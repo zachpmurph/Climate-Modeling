@@ -56,4 +56,4 @@ while t_current < T_final:
 plt.plot(x, u_initial, label='Initial')
 plt.plot(x, u, label=f'After t = {T_final}', ls = '--')
 plt.legend(); plt.xlabel('x'); plt.ylabel('u')
-plt.show()
+plt.savefig("graphs/linear_advection.png")
