@@ -2,53 +2,55 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 ##NOTE: Units are in meters and minutes
-
-# Parameters
-S0 = 0.05
-n0 = 0.05
-def c(u):
-    #return np.ones(len(u))
-    return (5/(3 * n0)) * (u ** (2/3)) * np.sqrt(S0)          # wave speed
+#Parameters:
 L = 10.0         # domain length
 Nx = int(L*10)       # number of cells
-dx = L / (Nx - 1)
+dx = L / Nx
+x = np.linspace(dx/2, L-(dx/2), Nx)
 CFL = 0.5        # Courant number (must be <= 1)
-u_max_expected = 1.0  # or however big you expect u to get
-dt = CFL * dx / c(u_max_expected) 
 T_final = 10.0    # total simulation time
-Nt = int(T_final / dt)
-center = 3.0
-#nu = c * dt / dx
+t_current = 0
+S0 = 0.05
+n0 = 0.05
+
 def r(x, t):
     if (t >=0 and t < 50):
         return 0.00002 * (L-x)
     return 0
 
-# Grid
-x = np.linspace(0, L, Nx)
+def c(u):
+    u = np.maximum(u, 0.0)  # prevents accidental negatives from error
+    return (5/(3 * n0)) * (u ** (2/3)) * np.sqrt(S0)          # wave speed
+
+def q(u):
+    u = np.maximum(u, 0.0)  # prevents accidental negatives from error
+    return (1/(n0)) * (u ** (5/3)) * np.sqrt(S0)          # wave speed 
 
 # Initial condition: a Gaussian pulse
+center = 3.0
 u = 0.01 *np.exp(-((x - center)**2) / 0.2)
-#u = np.zeros(len(x))
 u_initial = u.copy()
 
-# Time stepping with upwind scheme
-for n in range(Nt):
+while t_current < T_final:
+    # Adaptive time step
+    c_max = np.max(c(u))
+    dt = CFL * dx / c_max
+    if t_current + dt > T_final:
+        dt = T_final - t_current
+    
+    # Conservative upwind update
+    flux = q(u)
     u_new = u.copy()
-    nu = c(u) * dt/dx
-    #if c > 0:
-    u_new[1:] = u[1:] - nu[1:] * (u[1:] - u[:-1])
-    u_new[0] = u[0]    # left boundary is inflow (nothing coming in), right boundary is outflow
-    u = u_new + (dt * r(x, n *dt))
-
-# Analytic solution for constant source g0 over the whole run
-g0 = 0.1
-#u_analytic = g0 * T_final * np.ones_like(x)
-#u_analytic[x < c * T_final] = g0 * (x[x < c * T_final] / c)  # ramp near boundary
-
-# Verification
-#l2_error = np.sqrt(np.mean((u - u_analytic)**2))
-#print(f"L2 error: {l2_error:.4e}")
+    u_new[1:] = u[1:] - (dt/dx) * (flux[1:] - flux[:-1])
+    u_new[0] = 1e-10   # zero-depth at watershed divide (adjust to taste)
+    
+    # Add source
+    u = u_new + dt * r(x, t_current)
+    
+    # Enforce non-negativity
+    u = np.maximum(u, 1e-10)
+    
+    t_current += dt
 
 # Plot
 plt.plot(x, u_initial, label='Initial')
