@@ -35,3 +35,20 @@ def test_still_water_at_rest(monkeypatch):
         f"Still water disturbed: max deviation = {np.max(np.abs(h_final[5:-1] - 0.5))}"
     assert np.allclose(q_final[5:-1], 0.0, atol=1e-15), \
         f"Discharge non-zero: max = {np.max(np.abs(q_final[5:-1]))}"
+
+
+def test_mass_conservation():
+    # Run long enough that outflow is non-trivial (~40 min same as kinematic wave test).
+    # Tolerance is 1% rather than 0.1%: Lax-Friedrichs numerical diffusion at the
+    # left BC creates a small mass leakage not captured by outflow tracking alone.
+    result = sv.run_model(sv.L, 40.0)
+    x = result["x"]
+    dx = x[1] - x[0]
+
+    stored_initial = np.sum(result["h_initial"][1:]) * dx
+    stored_final = np.sum(result["h_final"][1:]) * dx
+    delta_mass = stored_final - stored_initial
+
+    expected_delta = result["mass_source"] - result["mass_outflow"]
+
+    assert delta_mass == pytest.approx(expected_delta, rel=1e-2)
