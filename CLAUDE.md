@@ -20,8 +20,13 @@ Run the solver:
 python src/floods/linear_advection.py
 ```
 
-This runs the simulation to completion and writes a plot to `graphs/linear_advection.png`
-(no window is shown — the script saves rather than displays).
+This runs the simulation to completion and writes a plot to `data/linear_advection.png`
+plus a per-minute depth table to `data/linear_advection_timeseries.csv` (no window is
+shown — the script saves rather than displays). To watch that table animate:
+
+```
+python src/tools/animate_depth.py
+```
 
 Run the tests:
 
@@ -66,9 +71,14 @@ only in commit messages.
 - Depth is clamped non-negative after every update, and the left boundary cell is
   pinned near zero (no-inflow condition) each step — preserve both when restructuring
   the update loop.
-- `run_model(L, T_final)` returns a dict (`x`, `u_initial`, `u_final`, `mass_source`,
-  `mass_outflow`) rather than a bare array. `mass_source`/`mass_outflow` are cumulative
-  totals tracked over the interior control volume (cells `1..Nx-1`) during the time
-  loop — cell 0 is a boundary-condition cell, not physical storage, so it's excluded
-  from both. This is what `tests/test_linear_advection.py::test_mass_conservation`
-  checks against.
+- `run_model(L, T_final, record_interval=1.0)` returns a dict (`x`, `u_initial`,
+  `u_final`, `times`, `u_history`, `mass_source`, `mass_outflow`) rather than a bare
+  array. `mass_source`/`mass_outflow` are cumulative totals tracked over the interior
+  control volume (cells `1..Nx-1`) during the time loop — cell 0 is a
+  boundary-condition cell, not physical storage, so it's excluded from both. This is
+  what `tests/test_linear_advection.py::test_mass_conservation` checks against.
+- `times`/`u_history` are snapshots taken every `record_interval` minutes (always
+  including `t=0` and `t=T_final`), not every adaptive `dt` — the loop caps `dt` so it
+  lands exactly on each recording mark rather than overshooting it, so snapshots are
+  exact, not interpolated. `save_time_series_csv()` writes this table to disk (one row
+  per recorded time, one column per cell) for `src/tools/animate_depth.py` to read back.

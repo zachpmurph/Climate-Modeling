@@ -30,8 +30,10 @@ non-negative after every step.
 
 **Units:** meters and minutes throughout.
 
-**Output:** running the script simulates to `T_final` and saves a before/after plot
-to `graphs/linear_advection.png`.
+**Output:** running the script simulates to `T_final`, saves a before/after plot to
+`data/linear_advection.png`, and saves the full depth-vs-time table (recorded every
+`record_interval` minutes, default 1) to `data/linear_advection_timeseries.csv`. Use
+`src/tools/animate_depth.py` to animate that table and watch depth evolve over time.
 
 ## Development History
 
@@ -54,16 +56,21 @@ Earlier stages are preserved as dated documents under `README/`.
 
 ```
 src/floods/linear_advection.py   # current flood model solver (kinematic wave)
-graphs/                           # simulation output plots
+src/tools/animate_depth.py       # animates a saved depth-vs-time table
+tests/test_linear_advection.py   # mass conservation + analytical verification
+data/                             # simulation output: plot + time series CSV
 ```
 
 ## How to Run
 
 ```
 python src/floods/linear_advection.py
+python src/tools/animate_depth.py                    # animate the most recent run
+python src/tools/animate_depth.py path/to/other.csv  # or a specific table
 ```
 
-Requires `numpy` and `matplotlib`. Produces `graphs/linear_advection.png`.
+Requires `numpy` and `matplotlib`. The solver produces `data/linear_advection.png`
+and `data/linear_advection_timeseries.csv`.
 
 ## Next Steps
 

@@ -1,18 +1,20 @@
+import csv
+
 import numpy as np
 import matplotlib.pyplot as plt
 
 ##NOTE: Units are in meters and minutes
 #Parameters:
 L = 10.0         # domain length
-T_final = 10.0    # total simulation time
+T_final = 300.0    # total simulation time
 S0 = 0.05
 n0 = 0.05
 
 
 def r(x, t):
     if (t >=0 and t < 50):
-        return 0.00002 * (L-x)
-    return 0
+        return 0.00002 * np.ones(len(x))
+    return np.zeros(len(x))
 
 def c(u):
     u = np.maximum(u, 0.0)  # prevents accidental negatives from error
@@ -23,7 +25,7 @@ def q(u):
     return (1/(n0)) * (u ** (5/3)) * np.sqrt(S0)          # wave speed 
 
 #Runs the kinematic wave model
-def run_model(L, T_final):
+def run_model(L, T_final, record_interval=1.0):
     #Establish Domain
     Nx = int(L*10)       # number of cells
     dx = L / Nx
@@ -43,6 +45,18 @@ def run_model(L, T_final):
     mass_source = 0.0
     mass_outflow = 0.0
 
+    # Record snapshots on a fixed wall-clock grid (every record_interval
+    # minutes) rather than every adaptive dt, so the time series is easy
+    # to animate/tabulate. record_times always includes t=0 and T_final.
+    n_marks = int(np.floor(T_final / record_interval + 1e-9))
+    record_times = [i * record_interval for i in range(n_marks + 1)]
+    if record_times[-1] < T_final - 1e-9:
+        record_times.append(T_final)
+
+    times = [0.0]
+    history = [u_initial.copy()]
+    next_record_idx = 1
+
     while t_current < T_final:
         # Adaptive time step
         c_max = np.max(c(u))
@@ -50,6 +64,11 @@ def run_model(L, T_final):
         dt = CFL * dx / c_max
         if t_current + dt > T_final:
             dt = T_final - t_current
+        # Also cap dt so we land exactly on the next recording mark instead
+        # of stepping past it -- keeps the recorded snapshots exact rather
+        # than approximated from whichever step happened to overshoot.
+        if next_record_idx < len(record_times):
+            dt = min(dt, record_times[next_record_idx] - t_current)
 
         # Conservative upwind update
         flux = q(u)
@@ -69,13 +88,29 @@ def run_model(L, T_final):
 
         t_current += dt
 
+        if next_record_idx < len(record_times) and t_current >= record_times[next_record_idx] - 1e-9:
+            times.append(record_times[next_record_idx])
+            history.append(u.copy())
+            next_record_idx += 1
+
     return {
         "x": x,
+        "times": np.array(times),
+        "u_history": np.array(history),
         "u_initial": u_initial,
         "u_final": u,
         "mass_source": mass_source,
         "mass_outflow": mass_outflow,
     }
+
+def save_time_series_csv(result, path):
+    """Write the recorded (t, u(x)) table to a CSV: one row per recorded
+    time, one column per spatial cell. Read back by src/tools/animate_depth.py."""
+    with open(path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["t"] + [f"{xi:.6f}" for xi in result["x"]])
+        for t, u_row in zip(result["times"], result["u_history"]):
+            writer.writerow([f"{t:.6f}"] + [f"{ui:.10g}" for ui in u_row])
 
 if __name__ == "__main__":
     result = run_model(L, T_final)
@@ -83,5 +118,7 @@ if __name__ == "__main__":
     plt.plot(result["x"], result["u_initial"], label='Initial')
     plt.plot(result["x"], result["u_final"], label=f'After t = {T_final}', ls = '--')
     plt.legend(); plt.xlabel('x'); plt.ylabel('u')
-    plt.savefig("graphs/linear_advection.png")
+    plt.savefig("data/linear_advection.png")
+
+    save_time_series_csv(result, "data/linear_advection_timeseries.csv")
 

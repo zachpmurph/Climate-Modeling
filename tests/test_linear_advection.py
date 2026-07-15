@@ -1,6 +1,6 @@
 """Tests for the kinematic wave solver in floods/linear_advection.py.
 
-Covers two properties of the numerical scheme:
+Covers:
 
 1. Mass conservation: the change in stored depth over the interior of the
    domain must equal source added minus outflow through the right boundary
@@ -10,7 +10,12 @@ Covers two properties of the numerical scheme:
 2. Convergence to the known analytical steady state for constant rainfall
    on the kinematic wave equation: q_eq(x) = rate * x, so
    h_eq(x) = (rate * x * n0 / sqrt(S0)) ** (3/5).
+
+3. The recorded (times, u_history) time series and its CSV export -- used
+   by src/tools/animate_depth.py to animate depth over time.
 """
+import csv
+
 import numpy as np
 import pytest
 
@@ -68,3 +73,48 @@ def test_reaches_analytical_equilibrium(monkeypatch):
     assert np.max(rel_error) < 0.05
     l2_rel_error = np.sqrt(np.mean((u_final[mask] - h_eq[mask]) ** 2)) / np.sqrt(np.mean(h_eq[mask] ** 2))
     assert l2_rel_error < 0.02
+
+
+def test_time_series_recorded_every_minute():
+    result = la.run_model(la.L, 10.0)
+
+    assert np.allclose(result["times"], np.arange(0, 11))
+    assert result["u_history"].shape == (11, result["x"].shape[0])
+    # First/last recorded rows must match u_initial/u_final exactly -- they
+    # come from the same snapshots, not a re-derivation.
+    assert np.array_equal(result["u_history"][0], result["u_initial"])
+    assert np.array_equal(result["u_history"][-1], result["u_final"])
+
+
+def test_time_series_custom_interval_and_fractional_final_time():
+    # record_interval doesn't evenly divide T_final here (5.5 / 0.5 = 11,
+    # so it actually does divide evenly -- pick a case that doesn't, to
+    # confirm T_final itself always gets appended as the last mark).
+    result = la.run_model(la.L, 5.3, record_interval=0.5)
+
+    assert result["times"][-1] == pytest.approx(5.3)
+    assert result["u_history"].shape[0] == len(result["times"])
+    # marks at 0, 0.5, ..., 5.0 (11 of them) plus the trailing 5.3
+    assert len(result["times"]) == 12
+
+
+def test_save_time_series_csv_round_trip(tmp_path):
+    result = la.run_model(la.L, 3.0)
+    csv_path = tmp_path / "timeseries.csv"
+
+    la.save_time_series_csv(result, csv_path)
+
+    with open(csv_path, newline="") as f:
+        reader = csv.reader(f)
+        header = next(reader)
+        rows = list(reader)
+
+    assert header[0] == "t"
+    assert len(header) - 1 == len(result["x"])
+    assert len(rows) == len(result["times"])
+
+    read_x = np.array([float(v) for v in header[1:]])
+    assert np.allclose(read_x, result["x"], atol=1e-5)
+
+    read_first_row = np.array([float(v) for v in rows[0][1:]])
+    assert np.allclose(read_first_row, result["u_initial"], rtol=1e-6, atol=1e-15)
