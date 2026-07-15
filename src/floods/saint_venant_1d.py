@@ -54,6 +54,8 @@ def run_model(L, T_final, record_interval=1.0, h_init=None, q_init=None):
     t_current = 0.0
 
     while t_current < T_final:
+        h[0] = h_floor
+        q[0] = 0.0
         vel = np.where(h > h_floor, q / h, 0.0)
         c_wave = np.sqrt(g * np.maximum(h, 0.0))
         max_speed = np.max(np.abs(vel) + c_wave)
@@ -69,10 +71,9 @@ def run_model(L, T_final, record_interval=1.0, h_init=None, q_init=None):
         F_h = q.copy()
         F_q = q ** 2 / np.maximum(h, h_floor) + 0.5 * g * h ** 2
 
-        # Mass bookkeeping (outflow through right face, source over interior)
+        # Mass bookkeeping
         source = r(x, t_current)
-        mass_outflow += q[-1] * dt
-        mass_source += np.sum(source[1:]) * dx * dt
+        mass_source += np.sum(source[1:-1]) * dx * dt
 
         # Lax-Friedrichs flux update (interior cells 1..Nx-2)
         h_new = h.copy()
@@ -82,19 +83,25 @@ def run_model(L, T_final, record_interval=1.0, h_init=None, q_init=None):
         q_new[1:-1] = (0.5 * (q[2:] + q[:-2])
                        - 0.5 * (dt / dx) * (F_q[2:] - F_q[:-2]))
 
+        mass_outflow += (np.sum(h[1:-1]) - np.sum(h_new[1:-1])) * dx
+
         # Boundary conditions
         h_new[0] = h_floor   # no-inflow left BC
         q_new[0] = 0.0
         h_new[-1] = h_new[-2]   # zero-gradient right BC (free outflow)
         q_new[-1] = q_new[-2]
 
-        # Operator-split source terms
-        h_new += dt * source
+        # Operator-split source terms (interior cells only)
+        h_new[1:-1] += dt * source[1:-1]
+        h_new[-1] = h_new[-2]
+        q_new[-1] = q_new[-2]
 
         vel_new = np.where(h_new > h_floor, q_new / h_new, 0.0)
-        Sf = (n0 ** 2 * vel_new * np.abs(vel_new)
-              / np.maximum(h_new, h_floor) ** (4 / 3))
-        q_new += dt * g * h_new * (S0 - Sf)
+        # Semi-implicit friction: treat bed slope explicitly, friction implicitly.
+        # Prevents Sf from blowing up in near-dry cells where vel = q/h is large.
+        friction_coeff = n0 ** 2 * np.abs(vel_new) / np.maximum(h_new, h_floor) ** (4 / 3)
+        denom = 1.0 + dt * g * friction_coeff
+        q_new = (q_new + dt * g * h_new * S0) / denom
 
         # Safeguards
         h_new = np.maximum(h_new, h_floor)
