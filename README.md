@@ -50,12 +50,14 @@ Earlier stages are preserved as dated documents under `README/`.
 | **2 — Nonlinear kinematic wave** | `536bf04` | Replaced the constant advection speed with the nonlinear Manning's-equation closure $c(h)$, turning the model into the kinematic wave equation and introducing genuinely nonlinear behavior (wave steepening, no more closed-form solution). Parameters (`S0`, `n0`) adjusted to physically realistic overland-flow values. |
 | **2.1 — Adaptive time stepping** | `b15e0e9` | Added CFL-based adaptive $\Delta t$, recomputed each step from the current max wave speed, to prevent numerical oscillations now that $c$ can grow with $h$. General code cleanup. |
 | **2.2 — Plot output** | `5ba28e8` | Switched from an interactive `plt.show()` to saving the comparison plot under `graphs/`. |
+| **3 — 1D Saint-Venant (full dynamic wave)** | *(this session)* | New file `src/floods/saint_venant_1d.py`. Upgraded from kinematic wave to full dynamic Saint-Venant equations: added momentum equation tracking unit discharge $q = h \cdot \text{vel}$, pressure-gradient term $\partial(gh^2/2)/\partial x$, inertia, and Manning's friction slope $S_f$. Lax-Friedrichs scheme, adaptive CFL time stepping, operator-split source terms. |
 
 
 ## Repository Layout
 
 ```
 src/floods/linear_advection.py   # current flood model solver (kinematic wave)
+src/floods/saint_venant_1d.py    # 1D Saint-Venant (full dynamic wave) solver
 src/tools/animate_depth.py       # animates a saved depth-vs-time table
 tests/test_linear_advection.py   # mass conservation + analytical verification
 data/                             # simulation output: plot + time series CSV
