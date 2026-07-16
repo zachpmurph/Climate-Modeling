@@ -98,11 +98,10 @@ def run_model(L, T_final, record_interval=1.0, h_init=None, q_init=None):
         # Operator-split source terms (interior cells only)
         h_new[1:-1] += dt * source[1:-1]
         h_new[-1] = h_new[-2]
-        q_new[-1] = q_new[-2]
 
         vel_new = np.where(h_new > h_floor, q_new / h_new, 0.0)
-        # Semi-implicit friction: treat bed slope explicitly, friction implicitly.
-        # Prevents Sf from blowing up in near-dry cells where vel = q/h is large.
+        # Semi-implicit friction: bed slope explicit, friction implicit.
+        # Prevents stiff blow-up in near-dry cells where vel = q/h can be large.
         friction_coeff = n0 ** 2 * np.abs(vel_new) / np.maximum(h_new, h_floor) ** (4 / 3)
         denom = 1.0 + dt * g * friction_coeff
         q_new = (q_new + dt * g * h_new * S0) / denom
