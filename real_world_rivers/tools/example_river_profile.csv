@@ -1,0 +1,6 @@
+station_m,slope,manning_n,initial_depth_m,rainfall_rate_m_per_min,label
+0,0.0012,0.035,0.04,0.000000,upstream
+1000,0.0010,0.038,0.04,0.000001,upper_mid
+2000,0.0008,0.040,0.04,0.000001,mid_reach
+3000,0.0007,0.042,0.04,0.000001,lower_mid
+4000,0.0006,0.045,0.04,0.000000,downstream

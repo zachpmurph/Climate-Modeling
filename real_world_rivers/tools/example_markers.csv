@@ -1,0 +1,4 @@
+lat,lon,station_m,label
+40.0000,-120.0000,0,upstream
+39.9950,-120.0000,600,middle
+39.9900,-120.0000,1200,downstream

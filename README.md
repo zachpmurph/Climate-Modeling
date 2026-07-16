@@ -56,23 +56,35 @@ Earlier stages are preserved as dated documents under `README/`.
 ## Repository Layout
 
 ```
-src/floods/linear_advection.py   # current flood model solver (kinematic wave)
-src/floods/saint_venant_1d.py    # 1D Saint-Venant (full dynamic wave) solver
-src/tools/animate_depth.py       # animates a saved depth-vs-time table
-tests/test_linear_advection.py   # mass conservation + analytical verification
-data/                             # simulation output: plot + time series CSV
+src/floods/linear_advection.py        # kinematic wave overland-flow solver
+src/floods/saint_venant_1d.py         # 1D Saint-Venant (full dynamic wave) solver
+src/floods/river_kinematic_wave.py    # kinematic wave solver for real river profiles
+src/tools/animate_depth.py            # animates a saved depth-vs-time table
+src/tools/run_river_kinematic_wave.py # runs the river-profile kinematic wave solver
+src/tools/collect_river_data.py       # collects and exports real-river input data
+src/tools/river_data/                 # provider clients, importers, and SQLite helpers
+tests/test_linear_advection.py        # mass conservation + analytical verification
+tests/test_saint_venant_1d.py         # still-water and mass conservation tests
+tests/test_river_kinematic_wave.py    # profile I/O and mass balance tests
+tests/test_river_data_tools.py        # data collection pipeline tests
+data/                                  # simulation output: plots and time series CSVs
+data/real_world_rivers/               # SQL schema and local river input database
+real_world_rivers/                    # example data files and Columbia River inputs
 ```
 
 ## How to Run
 
 ```
 python src/floods/linear_advection.py
+python src/floods/saint_venant_1d.py
 python src/tools/animate_depth.py                    # animate the most recent run
 python src/tools/animate_depth.py path/to/other.csv  # or a specific table
+python src/tools/collect_river_data.py --help        # real-river data workflow
 ```
 
-Requires `numpy` and `matplotlib`. The solver produces `data/linear_advection.png`
-and `data/linear_advection_timeseries.csv`.
+Requires `numpy`, `matplotlib`, and `pytest`. The overland-flow solvers produce plots
+and time series CSVs under `data/`. The river solver reads a profile CSV produced by
+`collect_river_data.py` and writes outputs to `data/real_world_rivers/runs/`.
 
 ## Next Steps
 
