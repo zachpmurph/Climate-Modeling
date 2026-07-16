@@ -136,8 +136,22 @@ def run_model(L, T_final, record_interval=1.0, h_init=None, q_init=None):
 
 
 def save_time_series_csv(result, path):
-    raise NotImplementedError
+    """Write (t, h(x)) table to CSV: one row per recorded time, one column
+    per cell. Same format as linear_advection_timeseries.csv — compatible
+    with src/tools/animate_depth.py."""
+    with open(path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["t"] + [f"{xi:.6f}" for xi in result["x"]])
+        for t, h_row in zip(result["times"], result["h_history"]):
+            writer.writerow([f"{t:.6f}"] + [f"{hi:.10g}" for hi in h_row])
 
 
 if __name__ == "__main__":
-    pass
+    result = run_model(L, T_final)
+    plt.plot(result["x"], result["h_initial"], label="Initial")
+    plt.plot(result["x"], result["h_final"], label=f"After t = {T_final}", ls="--")
+    plt.legend()
+    plt.xlabel("x (m)")
+    plt.ylabel("h (m)")
+    plt.savefig("data/saint_venant_1d.png")
+    save_time_series_csv(result, "data/saint_venant_1d_timeseries.csv")
