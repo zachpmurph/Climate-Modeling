@@ -17,6 +17,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 DEFAULT_PATH = "data/linear_advection_timeseries.csv"
+DEFAULT_PATH = "data/saint_venant_1d_timeseries.csv"
 
 
 def load_time_series(path):

@@ -7,7 +7,7 @@ import numpy as np
 
 # Units: meters and minutes throughout.
 L = 10.0
-T_final = 300.0
+T_final = 30.0
 S0 = 0.05
 MANNING_N_SECONDS = 0.05
 n0 = MANNING_N_SECONDS / 60.0
@@ -94,7 +94,7 @@ def _record_times(final_time, record_interval):
 def run_model(
     L,
     T_final,
-    record_interval=1.0,
+    record_interval=0.5,
     h_init=None,
     q_init=None,
     left_inflow=None,
@@ -108,9 +108,10 @@ def run_model(
     nx = _validate_inputs(L, T_final, record_interval, h_init, q_init)
     dx = L / nx
     x = np.linspace(dx / 2, L - dx / 2, nx)
+    center = 5.0
 
     if h_init is None:
-        h = 0.01 * np.exp(-((x - 3.0) ** 2) / 0.2)
+        h = 0.01 * np.exp(-((x - center) ** 2) / 0.2)
     else:
         h = np.asarray(h_init, dtype=float).copy()
     h = np.maximum(h, H_FLOOR)
