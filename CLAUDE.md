@@ -9,6 +9,10 @@ under development is a 1D flood model (kinematic wave overland flow), living in
 `src/general/solvers/linear_advection.py`. See [README.md](README.md) for the physics, the
 governing equation, and a stage-by-stage development history.
 
+Solvers now live under `src/general/solvers/` and share a common contract defined in
+`src/general/solvers/contract.py`. A unified harness in `src/rivers/simulations/`
+dispatches to any registered solver by name.
+
 ## Commands
 
 There is no build system or linter configured. Dependencies are `numpy`, `matplotlib`,
@@ -35,6 +39,13 @@ python -m pytest tests/
 python -m pytest tests/test_linear_advection.py::test_mass_conservation  # single test
 ```
 
+Unified CLI (solver-agnostic harness):
+
+```
+python src/rivers/simulations/run_simulation.py real_world_rivers/tools/example_river_profile.csv \
+    --solver river_kinematic_wave --t-final 10 --left-inflow 0.0006
+```
+
 `pytest.ini` sets `pythonpath = src`, so tests import model code as
 `from general.solvers import linear_advection` without an installed package or `__init__.py`
 (there is no `src/general/solvers/__init__.py` — `general.solvers` is a namespace package). Model
@@ -55,6 +66,17 @@ matches current behavior; check the top-level README.md history table first.
 
 When you finish a new stage, update that history table rather than leaving the record
 only in commit messages.
+
+## Solver contract
+
+Each solver in `src/general/solvers/` exposes a module-level `SOLVER` singleton that implements the `Solver` protocol from `src/general/solvers/contract.py`. The protocol requires:
+- `name: str` — registry key
+- `supports: frozenset[str]` — which `Scenario` knobs this solver honours
+- `run(domain: Domain, scenario: Scenario) -> SimulationResult`
+
+The back-compat `run_model(...)` function is preserved in each solver file so existing tests and `__main__` demos continue to work unchanged.
+
+`src/rivers/simulations/registry.py` maps solver names to instances. `src/rivers/simulations/run_simulation.py` is the unified CLI entry point.
 
 ## Model conventions
 

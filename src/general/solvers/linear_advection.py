@@ -3,6 +3,8 @@ import csv
 import numpy as np
 import matplotlib.pyplot as plt
 
+from general.solvers.contract import Domain, Scenario, SimulationResult
+
 ##NOTE: Units are in meters and minutes
 #Parameters:
 L = 10.0         # domain length
@@ -111,6 +113,54 @@ def save_time_series_csv(result, path):
         writer.writerow(["t"] + [f"{xi:.6f}" for xi in result["x"]])
         for t, u_row in zip(result["times"], result["u_history"]):
             writer.writerow([f"{t:.6f}"] + [f"{ui:.10g}" for ui in u_row])
+
+class _KinematicWaveSolver:
+    name = "kinematic_wave"
+    supports = frozenset({"rainfall"})
+
+    def run(self, domain: Domain, scenario: Scenario) -> SimulationResult:
+        import general.solvers.linear_advection as _la
+
+        # Temporarily set globals from the Domain (uniform assumed: use first cell)
+        _orig_S0, _orig_n0 = _la.S0, _la.n0
+        _la.S0 = float(domain.slope[0])
+        _la.n0 = float(domain.manning_n[0])
+
+        # Inject per-scenario rainfall as module-level r if provided
+        _orig_r = _la.r
+        if scenario.rainfall is not None:
+            _la.r = scenario.rainfall
+
+        L = float(domain.x_m[-1] + domain.dx_m[-1] / 2)
+        try:
+            result = run_model(L, scenario.t_final_min, scenario.record_interval_min)
+        finally:
+            _la.S0 = _orig_S0
+            _la.n0 = _orig_n0
+            _la.r = _orig_r
+
+        x_int = result["x"]
+        dx_int = x_int[1] - x_int[0] if len(x_int) > 1 else domain.dx_m[0]
+        internal_domain = Domain(
+            x_m=x_int,
+            dx_m=np.full_like(x_int, dx_int),
+            slope=np.full_like(x_int, float(domain.slope[0])),
+            manning_n=np.full_like(x_int, float(domain.manning_n[0])),
+        )
+        return SimulationResult(
+            domain=internal_domain,
+            times=result["times"],
+            depth_history=result["u_history"],
+            depth_initial=result["u_initial"],
+            depth_final=result["u_final"],
+            mass_inflow=0.0,
+            mass_source=result["mass_source"],
+            mass_outflow=result["mass_outflow"],
+        )
+
+
+SOLVER = _KinematicWaveSolver()
+
 
 if __name__ == "__main__":
     result = run_model(L, T_final)

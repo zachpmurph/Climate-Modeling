@@ -51,6 +51,7 @@ Earlier stages are preserved as dated documents under `README/`.
 | **2.1 — Adaptive time stepping** | `b15e0e9` | Added CFL-based adaptive $\Delta t$, recomputed each step from the current max wave speed, to prevent numerical oscillations now that $c$ can grow with $h$. General code cleanup. |
 | **2.2 — Plot output** | `5ba28e8` | Switched from an interactive `plt.show()` to saving the comparison plot under `graphs/`. |
 | **3 — 1D Saint-Venant (full dynamic wave)** | *(this session)* | New file `src/general/solvers/saint_venant_1d.py`. Upgraded from kinematic wave to full dynamic Saint-Venant equations: added momentum equation tracking unit discharge $q = h \cdot \text{vel}$, pressure-gradient term $\partial(gh^2/2)/\partial x$, inertia, and Manning's friction slope $S_f$. Rusanov face fluxes, adaptive CFL time stepping, snapshot interpolation, physical boundary fluxes, and operator-split source terms. |
+| **4 — Solver-agnostic harness** | *(this session)* | Added `src/general/solvers/contract.py` (Domain, Scenario, SimulationResult, Solver protocol, UnsupportedScenario). Moved RiverProfile loaders to `src/general/solvers/profile.py`. Each solver exposes a `SOLVER` singleton implementing the contract; back-compat `run_model()` wrappers preserved. `src/rivers/simulations/registry.py` maps solver names to singletons; `src/rivers/simulations/run_simulation.py` is the unified CLI. |
 
 
 ### Saint-Venant review revision
@@ -65,10 +66,15 @@ the model's minute time unit (`n0 = MANNING_N_SECONDS / 60.0`).
 ## Repository Layout
 
 ```
+src/general/solvers/contract.py                # Domain, Scenario, SimulationResult, Solver protocol
+src/general/solvers/profile.py                 # RiverProfile dataclass and CSV/JSON loaders
 src/general/solvers/linear_advection.py        # kinematic wave overland-flow solver
 src/general/solvers/saint_venant_1d.py         # 1D Saint-Venant (full dynamic wave) solver
 src/general/solvers/river_kinematic_wave.py    # kinematic wave solver for real river profiles
 src/general/viz/animate_depth.py               # animates a saved depth-vs-time table
+src/rivers/simulations/registry.py             # name → Solver mapping
+src/rivers/simulations/run_simulation.py       # unified CLI dispatcher
+src/rivers/simulations/ingest_to_simulate.py   # profile_path → (Domain, Scenario) helper
 src/rivers/simulations/run_river_kinematic_wave.py # runs the river-profile kinematic wave solver
 src/rivers/ingest/collect_river_data.py        # collects and exports real-river input data
 src/rivers/ingest/                             # provider clients, importers, and SQLite helpers
@@ -76,6 +82,7 @@ tests/test_linear_advection.py        # mass conservation + analytical verificat
 tests/test_saint_venant_1d.py         # conservation, equilibrium, boundary, and dry-state tests
 tests/test_river_kinematic_wave.py    # profile I/O and mass balance tests
 tests/test_river_data_tools.py        # data collection pipeline tests
+tests/test_run_simulation.py          # dispatch, UnsupportedScenario, result shapes
 data/                                  # simulation output: plots and time series CSVs
 data/real_world_rivers/               # SQL schema and local river input database
 real_world_rivers/                    # example data files and Columbia River inputs
@@ -89,6 +96,8 @@ python src/general/solvers/saint_venant_1d.py
 python src/general/viz/animate_depth.py                    # animate the most recent run
 python src/general/viz/animate_depth.py path/to/other.csv  # or a specific table
 python src/rivers/ingest/collect_river_data.py --help      # real-river data workflow
+python src/rivers/simulations/run_simulation.py real_world_rivers/tools/example_river_profile.csv \
+    --solver river_kinematic_wave --t-final 10 --left-inflow 0.0006
 ```
 
 Requires `numpy`, `matplotlib`, and `pytest`. The overland-flow solvers produce plots

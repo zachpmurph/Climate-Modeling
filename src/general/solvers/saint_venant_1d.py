@@ -4,6 +4,8 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
+from general.solvers.contract import Domain, Scenario, SimulationResult
+
 
 # Units: meters and minutes throughout.
 L = 10.0
@@ -206,6 +208,60 @@ def save_time_series_csv(result, path):
         writer.writerow(["t"] + [f"{xi:.6f}" for xi in result["x"]])
         for time, depth_row in zip(result["times"], result["h_history"]):
             writer.writerow([f"{time:.6f}"] + [f"{depth:.10g}" for depth in depth_row])
+
+
+class _SaintVenantSolver:
+    name = "saint_venant"
+    supports = frozenset({"initial_depth", "initial_discharge", "left_inflow", "cfl"})
+
+    def run(self, domain: Domain, scenario: Scenario) -> SimulationResult:
+        import general.solvers.saint_venant_1d as _self_module
+
+        L = float(domain.x_m[-1] + domain.dx_m[-1] / 2)
+        left_inflow = scenario.left_inflow  # float, callable, or 0.0 — run_model handles all
+        h_init = scenario.initial_depth_m if isinstance(scenario.initial_depth_m, np.ndarray) else None
+        q_init = scenario.initial_discharge if isinstance(scenario.initial_discharge, np.ndarray) else None
+
+        old_cfl = _self_module.CFL
+        try:
+            _self_module.CFL = scenario.cfl
+            raw = run_model(
+                L,
+                scenario.t_final_min,
+                record_interval=scenario.record_interval_min,
+                h_init=h_init,
+                q_init=q_init,
+                left_inflow=left_inflow,
+            )
+        finally:
+            _self_module.CFL = old_cfl
+
+        x_int = raw["x"]
+        dx_int = x_int[1] - x_int[0] if len(x_int) > 1 else domain.dx_m[0]
+        internal_domain = Domain(
+            x_m=x_int,
+            dx_m=np.full_like(x_int, dx_int),
+            slope=np.full_like(x_int, float(domain.slope[0])),
+            manning_n=np.full_like(x_int, float(domain.manning_n[0])),
+        )
+        return SimulationResult(
+            domain=internal_domain,
+            times=raw["times"],
+            depth_history=raw["h_history"],
+            depth_initial=raw["h_initial"],
+            depth_final=raw["h_final"],
+            mass_inflow=raw["mass_inflow"],
+            mass_source=raw["mass_source"],
+            mass_outflow=raw["mass_outflow"],
+            extra={
+                "discharge_history": raw["q_history"],
+                "discharge_initial": raw["q_initial"],
+                "discharge_final": raw["q_final"],
+            },
+        )
+
+
+SOLVER = _SaintVenantSolver()
 
 
 if __name__ == "__main__":
