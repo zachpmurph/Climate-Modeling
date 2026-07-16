@@ -50,8 +50,17 @@ Earlier stages are preserved as dated documents under `README/`.
 | **2 — Nonlinear kinematic wave** | `536bf04` | Replaced the constant advection speed with the nonlinear Manning's-equation closure $c(h)$, turning the model into the kinematic wave equation and introducing genuinely nonlinear behavior (wave steepening, no more closed-form solution). Parameters (`S0`, `n0`) adjusted to physically realistic overland-flow values. |
 | **2.1 — Adaptive time stepping** | `b15e0e9` | Added CFL-based adaptive $\Delta t$, recomputed each step from the current max wave speed, to prevent numerical oscillations now that $c$ can grow with $h$. General code cleanup. |
 | **2.2 — Plot output** | `5ba28e8` | Switched from an interactive `plt.show()` to saving the comparison plot under `graphs/`. |
-| **3 — 1D Saint-Venant (full dynamic wave)** | *(this session)* | New file `src/floods/saint_venant_1d.py`. Upgraded from kinematic wave to full dynamic Saint-Venant equations: added momentum equation tracking unit discharge $q = h \cdot \text{vel}$, pressure-gradient term $\partial(gh^2/2)/\partial x$, inertia, and Manning's friction slope $S_f$. Lax-Friedrichs scheme, adaptive CFL time stepping, operator-split source terms. |
+| **3 — 1D Saint-Venant (full dynamic wave)** | *(this session)* | New file `src/floods/saint_venant_1d.py`. Upgraded from kinematic wave to full dynamic Saint-Venant equations: added momentum equation tracking unit discharge $q = h \cdot \text{vel}$, pressure-gradient term $\partial(gh^2/2)/\partial x$, inertia, and Manning's friction slope $S_f$. Rusanov face fluxes, adaptive CFL time stepping, snapshot interpolation, physical boundary fluxes, and operator-split source terms. |
 
+
+### Saint-Venant review revision
+
+The Saint-Venant implementation uses conservative Rusanov face fluxes with
+ghost-cell boundaries, adaptive CFL stepping, snapshot interpolation that does
+not alter solver timesteps, closed or prescribed-discharge upstream boundaries
+(`left_inflow`), and separate inflow/outflow/floor mass accounting. The
+conventional seconds-based Manning coefficient is converted before use with
+the model's minute time unit (`n0 = MANNING_N_SECONDS / 60.0`).
 
 ## Repository Layout
 
@@ -64,7 +73,7 @@ src/tools/run_river_kinematic_wave.py # runs the river-profile kinematic wave so
 src/tools/collect_river_data.py       # collects and exports real-river input data
 src/tools/river_data/                 # provider clients, importers, and SQLite helpers
 tests/test_linear_advection.py        # mass conservation + analytical verification
-tests/test_saint_venant_1d.py         # still-water and mass conservation tests
+tests/test_saint_venant_1d.py         # conservation, equilibrium, boundary, and dry-state tests
 tests/test_river_kinematic_wave.py    # profile I/O and mass balance tests
 tests/test_river_data_tools.py        # data collection pipeline tests
 data/                                  # simulation output: plots and time series CSVs
