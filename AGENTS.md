@@ -6,7 +6,7 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 
 A growing collection of climate-related numerical models. Currently the only model
 under development is a 1D flood model (kinematic wave overland flow), living in
-`src/floods/linear_advection.py`. See [README.md](README.md) for the physics, the
+`src/general/solvers/linear_advection.py`. See [README.md](README.md) for the physics, the
 governing equation, and a stage-by-stage development history.
 
 ## Commands
@@ -17,7 +17,7 @@ and `pytest` (no requirements file exists — install them directly if missing).
 Run the solver:
 
 ```
-python src/floods/linear_advection.py
+python src/general/solvers/linear_advection.py
 ```
 
 This runs the simulation to completion and writes a plot to `data/linear_advection.png`
@@ -25,7 +25,7 @@ plus a per-minute depth table to `data/linear_advection_timeseries.csv` (no wind
 shown — the script saves rather than displays). To watch that table animate:
 
 ```
-python src/tools/animate_depth.py
+python src/general/viz/animate_depth.py
 ```
 
 Run the tests:
@@ -36,8 +36,8 @@ python -m pytest tests/test_linear_advection.py::test_mass_conservation  # singl
 ```
 
 `pytest.ini` sets `pythonpath = src`, so tests import model code as
-`from floods import linear_advection` without an installed package or `__init__.py`
-(there is no `src/floods/__init__.py` — `floods` is a namespace package). Model
+`from general.solvers import linear_advection` without an installed package or `__init__.py`
+(there is no `src/general/solvers/__init__.py` — `general.solvers` is a namespace package). Model
 functions (`run_model`, `r`, `c`, `q`, ...) are plain module-level functions in
 `linear_advection.py`, not wrapped in a class, so tests monkeypatch them directly
 (e.g. `monkeypatch.setattr(la, "r", other_func)`) to substitute things like a
@@ -81,4 +81,4 @@ only in commit messages.
   including `t=0` and `t=T_final`), not every adaptive `dt` — the loop caps `dt` so it
   lands exactly on each recording mark rather than overshooting it, so snapshots are
   exact, not interpolated. `save_time_series_csv()` writes this table to disk (one row
-  per recorded time, one column per cell) for `src/tools/animate_depth.py` to read back.
+  per recorded time, one column per cell) for `src/general/viz/animate_depth.py` to read back.

@@ -105,7 +105,7 @@ def run_model(L, T_final, record_interval=1.0):
 
 def save_time_series_csv(result, path):
     """Write the recorded (t, u(x)) table to a CSV: one row per recorded
-    time, one column per spatial cell. Read back by src/tools/animate_depth.py."""
+    time, one column per spatial cell. Read back by src/general/viz/animate_depth.py."""
     with open(path, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(["t"] + [f"{xi:.6f}" for xi in result["x"]])

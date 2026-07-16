@@ -4,14 +4,14 @@ import sqlite3
 
 import pytest
 
-from floods import river_kinematic_wave
-from tools.river_data.common import haversine_m
-from tools.river_data.elevation import collect_elevations, parse_elevations
-from tools.river_data.export_profile import export_profile
-from tools.river_data.markers import create_reach, load_marker_rows
-from tools.river_data.parameters import import_geometry, import_roughness
-from tools.river_data.rainfall import collect_rainfall, parse_hourly_precipitation
-from tools.river_data.usgs_flow import (
+from general.solvers import river_kinematic_wave
+from rivers.ingest.common import haversine_m
+from rivers.ingest.elevation import collect_elevations, parse_elevations
+from rivers.ingest.export_profile import export_profile
+from rivers.ingest.markers import create_reach, load_marker_rows
+from rivers.ingest.parameters import import_geometry, import_roughness
+from rivers.ingest.rainfall import collect_rainfall, parse_hourly_precipitation
+from rivers.ingest.usgs_flow import (
     CFS_TO_M3_PER_MIN,
     collect_usgs_flow,
     discharge_to_m3_per_min,

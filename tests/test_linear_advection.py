@@ -12,14 +12,14 @@ Covers:
    h_eq(x) = (rate * x * n0 / sqrt(S0)) ** (3/5).
 
 3. The recorded (times, u_history) time series and its CSV export -- used
-   by src/tools/animate_depth.py to animate depth over time.
+   by src/general/viz/animate_depth.py to animate depth over time.
 """
 import csv
 
 import numpy as np
 import pytest
 
-from floods import linear_advection as la
+from general.solvers import linear_advection as la
 
 
 def test_mass_conservation():

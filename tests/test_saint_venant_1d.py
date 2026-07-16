@@ -3,7 +3,7 @@ import math
 import numpy as np
 import pytest
 
-from floods import saint_venant_1d as sv
+from general.solvers import saint_venant_1d as sv
 
 
 def disable_forcing(monkeypatch):

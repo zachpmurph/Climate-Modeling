@@ -4,7 +4,7 @@ import json
 import numpy as np
 import pytest
 
-from floods import river_kinematic_wave as rkw
+from general.solvers import river_kinematic_wave as rkw
 
 
 def test_load_profile_csv():

@@ -7,7 +7,7 @@ kinematic wave overland-flow model.
 
 ## Current Model: Kinematic Wave Overland Flow
 
-`src/floods/linear_advection.py` currently solves the kinematic wave equation for
+`src/general/solvers/linear_advection.py` currently solves the kinematic wave equation for
 1D overland flow depth $h(x, t)$:
 
 $$\frac{\partial h}{\partial t} + \frac{\partial q(h)}{\partial x} = r(x, t)$$
@@ -33,7 +33,7 @@ non-negative after every step.
 **Output:** running the script simulates to `T_final`, saves a before/after plot to
 `data/linear_advection.png`, and saves the full depth-vs-time table (recorded every
 `record_interval` minutes, default 1) to `data/linear_advection_timeseries.csv`. Use
-`src/tools/animate_depth.py` to animate that table and watch depth evolve over time.
+`src/general/viz/animate_depth.py` to animate that table and watch depth evolve over time.
 
 ## Development History
 
@@ -50,7 +50,7 @@ Earlier stages are preserved as dated documents under `README/`.
 | **2 — Nonlinear kinematic wave** | `536bf04` | Replaced the constant advection speed with the nonlinear Manning's-equation closure $c(h)$, turning the model into the kinematic wave equation and introducing genuinely nonlinear behavior (wave steepening, no more closed-form solution). Parameters (`S0`, `n0`) adjusted to physically realistic overland-flow values. |
 | **2.1 — Adaptive time stepping** | `b15e0e9` | Added CFL-based adaptive $\Delta t$, recomputed each step from the current max wave speed, to prevent numerical oscillations now that $c$ can grow with $h$. General code cleanup. |
 | **2.2 — Plot output** | `5ba28e8` | Switched from an interactive `plt.show()` to saving the comparison plot under `graphs/`. |
-| **3 — 1D Saint-Venant (full dynamic wave)** | *(this session)* | New file `src/floods/saint_venant_1d.py`. Upgraded from kinematic wave to full dynamic Saint-Venant equations: added momentum equation tracking unit discharge $q = h \cdot \text{vel}$, pressure-gradient term $\partial(gh^2/2)/\partial x$, inertia, and Manning's friction slope $S_f$. Rusanov face fluxes, adaptive CFL time stepping, snapshot interpolation, physical boundary fluxes, and operator-split source terms. |
+| **3 — 1D Saint-Venant (full dynamic wave)** | *(this session)* | New file `src/general/solvers/saint_venant_1d.py`. Upgraded from kinematic wave to full dynamic Saint-Venant equations: added momentum equation tracking unit discharge $q = h \cdot \text{vel}$, pressure-gradient term $\partial(gh^2/2)/\partial x$, inertia, and Manning's friction slope $S_f$. Rusanov face fluxes, adaptive CFL time stepping, snapshot interpolation, physical boundary fluxes, and operator-split source terms. |
 
 
 ### Saint-Venant review revision
@@ -65,13 +65,13 @@ the model's minute time unit (`n0 = MANNING_N_SECONDS / 60.0`).
 ## Repository Layout
 
 ```
-src/floods/linear_advection.py        # kinematic wave overland-flow solver
-src/floods/saint_venant_1d.py         # 1D Saint-Venant (full dynamic wave) solver
-src/floods/river_kinematic_wave.py    # kinematic wave solver for real river profiles
-src/tools/animate_depth.py            # animates a saved depth-vs-time table
-src/tools/run_river_kinematic_wave.py # runs the river-profile kinematic wave solver
-src/tools/collect_river_data.py       # collects and exports real-river input data
-src/tools/river_data/                 # provider clients, importers, and SQLite helpers
+src/general/solvers/linear_advection.py        # kinematic wave overland-flow solver
+src/general/solvers/saint_venant_1d.py         # 1D Saint-Venant (full dynamic wave) solver
+src/general/solvers/river_kinematic_wave.py    # kinematic wave solver for real river profiles
+src/general/viz/animate_depth.py               # animates a saved depth-vs-time table
+src/rivers/simulations/run_river_kinematic_wave.py # runs the river-profile kinematic wave solver
+src/rivers/ingest/collect_river_data.py        # collects and exports real-river input data
+src/rivers/ingest/                             # provider clients, importers, and SQLite helpers
 tests/test_linear_advection.py        # mass conservation + analytical verification
 tests/test_saint_venant_1d.py         # conservation, equilibrium, boundary, and dry-state tests
 tests/test_river_kinematic_wave.py    # profile I/O and mass balance tests
@@ -84,11 +84,11 @@ real_world_rivers/                    # example data files and Columbia River in
 ## How to Run
 
 ```
-python src/floods/linear_advection.py
-python src/floods/saint_venant_1d.py
-python src/tools/animate_depth.py                    # animate the most recent run
-python src/tools/animate_depth.py path/to/other.csv  # or a specific table
-python src/tools/collect_river_data.py --help        # real-river data workflow
+python src/general/solvers/linear_advection.py
+python src/general/solvers/saint_venant_1d.py
+python src/general/viz/animate_depth.py                    # animate the most recent run
+python src/general/viz/animate_depth.py path/to/other.csv  # or a specific table
+python src/rivers/ingest/collect_river_data.py --help      # real-river data workflow
 ```
 
 Requires `numpy`, `matplotlib`, and `pytest`. The overland-flow solvers produce plots

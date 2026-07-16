@@ -1,11 +1,11 @@
 """View a kinematic wave depth-vs-time table as an animation.
 
-Reads a CSV produced by floods.linear_advection.save_time_series_csv
+Reads a CSV produced by general.solvers.linear_advection.save_time_series_csv
 (header row: t, x_0, x_1, ...; one row per recorded time) and animates
 u(x) over time, one frame per recorded timestamp.
 
 Usage:
-    python src/tools/animate_depth.py [path/to/timeseries.csv]
+    python src/general/viz/animate_depth.py [path/to/timeseries.csv]
 
 With no argument, reads data/linear_advection_timeseries.csv.
 """

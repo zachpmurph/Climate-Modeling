@@ -4,18 +4,18 @@ import sys
 from pathlib import Path
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
+SRC_ROOT = Path(__file__).resolve().parents[2]
+if str(SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(SRC_ROOT))
 
-from src.tools.river_data.common import connect_database
-from src.tools.river_data.database import DEFAULT_DB_PATH, initialize_database
-from src.tools.river_data.elevation import collect_elevations
-from src.tools.river_data.export_profile import export_profile
-from src.tools.river_data.markers import create_reach
-from src.tools.river_data.parameters import import_geometry, import_roughness
-from src.tools.river_data.rainfall import collect_rainfall
-from src.tools.river_data.usgs_flow import collect_usgs_flow
+from rivers.ingest.common import connect_database
+from rivers.ingest.database import DEFAULT_DB_PATH, initialize_database
+from rivers.ingest.elevation import collect_elevations
+from rivers.ingest.export_profile import export_profile
+from rivers.ingest.markers import create_reach
+from rivers.ingest.parameters import import_geometry, import_roughness
+from rivers.ingest.rainfall import collect_rainfall
+from rivers.ingest.usgs_flow import collect_usgs_flow
 
 
 def build_parser():
