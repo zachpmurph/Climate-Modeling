@@ -75,6 +75,12 @@ def run_model(L, T_final, record_interval=1.0, h_init=None, q_init=None):
         source = r(x, t_current)
         mass_source += np.sum(source[1:-1]) * dx * dt
 
+        # LxF boundary fluxes for mass tracking.
+        # F_left: LxF numerical flux at the left interior face (cell 0 → cell 1).
+        # Negative means mass flows leftward out of the interior (left-BC leakage).
+        F_left_face = 0.5 * q[1] - 0.5 * (dx / dt) * (h[1] - h_floor)
+        mass_outflow += (q[-2] - F_left_face) * dt
+
         # Lax-Friedrichs flux update (interior cells 1..Nx-2)
         h_new = h.copy()
         q_new = q.copy()
@@ -82,8 +88,6 @@ def run_model(L, T_final, record_interval=1.0, h_init=None, q_init=None):
                        - 0.5 * (dt / dx) * (F_h[2:] - F_h[:-2]))
         q_new[1:-1] = (0.5 * (q[2:] + q[:-2])
                        - 0.5 * (dt / dx) * (F_q[2:] - F_q[:-2]))
-
-        mass_outflow += (np.sum(h[1:-1]) - np.sum(h_new[1:-1])) * dx
 
         # Boundary conditions
         h_new[0] = h_floor   # no-inflow left BC

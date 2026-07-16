@@ -4,7 +4,7 @@ import pytest
 from floods import saint_venant_1d as sv
 
 
-def test_still_water_at_rest(monkeypatch):
+def test_far_field_undisturbed(monkeypatch):
     # Flat h=0.5, q=0, no rain, no slope — cells far from the left BC
     # should remain exactly undisturbed.
     #
@@ -38,8 +38,10 @@ def test_still_water_at_rest(monkeypatch):
 
 
 def test_mass_conservation():
-    # Run long enough that outflow is non-trivial (~40 min same as kinematic wave test).
-    # Mass balance closes to machine precision via direct array measurement.
+    # Verifies that change in stored depth equals rainfall added minus net boundary
+    # outflow (right-boundary outflow minus left-BC LxF diffusion leakage).
+    # Uses physical LxF boundary flux measurements, not array-derived bookkeeping,
+    # so this test can detect broken conservation in the scheme.
     result = sv.run_model(sv.L, 40.0)
     x = result["x"]
     dx = x[1] - x[0]
