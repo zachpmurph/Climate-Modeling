@@ -24,7 +24,7 @@ def parse_args():
     p.add_argument(
         "--solver",
         choices=sorted(SOLVERS),
-        default="river_kinematic_wave",
+        default="saint_venant_1d",
         help="Which solver to use",
     )
     p.add_argument("--t-final", type=float, required=True, help="Simulation duration in minutes")
