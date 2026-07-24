@@ -1,20 +1,20 @@
-"""Tests for the kinematic wave solver in floods/linear_advection.py.
+"""Tests for the 1-D river kinematic wave solver in general/solvers/linear_advection.py.
+
+linear_advection.py is the project's kinematic wave model: it runs directly on a
+RiverProfile (per-cell slope and Manning n), with optional upstream inflow and
+rainfall, and is the ``kinematic_wave`` solver in the simulation harness.
 
 Covers:
 
-1. Mass conservation: the change in stored depth over the interior of the
-   domain must equal source added minus outflow through the right boundary
-   (cell 0 is a boundary-condition cell, not a physical control volume, so
-   it's excluded from the balance -- see run_model's docstring).
-
-2. Convergence to the known analytical steady state for constant rainfall
-   on the kinematic wave equation: q_eq(x) = rate * x, so
-   h_eq(x) = (rate * x * n0 / sqrt(S0)) ** (3/5).
-
-3. The recorded (times, u_history) time series and its CSV export -- used
-   by src/general/viz/animate_depth.py to animate depth over time.
+1. Loading profiles (CSV/JSON) through the documented interface.
+2. Mass conservation with upstream inflow and with a timed rainfall source.
+3. Convergence to the analytical kinematic-wave equilibrium for constant
+   rainfall with a zero-inflow left boundary: the discrete steady state gives
+   q_eq(cell i) = rate * dx * (i + 1), hence h_eq = (q_eq * n / sqrt(S))**(3/5).
+4. The recorded (times, depth_history) series and its CSV/JSON export.
 """
 import csv
+import json
 
 import numpy as np
 import pytest
@@ -22,99 +22,175 @@ import pytest
 from general.solvers import linear_advection as la
 
 
-def test_mass_conservation():
-    # T=40 (not la.T_final=10) deliberately runs long enough for the
-    # advancing wave to reach the right boundary and produce non-trivial
-    # outflow (~9% of the balance) -- at T=10 outflow is ~0 and the test
-    # would pass even if outflow tracking were broken.
-    result = la.run_model(la.L, 40.0)
-    x = result["x"]
-    dx = x[1] - x[0]
-
-    stored_initial = np.sum(result["u_initial"][1:]) * dx
-    stored_final = np.sum(result["u_final"][1:]) * dx
-    delta_mass = stored_final - stored_initial
-
-    expected_delta = result["mass_source"] - result["mass_outflow"]
-
-    assert delta_mass == pytest.approx(expected_delta, rel=1e-3)
+def _uniform_profile(n_cells=11, length_m=1000.0, slope=0.001, manning_n=0.04):
+    return la.make_profile(
+        station_m=np.linspace(0.0, length_m, n_cells),
+        slope=np.full(n_cells, slope),
+        manning_n=np.full(n_cells, manning_n),
+    )
 
 
-def test_reaches_analytical_equilibrium(monkeypatch):
+# ── profile loading ────────────────────────────────────────────────────────
+def test_load_profile_csv():
+    profile = la.load_profile("real_world_rivers/tools/example_river_profile.csv")
+
+    assert np.allclose(profile.station_m, [0, 1000, 2000, 3000, 4000])
+    assert np.all(profile.dx_m > 0)
+    assert np.allclose(profile.initial_depth_m, [0.04, 0.04, 0.04, 0.04, 0.04])
+    assert profile.rainfall_rate_m_per_min is not None
+    assert profile.labels[0] == "upstream"
+
+
+def test_load_profile_json(tmp_path):
+    profile_path = tmp_path / "profile.json"
+    profile_path.write_text(
+        json.dumps(
+            {
+                "segments": [
+                    {"station_m": 0, "slope": 0.001, "manning_n": 0.035, "rainfall_rate_m_per_min": 0.000001},
+                    {"station_m": 100, "slope": 0.0012, "manning_n": 0.04, "rainfall_rate_m_per_min": 0.000002},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    profile = la.load_profile(profile_path)
+
+    assert np.allclose(profile.station_m, [0, 100])
+    assert profile.initial_depth_m is None
+    assert np.allclose(profile.rainfall_rate_m_per_min, [0.000001, 0.000002])
+
+
+# ── mass conservation ──────────────────────────────────────────────────────
+def test_upstream_inflow_mass_balance():
+    profile = _uniform_profile()
+
+    result = la.run_model(
+        profile,
+        t_final_min=30.0,
+        left_inflow_flux=0.0006,
+        record_interval_min=5.0,
+        base_depth_m=0.03,
+        wave_amplitude_m=0.01,
+        wave_center_m=200.0,
+        wave_width_m=75.0,
+    )
+
+    storage_initial = np.sum(result["depth_initial"] * result["dx_m"])
+    storage_final = np.sum(result["depth_final"] * result["dx_m"])
+    delta_storage = storage_final - storage_initial
+    expected_delta = result["mass_inflow"] + result["mass_source"] - result["mass_outflow"]
+
+    assert delta_storage == pytest.approx(expected_delta, rel=1e-3, abs=1e-8)
+    assert result["mass_source"] == pytest.approx(0.0)
+    assert result["times"][-1] == pytest.approx(30.0)
+    assert result["depth_history"].shape[0] == len(result["times"])
+
+
+def test_rainfall_source_mass_balance():
+    profile = _uniform_profile()
+
+    result = la.run_model(
+        profile,
+        t_final_min=20.0,
+        left_inflow_flux=0.0002,
+        record_interval_min=2.0,
+        base_depth_m=0.03,
+        rainfall_rate_m_per_min=0.00001,
+        rainfall_start_min=5.0,
+        rainfall_end_min=15.0,
+    )
+
+    storage_initial = np.sum(result["depth_initial"] * result["dx_m"])
+    storage_final = np.sum(result["depth_final"] * result["dx_m"])
+    delta_storage = storage_final - storage_initial
+    expected_delta = result["mass_inflow"] + result["mass_source"] - result["mass_outflow"]
+    expected_source = 0.00001 * np.sum(profile.dx_m) * 10.0
+
+    assert result["mass_source"] == pytest.approx(expected_source, rel=1e-10)
+    assert delta_storage == pytest.approx(expected_delta, rel=1e-3, abs=1e-8)
+
+
+def test_profile_rainfall_adds_to_uniform_rainfall():
+    profile = la.make_profile(
+        station_m=[0, 100, 200],
+        slope=[0.001, 0.001, 0.001],
+        manning_n=[0.04, 0.04, 0.04],
+        rainfall_rate_m_per_min=[0.0, 0.00001, 0.00002],
+    )
+
+    result = la.run_model(profile, t_final_min=1.0, left_inflow_flux=0.0, rainfall_rate_m_per_min=0.00001)
+
+    expected_source = np.sum((np.array([0.0, 0.00001, 0.00002]) + 0.00001) * profile.dx_m)
+    assert result["mass_source"] == pytest.approx(expected_source)
+
+
+# ── analytical equilibrium ─────────────────────────────────────────────────
+def test_reaches_analytical_equilibrium():
+    # Small uniform reach, zero upstream inflow, constant rainfall. The discrete
+    # kinematic-wave steady state is q_eq(i) = rate * dx * (i + 1), so
+    # h_eq(i) = (q_eq(i) * n / sqrt(S)) ** (3/5). No cell is pinned to zero, so
+    # (unlike the historical overland-flow test) every cell has a finite h_eq.
     rate = 0.0002
+    slope, manning_n = 0.05, 0.05
+    profile = _uniform_profile(n_cells=101, length_m=10.0, slope=slope, manning_n=manning_n)
+    dx = float(profile.dx_m[0])
 
-    def constant_rainfall(x, t):
-        return np.full_like(x, rate)
+    result = la.run_model(
+        profile,
+        t_final_min=150.0,
+        left_inflow_flux=0.0,
+        rainfall_rate_m_per_min=rate,
+    )
+    depth_final = result["depth_final"]
 
-    monkeypatch.setattr(la, "r", constant_rainfall)
-
-    # Estimated equilibrium time at x=L is ~49 min (h_eq(L)/rate); this is
-    # 3x that, and the steady-state residual check below confirms
-    # convergence rather than assuming the margin was enough.
-    result = la.run_model(la.L, 150.0)
-    x = result["x"]
-    dx = x[1] - x[0]
-    u_final = result["u_final"]
-
-    # Confirm steady state was actually reached: at steady state the scheme
-    # enforces (q[i]-q[i-1])/dx == rate for every interior cell.
-    flux_final = la.q(u_final)
+    # Steady state actually reached: interior discrete residual ~ rate.
+    flux_final = la.q(depth_final, profile.slope, profile.manning_n)
     residual = (flux_final[1:] - flux_final[:-1]) / dx - rate
     assert np.max(np.abs(residual)) < 1e-6
 
-    h_eq = (rate * x * la.n0 / np.sqrt(la.S0)) ** (3 / 5)
-
-    # Exclude the first ~1m: h_eq -> 0 as x -> 0, so relative error blows
-    # up near the boundary-condition cell even though absolute error there
-    # is tiny (this is expected, not a scheme bug -- see README history).
-    mask = x > 1.0
-    rel_error = np.abs(u_final[mask] - h_eq[mask]) / h_eq[mask]
-
-    assert np.max(rel_error) < 0.05
-    l2_rel_error = np.sqrt(np.mean((u_final[mask] - h_eq[mask]) ** 2)) / np.sqrt(np.mean(h_eq[mask] ** 2))
-    assert l2_rel_error < 0.02
+    q_eq = rate * dx * (np.arange(len(depth_final)) + 1)
+    h_eq = (q_eq * manning_n / np.sqrt(slope)) ** (3.0 / 5.0)
+    rel_error = np.abs(depth_final - h_eq) / h_eq
+    assert np.max(rel_error) < 1e-3
 
 
-def test_time_series_recorded_every_minute():
-    result = la.run_model(la.L, 10.0)
+# ── time-series recording + export ─────────────────────────────────────────
+def test_time_series_recorded_on_interval_grid():
+    profile = _uniform_profile()
+    result = la.run_model(profile, t_final_min=10.0, left_inflow_flux=0.0002, record_interval_min=1.0)
 
     assert np.allclose(result["times"], np.arange(0, 11))
-    assert result["u_history"].shape == (11, result["x"].shape[0])
-    # First/last recorded rows must match u_initial/u_final exactly -- they
-    # come from the same snapshots, not a re-derivation.
-    assert np.array_equal(result["u_history"][0], result["u_initial"])
-    assert np.array_equal(result["u_history"][-1], result["u_final"])
+    assert result["depth_history"].shape == (11, len(profile.station_m))
+    assert np.array_equal(result["depth_history"][0], result["depth_initial"])
+    assert np.array_equal(result["depth_history"][-1], result["depth_final"])
 
 
-def test_time_series_custom_interval_and_fractional_final_time():
-    # record_interval doesn't evenly divide T_final here (5.5 / 0.5 = 11,
-    # so it actually does divide evenly -- pick a case that doesn't, to
-    # confirm T_final itself always gets appended as the last mark).
-    result = la.run_model(la.L, 5.3, record_interval=0.5)
+def test_time_series_fractional_final_time_appended():
+    profile = _uniform_profile()
+    result = la.run_model(profile, t_final_min=5.3, left_inflow_flux=0.0002, record_interval_min=0.5)
 
     assert result["times"][-1] == pytest.approx(5.3)
-    assert result["u_history"].shape[0] == len(result["times"])
-    # marks at 0, 0.5, ..., 5.0 (11 of them) plus the trailing 5.3
-    assert len(result["times"]) == 12
+    assert result["depth_history"].shape[0] == len(result["times"])
+    assert len(result["times"]) == 12  # 0, 0.5, ..., 5.0 (11) + trailing 5.3
 
 
-def test_save_time_series_csv_round_trip(tmp_path):
-    result = la.run_model(la.L, 3.0)
-    csv_path = tmp_path / "timeseries.csv"
+def test_save_outputs(tmp_path):
+    profile = la.make_profile(station_m=[0, 100, 200], slope=[0.001, 0.001, 0.001], manning_n=[0.04, 0.04, 0.04])
+    result = la.run_model(profile, t_final_min=2.0, left_inflow_flux=0.0001, rainfall_rate_m_per_min=0.000001)
 
+    csv_path = tmp_path / "run.csv"
+    summary_path = tmp_path / "summary.json"
     la.save_time_series_csv(result, csv_path)
+    summary = la.save_summary_json(result, summary_path)
 
     with open(csv_path, newline="") as f:
-        reader = csv.reader(f)
-        header = next(reader)
-        rows = list(reader)
+        rows = list(csv.reader(f))
 
-    assert header[0] == "t"
-    assert len(header) - 1 == len(result["x"])
-    assert len(rows) == len(result["times"])
-
-    read_x = np.array([float(v) for v in header[1:]])
-    assert np.allclose(read_x, result["x"], atol=1e-5)
-
-    read_first_row = np.array([float(v) for v in rows[0][1:]])
-    assert np.allclose(read_first_row, result["u_initial"], rtol=1e-6, atol=1e-15)
+    assert rows[0][0] == "t_min"
+    assert len(rows[0]) == 4
+    assert summary_path.exists()
+    assert summary["cells"] == 3
+    assert "mass_source_m2" in summary
+    assert "mass_balance_error_m2" in summary

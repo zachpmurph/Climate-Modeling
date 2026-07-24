@@ -1,159 +1,286 @@
+"""1-D river kinematic wave model.
+
+This is the project's kinematic wave solver. It runs directly on a
+``RiverProfile`` (per-cell slope and Manning n), with optional constant upstream
+inflow and a rainfall source term, and integrates water depth forward with a
+conservative finite-volume upwind scheme and an adaptive (CFL-limited) time step.
+
+Two ways to run it:
+
+* **Standalone:** ``python src/general/solvers/linear_advection.py [profile]`` runs
+  a profile (CSV/JSON) and writes a depth time-series CSV and a summary JSON. With
+  no profile it runs a built-in uniform demo and also writes ``data/linear_advection.png``.
+* **Harness:** the module-level ``SOLVER`` (name ``"kinematic_wave"``) plugs into
+  ``src/rivers/simulations/run_simulation.py`` via the solver registry.
+
+Units are meters and minutes throughout.
+"""
+
 import csv
+import json
+import sys
+from pathlib import Path
+
+# Allow running this file directly (python src/general/solvers/linear_advection.py):
+# put src/ on the path so the general.* / rivers.* packages import either way.
+_SRC_ROOT = Path(__file__).resolve().parents[2]
+if str(_SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(_SRC_ROOT))
 
 import numpy as np
-import matplotlib.pyplot as plt
 
 from general.solvers.contract import Domain, Scenario, SimulationResult
+from general.solvers.profile import (
+    RiverProfile,
+    domain_from_profile,
+    load_profile,
+    load_profile_csv,
+    load_profile_json,
+    make_profile,
+)
 
-##NOTE: Units are in meters and minutes
-#Parameters:
-L = 10.0         # domain length
-T_final = 300.0    # total simulation time
-S0 = 0.05
-n0 = 0.05
+MIN_DEPTH = 1e-10
 
 
-def r(x, t):
-    if (t >=0 and t < 50):
-        return 0.00002 * np.ones(len(x))
-    return np.zeros(len(x))
+def q(depth_m, slope, manning_n):
+    """Manning discharge per unit width (m^2/min in this repo's convention)."""
+    depth_m = np.maximum(depth_m, 0.0)
+    return (1.0 / manning_n) * (depth_m ** (5.0 / 3.0)) * np.sqrt(slope)
 
-def c(u):
-    u = np.maximum(u, 0.0)  # prevents accidental negatives from error
-    return (5/(3 * n0)) * (u ** (2/3)) * np.sqrt(S0)          # wave speed
 
-def q(u):
-    u = np.maximum(u, 0.0)  # prevents accidental negatives from error
-    return (1/(n0)) * (u ** (5/3)) * np.sqrt(S0)          # wave speed 
+def c(depth_m, slope, manning_n):
+    """Kinematic wave speed dq/dh."""
+    depth_m = np.maximum(depth_m, 0.0)
+    return (5.0 / (3.0 * manning_n)) * (depth_m ** (2.0 / 3.0)) * np.sqrt(slope)
 
-#Runs the kinematic wave model
-def run_model(L, T_final, record_interval=1.0):
-    #Establish Domain
-    Nx = int(L*10)       # number of cells
-    dx = L / Nx
-    x = np.linspace(dx/2, L-(dx/2), Nx)
 
-    #Initial Condition
-    center = 3.0
-    u = 0.01 *np.exp(-((x - center)**2) / 0.2)
-    u_initial = u.copy()
-    t_current = 0
+def _initial_depth(profile, base_depth_m, wave_center_m, wave_amplitude_m, wave_width_m):
+    if profile.initial_depth_m is not None:
+        depth = profile.initial_depth_m.copy()
+    else:
+        depth = np.full_like(profile.station_m, base_depth_m, dtype=float)
 
-    # Mass bookkeeping over the interior control volume (cells 1..Nx-1).
-    # Cell 0 is a boundary-condition cell (reset to ~0 every step) rather
-    # than a physical control volume, so it's excluded from both sides of
-    # the balance: mass_source only counts source added to cells 1..Nx-1,
-    # and mass_outflow is the flux leaving through the right edge.
+    if wave_amplitude_m != 0.0:
+        if wave_center_m is None:
+            wave_center_m = float(profile.station_m[0] + 0.25 * (profile.station_m[-1] - profile.station_m[0]))
+        if wave_width_m is None:
+            wave_width_m = max(float(profile.length_m) / 20.0, float(np.min(profile.dx_m)))
+        depth += wave_amplitude_m * np.exp(-((profile.station_m - wave_center_m) ** 2) / (2.0 * wave_width_m ** 2))
+
+    return np.maximum(depth, MIN_DEPTH)
+
+
+def _rainfall_source(profile, rainfall_rate_m_per_min, rainfall_start_min, rainfall_end_min, t_current):
+    if rainfall_end_min is not None and rainfall_end_min < rainfall_start_min:
+        raise ValueError("rainfall_end_min must be greater than or equal to rainfall_start_min")
+    if t_current < rainfall_start_min:
+        return np.zeros_like(profile.station_m, dtype=float)
+    if rainfall_end_min is not None and t_current >= rainfall_end_min:
+        return np.zeros_like(profile.station_m, dtype=float)
+
+    source = np.zeros_like(profile.station_m, dtype=float)
+    if profile.rainfall_rate_m_per_min is not None:
+        source += profile.rainfall_rate_m_per_min
+    source += rainfall_rate_m_per_min
+    return source
+
+
+def run_model(
+    profile,
+    t_final_min,
+    left_inflow_flux,
+    record_interval_min=1.0,
+    base_depth_m=0.01,
+    wave_center_m=None,
+    wave_amplitude_m=0.0,
+    wave_width_m=None,
+    rainfall_rate_m_per_min=0.0,
+    rainfall_start_min=0.0,
+    rainfall_end_min=None,
+    cfl=0.5,
+):
+    """Run a 1D river kinematic wave model with upstream inflow and rainfall.
+
+    ``left_inflow_flux`` is the depth-area flux entering the left boundary in
+    square meters per minute. Rainfall source terms are depth added per minute.
+    The model state is water depth in meters.
+    """
+    if t_final_min < 0:
+        raise ValueError("t_final_min must be non-negative")
+    if record_interval_min <= 0:
+        raise ValueError("record_interval_min must be positive")
+    if left_inflow_flux < 0:
+        raise ValueError("left_inflow_flux must be non-negative")
+    if rainfall_rate_m_per_min < 0:
+        raise ValueError("rainfall_rate_m_per_min must be non-negative")
+    if rainfall_start_min < 0:
+        raise ValueError("rainfall_start_min must be non-negative")
+    if rainfall_end_min is not None and rainfall_end_min < rainfall_start_min:
+        raise ValueError("rainfall_end_min must be greater than or equal to rainfall_start_min")
+    if not (0 < cfl <= 1):
+        raise ValueError("cfl must be in the interval (0, 1]")
+
+    depth = _initial_depth(profile, base_depth_m, wave_center_m, wave_amplitude_m, wave_width_m)
+    initial_depth = depth.copy()
+
+    n_marks = int(np.floor(t_final_min / record_interval_min + 1e-9))
+    record_times = [i * record_interval_min for i in range(n_marks + 1)]
+    if not record_times or record_times[-1] < t_final_min - 1e-9:
+        record_times.append(float(t_final_min))
+
+    times = [0.0]
+    history = [initial_depth.copy()]
+    next_record_idx = 1
+    t_current = 0.0
+
+    mass_inflow = 0.0
     mass_source = 0.0
     mass_outflow = 0.0
 
-    # Record snapshots on a fixed wall-clock grid (every record_interval
-    # minutes) rather than every adaptive dt, so the time series is easy
-    # to animate/tabulate. record_times always includes t=0 and T_final.
-    n_marks = int(np.floor(T_final / record_interval + 1e-9))
-    record_times = [i * record_interval for i in range(n_marks + 1)]
-    if record_times[-1] < T_final - 1e-9:
-        record_times.append(T_final)
+    while t_current < t_final_min - 1e-12:
+        # Adaptive time step from the CFL condition against the current max wave
+        # speed -- c(h) is nonlinear, so a fixed dt can go unstable as h grows.
+        wave_speed = c(depth, profile.slope, profile.manning_n)
+        c_max = float(np.max(wave_speed))
+        if c_max > 0:
+            dt = cfl * float(np.min(profile.dx_m)) / c_max
+        else:
+            dt = t_final_min - t_current
 
-    times = [0.0]
-    history = [u_initial.copy()]
-    next_record_idx = 1
-
-    while t_current < T_final:
-        # Adaptive time step
-        c_max = np.max(c(u))
-        CFL = 0.5        # Courant number (must be <= 1)
-        dt = CFL * dx / c_max
-        if t_current + dt > T_final:
-            dt = T_final - t_current
-        # Also cap dt so we land exactly on the next recording mark instead
-        # of stepping past it -- keeps the recorded snapshots exact rather
-        # than approximated from whichever step happened to overshoot.
+        dt = min(dt, t_final_min - t_current)
         if next_record_idx < len(record_times):
             dt = min(dt, record_times[next_record_idx] - t_current)
+        # Land exactly on rainfall on/off transitions so the source integral is exact.
+        if rainfall_end_min is not None and t_current < rainfall_end_min < t_current + dt:
+            dt = rainfall_end_min - t_current
+        if t_current < rainfall_start_min < t_current + dt:
+            dt = rainfall_start_min - t_current
+        if dt <= 1e-12:
+            dt = min(t_final_min - t_current, 1e-12)
 
-        # Conservative upwind update
-        flux = q(u)
-        u_new = u.copy()
-        u_new[1:] = u[1:] - (dt/dx) * (flux[1:] - flux[:-1])
-        u_new[0] = 1e-10   # zero-depth at watershed divide (adjust to taste)
+        # Conservative upwind flux update: left interface carries the upstream
+        # inflow, interior interfaces carry the upwind cell's Manning flux.
+        cell_flux = q(depth, profile.slope, profile.manning_n)
+        interface_flux = np.empty(len(depth) + 1, dtype=float)
+        interface_flux[0] = left_inflow_flux
+        interface_flux[1:] = cell_flux
 
-        source = r(x, t_current)
-        mass_outflow += flux[-1] * dt
-        mass_source += np.sum(source[1:]) * dx * dt
+        source = _rainfall_source(profile, rainfall_rate_m_per_min, rainfall_start_min, rainfall_end_min, t_current)
+        depth = depth - (dt / profile.dx_m) * (interface_flux[1:] - interface_flux[:-1])
+        depth = depth + dt * source
+        depth = np.maximum(depth, MIN_DEPTH)
 
-        # Add source
-        u = u_new + dt * source
-
-        # Enforce non-negativity
-        u = np.maximum(u, 1e-10)
-
+        mass_inflow += left_inflow_flux * dt
+        mass_source += float(np.sum(source * profile.dx_m) * dt)
+        mass_outflow += cell_flux[-1] * dt
         t_current += dt
 
         if next_record_idx < len(record_times) and t_current >= record_times[next_record_idx] - 1e-9:
             times.append(record_times[next_record_idx])
-            history.append(u.copy())
+            history.append(depth.copy())
             next_record_idx += 1
 
     return {
-        "x": x,
+        "station_m": profile.station_m,
+        "dx_m": profile.dx_m,
+        "slope": profile.slope,
+        "manning_n": profile.manning_n,
         "times": np.array(times),
-        "u_history": np.array(history),
-        "u_initial": u_initial,
-        "u_final": u,
+        "depth_history": np.array(history),
+        "depth_initial": initial_depth,
+        "depth_final": depth,
+        "mass_inflow": mass_inflow,
         "mass_source": mass_source,
         "mass_outflow": mass_outflow,
+        "left_inflow_flux": left_inflow_flux,
+        "rainfall_rate_m_per_min": rainfall_rate_m_per_min,
+        "rainfall_start_min": rainfall_start_min,
+        "rainfall_end_min": rainfall_end_min,
     }
 
+
 def save_time_series_csv(result, path):
-    """Write the recorded (t, u(x)) table to a CSV: one row per recorded
-    time, one column per spatial cell. Read back by src/general/viz/animate_depth.py."""
+    """Write the recorded (t, depth(x)) table: one row per recorded time, one
+    column per cell. Read back by src/general/viz/animate_depth.py."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["t"] + [f"{xi:.6f}" for xi in result["x"]])
-        for t, u_row in zip(result["times"], result["u_history"]):
-            writer.writerow([f"{t:.6f}"] + [f"{ui:.10g}" for ui in u_row])
+        writer.writerow(["t_min"] + [f"{station:.6f}" for station in result["station_m"]])
+        for t, depth_row in zip(result["times"], result["depth_history"]):
+            writer.writerow([f"{t:.6f}"] + [f"{depth:.10g}" for depth in depth_row])
+
+
+def save_summary_json(result, path):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    storage_initial = float(np.sum(result["depth_initial"] * result["dx_m"]))
+    storage_final = float(np.sum(result["depth_final"] * result["dx_m"]))
+    expected_delta = result["mass_inflow"] + result["mass_source"] - result["mass_outflow"]
+    summary = {
+        "t_start_min": float(result["times"][0]),
+        "t_final_min": float(result["times"][-1]),
+        "cells": int(len(result["station_m"])),
+        "river_length_m": float(np.sum(result["dx_m"])),
+        "left_inflow_flux_m2_per_min": float(result["left_inflow_flux"]),
+        "rainfall_rate_m_per_min": float(result["rainfall_rate_m_per_min"]),
+        "rainfall_start_min": float(result["rainfall_start_min"]),
+        "rainfall_end_min": None if result["rainfall_end_min"] is None else float(result["rainfall_end_min"]),
+        "mass_inflow_m2": float(result["mass_inflow"]),
+        "mass_source_m2": float(result["mass_source"]),
+        "mass_outflow_m2": float(result["mass_outflow"]),
+        "storage_initial_m2": storage_initial,
+        "storage_final_m2": storage_final,
+        "storage_delta_m2": storage_final - storage_initial,
+        "mass_balance_error_m2": (storage_final - storage_initial) - expected_delta,
+        "max_depth_final_m": float(np.max(result["depth_final"])),
+    }
+    path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+    return summary
+
 
 class _KinematicWaveSolver:
     name = "kinematic_wave"
-    supports = frozenset({"rainfall"})
+    supports = frozenset({"initial_depth", "left_inflow", "rainfall", "cfl"})
 
     def run(self, domain: Domain, scenario: Scenario) -> SimulationResult:
-        import general.solvers.linear_advection as _la
-
-        # Temporarily set globals from the Domain (uniform assumed: use first cell)
-        _orig_S0, _orig_n0 = _la.S0, _la.n0
-        _la.S0 = float(domain.slope[0])
-        _la.n0 = float(domain.manning_n[0])
-
-        # Inject per-scenario rainfall as module-level r if provided
-        _orig_r = _la.r
-        if scenario.rainfall is not None:
-            _la.r = scenario.rainfall
-
-        L = float(domain.x_m[-1] + domain.dx_m[-1] / 2)
-        try:
-            result = run_model(L, scenario.t_final_min, scenario.record_interval_min)
-        finally:
-            _la.S0 = _orig_S0
-            _la.n0 = _orig_n0
-            _la.r = _orig_r
-
-        x_int = result["x"]
-        dx_int = x_int[1] - x_int[0] if len(x_int) > 1 else domain.dx_m[0]
-        internal_domain = Domain(
-            x_m=x_int,
-            dx_m=np.full_like(x_int, dx_int),
-            slope=np.full_like(x_int, float(domain.slope[0])),
-            manning_n=np.full_like(x_int, float(domain.manning_n[0])),
+        init_depth = scenario.initial_depth_m
+        profile = RiverProfile(
+            station_m=domain.x_m,
+            dx_m=domain.dx_m,
+            slope=domain.slope,
+            manning_n=domain.manning_n,
+            initial_depth_m=init_depth if isinstance(init_depth, np.ndarray) else None,
         )
+
+        left_inflow = scenario.left_inflow
+        if callable(left_inflow):
+            left_inflow = float(left_inflow(0.0))
+
+        rainfall_rate = 0.0
+        if scenario.rainfall is not None:
+            sample = scenario.rainfall(domain.x_m, 0.0)
+            rainfall_rate = float(np.mean(sample))
+
+        base_depth_m = float(init_depth) if not isinstance(init_depth, np.ndarray) else 0.01
+
+        result = run_model(
+            profile,
+            t_final_min=scenario.t_final_min,
+            left_inflow_flux=float(left_inflow),
+            record_interval_min=scenario.record_interval_min,
+            rainfall_rate_m_per_min=rainfall_rate,
+            cfl=scenario.cfl,
+            base_depth_m=base_depth_m,
+        )
+
         return SimulationResult(
-            domain=internal_domain,
+            domain=domain,
             times=result["times"],
-            depth_history=result["u_history"],
-            depth_initial=result["u_initial"],
-            depth_final=result["u_final"],
-            mass_inflow=0.0,
+            depth_history=result["depth_history"],
+            depth_initial=result["depth_initial"],
+            depth_final=result["depth_final"],
+            mass_inflow=result["mass_inflow"],
             mass_source=result["mass_source"],
             mass_outflow=result["mass_outflow"],
         )
@@ -162,13 +289,48 @@ class _KinematicWaveSolver:
 SOLVER = _KinematicWaveSolver()
 
 
+def _demo_profile():
+    """A uniform reach used when the script is run with no profile argument."""
+    n_cells = 101
+    return make_profile(
+        station_m=np.linspace(0.0, 10.0, n_cells),
+        slope=np.full(n_cells, 0.05),
+        manning_n=np.full(n_cells, 0.05),
+    )
+
+
+def main(argv=None):
+    argv = list(sys.argv[1:] if argv is None else argv)
+
+    if argv:
+        profile = load_profile(argv[0])
+        run_name = Path(argv[0]).stem
+        result = run_model(profile, t_final_min=300.0, left_inflow_flux=0.0, rainfall_rate_m_per_min=0.00002,
+                           rainfall_end_min=50.0)
+    else:
+        profile = _demo_profile()
+        run_name = "linear_advection"
+        result = run_model(profile, t_final_min=300.0, left_inflow_flux=0.0, rainfall_rate_m_per_min=0.00002,
+                           rainfall_end_min=50.0)
+
+    out_dir = Path("data")
+    save_time_series_csv(result, out_dir / f"{run_name}_timeseries.csv")
+    summary = save_summary_json(result, out_dir / f"{run_name}_summary.json")
+
+    if not argv:
+        # Preserve the historical no-argument demo artifact.
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        plt.plot(result["station_m"], result["depth_initial"], label="Initial")
+        plt.plot(result["station_m"], result["depth_final"], label="Final", ls="--")
+        plt.legend(); plt.xlabel("station (m)"); plt.ylabel("depth (m)")
+        plt.savefig(out_dir / "linear_advection.png")
+
+    print(json.dumps(summary, indent=2))
+    return summary
+
+
 if __name__ == "__main__":
-    result = run_model(L, T_final)
-    # Plot
-    plt.plot(result["x"], result["u_initial"], label='Initial')
-    plt.plot(result["x"], result["u_final"], label=f'After t = {T_final}', ls = '--')
-    plt.legend(); plt.xlabel('x'); plt.ylabel('u')
-    plt.savefig("data/linear_advection.png")
-
-    save_time_series_csv(result, "data/linear_advection_timeseries.csv")
-
+    main()
