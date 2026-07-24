@@ -4,7 +4,7 @@ import sqlite3
 
 import pytest
 
-from general.solvers import river_kinematic_wave
+from general.solvers.profile import load_profile
 from rivers.ingest.common import haversine_m
 from rivers.ingest.elevation import collect_elevations, parse_elevations
 from rivers.ingest.export_profile import export_profile
@@ -195,7 +195,7 @@ def test_collection_and_profile_export_pipeline(tmp_path):
         flow_start="2020-01-01T00:00:00Z",
         flow_end="2020-01-01T02:00:00Z",
     )
-    profile = river_kinematic_wave.load_profile(output_path)
+    profile = load_profile(output_path)
 
     assert metadata["slope_values_adjusted"] == 1
     assert metadata["recommended_upstream_inflow"]["left_inflow_flux_m2_per_min"] == pytest.approx(
