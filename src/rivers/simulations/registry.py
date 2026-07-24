@@ -1,14 +1,12 @@
 from general.solvers.contract import UnsupportedScenario
 import general.solvers.linear_advection as _la
 import general.solvers.saint_venant_1d as _sv
-import general.solvers.river_kinematic_wave as _rkw
 
 import numpy as np
 
 SOLVERS = {
     "kinematic_wave": _la.SOLVER,
     "saint_venant": _sv.SOLVER,
-    "river_kinematic_wave": _rkw.SOLVER,
 }
 
 
