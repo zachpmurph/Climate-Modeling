@@ -9,11 +9,27 @@ validation and metadata rather than silently picking a convention.
 
 ---
 
-## 1. Manning's *n* unit convention is unresolved and self-contradictory in the repo
+## 1. Manning's *n* unit convention — RESOLVED: SI
 
-**Severity: blocking for calibrated results (not for running the pipeline).**
+**Decision (model owner, 2026-07-24): Manning's *n* is expressed in SI units
+(s·m^(−1/3)) at the model-facing boundary.**
 
-### The problem
+### What this now requires
+
+- **Ingestion side (done):** roughness is emitted and validated as SI *n*. The
+  validation plausibility range is the SI range (~0.008–0.2), and the curated
+  `real_world_rivers/columbia_hanford_roughness.csv` now carries the raw SI value
+  `0.028` (previously the ÷60 form `0.000467`).
+- **Model side (OUTSTANDING — owned by the model developer, not ingestion):** the
+  solver's `q = (1/n)·h^(5/3)·√S` (and the matching `c`) has **no seconds→minutes
+  factor**, so with SI *n* it produces velocity/flux in **m/s**, while the repo's
+  stated convention is meters-and-minutes. To make the model consistent with the
+  SI decision, multiply `q` and `c` by **60** (s→min) in
+  `src/general/solvers/river_kinematic_wave.py`. Until that factor is added, model
+  output built from SI *n* will be a factor of 60 too fast. Ingestion does not and
+  will not make this change.
+
+### The original problem (for the record)
 
 The 1D kinematic-wave solver computes discharge per unit width as
 
@@ -36,40 +52,18 @@ The repo currently contains **both conventions at once**:
 | `tests/test_river_data_tools.py` | `0.035`, `0.04` | raw SI (s-based) |
 | `real_world_rivers/columbia_hanford_roughness.csv` | `0.000467` | SI ÷ 60 (m-and-min), *documented in the file itself* |
 
-The Columbia roughness file explicitly annotates its value as
-*"SI n=0.028 s/m^(1/3) converted to min/m^(1/3) (÷60) for meters-and-minutes
-unit system."* So the curated real-world data assumes the ÷60 convention, while
-the solver's own test data assumes raw SI. These cannot both be right for the
-same `q` formula.
+Originally the repo contained **both conventions at once** — `test_river_data_tools.py`
+used raw SI *n* (`0.035`, `0.04`) while `columbia_hanford_roughness.csv` used the
+÷60 form (`0.000467`). The SI decision above resolves this in favour of raw SI:
+the test data was already SI, and the Columbia file has been changed to its raw SI
+value `0.028`.
 
-### What ingestion does in the meantime
+### Follow-up ingestion can do once the model factor lands
 
-- Ingestion **stores and emits Manning's *n* exactly as provided** in the
-  reviewed roughness input — it does not convert. Whatever convention the input
-  file uses is preserved verbatim, and the `method`/`notes` fields carry the
-  provenance.
-- The roughness **plausibility warning** in `validation.py` uses a range
-  (`1e-4 … 0.2`) deliberately widened to span *both* candidate conventions, so a
-  legitimately-converted value (Columbia's `0.000467`) is not flagged as
-  suspicious and a raw-SI value (`0.035`) is not either. This is a stopgap; a
-  single convention would let the range tighten and actually catch errors.
-
-### Requested decision
-
-Declare **one** convention for Manning's *n* at the model-facing boundary, and
-either:
-
-1. **Adopt m-and-min *n* (SI ÷ 60)** as the contract. Then the solver is already
-   consistent, `test_river_data_tools.py` should use ÷60 values, and ingestion
-   can assume/validate the ÷60 range. OR
-2. **Adopt raw SI *n*** and add the missing `×60` (seconds→minutes) factor to the
-   solver's `q`/`c`, so the model produces true m/min. Then ingestion assumes/
-   validates the SI range and the Columbia file should carry raw SI values.
-
-Once decided, ingestion will tighten the roughness validation range and, if
-option 1 is chosen, can optionally perform and record the SI→(m·min) conversion
-as a `derived` value with full provenance (original SI value, factor, result)
-rather than requiring pre-converted inputs.
+Once the solver's ×60 factor is in place, ingestion can optionally *derive* the
+SI *n* from a documented source value and record the derivation with provenance
+(original value, method, result) rather than relying on a hand-entered SI number
+in the reviewed CSV. Not needed for correctness; offered if useful.
 
 ---
 
