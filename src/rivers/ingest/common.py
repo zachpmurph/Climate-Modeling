@@ -2,10 +2,11 @@ import json
 import math
 import sqlite3
 import time
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
 from .database import DEFAULT_DB_PATH, initialize_database
@@ -14,13 +15,54 @@ from .database import DEFAULT_DB_PATH, initialize_database
 USER_AGENT = "Climate-Modeling river-data collector/1.0"
 EARTH_RADIUS_M = 6_371_008.8
 
+# Query-string keys whose values are credentials and must never appear in
+# stored URLs, logs, metadata, or exception messages.
+SENSITIVE_QUERY_KEYS = frozenset(
+    {"api_key", "apikey", "key", "token", "access_token", "auth", "password", "secret"}
+)
 
+
+class ProviderRequestError(RuntimeError):
+    """A provider HTTP request failed. Its message is credential-redacted."""
+
+
+def redact_url(url):
+    """Return ``url`` with the value of any sensitive query parameter replaced.
+
+    Redaction covers credentials passed in the query string of provider URLs so
+    they cannot leak through ``data_sources.url``, logs, metadata sidecars, or
+    exception text. URLs without a query string are returned unchanged.
+    """
+    if not url:
+        return url
+    parts = urlsplit(url)
+    if not parts.query:
+        return url
+    query = [
+        (key, "REDACTED" if key.lower() in SENSITIVE_QUERY_KEYS else value)
+        for key, value in parse_qsl(parts.query, keep_blank_values=True)
+    ]
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
+
+
+@contextmanager
 def connect_database(db_path=DEFAULT_DB_PATH):
+    """Yield a configured SQLite connection, committing on success and always closing.
+
+    Used as ``with connect_database(...) as conn:``. The surrounding transaction
+    commits on a clean exit and rolls back on exception, and the connection is
+    closed either way — so a failed provider call leaves no partial writes and
+    no dangling file handle (which on Windows would lock the database file).
+    """
     initialize_database(db_path)
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
-    return conn
+    try:
+        with conn:
+            yield conn
+    finally:
+        conn.close()
 
 
 def utc_now():
@@ -29,21 +71,27 @@ def utc_now():
 
 def request_json(base_url, params=None, timeout=30, max_retries=3, retry_delay=1.0):
     url = f"{base_url}?{urlencode(params)}" if params else base_url
+    safe_url = redact_url(url)
     request = Request(url, headers={"Accept": "application/json", "User-Agent": USER_AGENT})
     last_error = None
     for attempt in range(max_retries + 1):
         try:
             with urlopen(request, timeout=timeout) as response:
-                return json.load(response), response.geturl()
+                return json.load(response), redact_url(response.geturl())
         except HTTPError as exc:
             if exc.code < 500:
-                raise  # 4xx errors won't be fixed by retrying
+                # 4xx errors won't be fixed by retrying. Raise a redacted error
+                # so the credential in `url` never surfaces in the traceback.
+                raise ProviderRequestError(f"HTTP {exc.code} from {safe_url}") from None
             last_error = exc
         except (URLError, OSError) as exc:
             last_error = exc
         if attempt < max_retries:
             time.sleep(retry_delay * (2 ** attempt))
-    raise last_error
+    raise ProviderRequestError(
+        f"Provider request to {safe_url} failed after {max_retries + 1} attempt(s): "
+        f"{type(last_error).__name__}"
+    ) from None
 
 
 def add_source(conn, name, source_type, url=None, citation=None, notes=None):

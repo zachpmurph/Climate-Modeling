@@ -6,10 +6,12 @@ or fixture payloads. No test in this module touches the network.
 """
 
 import csv
+from urllib.error import URLError
 
 import pytest
 
-from rivers.ingest.common import add_source, connect_database, request_json
+from rivers.ingest import common
+from rivers.ingest.common import add_source, connect_database, redact_url, request_json
 from rivers.ingest.elevation import collect_elevations
 from rivers.ingest.markers import create_reach
 from rivers.ingest.rainfall import collect_rainfall
@@ -104,6 +106,53 @@ def test_rerunning_elevation_ingestion_does_not_duplicate_samples(tmp_path):
 
     assert _count(db_path, "elevation_samples", reach_id) == 3
     assert _count(db_path, "slope_samples", reach_id) == 2
+
+
+def test_redact_url_scrubs_sensitive_query_parameters():
+    redacted = redact_url("https://api.example.test/data?api_key=SECRET&token=TOP&x=1")
+    assert "SECRET" not in redacted
+    assert "TOP" not in redacted
+    assert "x=1" in redacted
+    assert "api_key=REDACTED" in redacted
+
+
+def test_request_json_redacts_credentials_in_raised_exception(monkeypatch):
+    def failing_urlopen(request, timeout=None):
+        raise URLError(f"cannot reach {request.full_url}")
+
+    # No retry delay: avoid slowing the test.
+    monkeypatch.setattr(common, "urlopen", failing_urlopen)
+
+    with pytest.raises(Exception) as excinfo:
+        request_json(
+            "https://api.example.test/data",
+            {"api_key": "SUPERSECRET", "site": "01234567"},
+            max_retries=0,
+        )
+
+    message = str(excinfo.value)
+    assert "SUPERSECRET" not in message
+    assert "REDACTED" in message
+
+
+def test_failed_provider_call_preserves_previously_stored_data(tmp_path):
+    db_path, reach_id = _make_reach(tmp_path)
+    collect_rainfall(reach_id, "2020-01-01", "2020-01-01", db_path=db_path, requester=_rainfall_requester)
+
+    def exploding_requester(url, params=None):
+        raise RuntimeError("provider is down")
+
+    with pytest.raises(RuntimeError):
+        collect_elevations(reach_id, db_path=db_path, requester=exploding_requester)
+
+    # The failed elevation fetch must not have written partial rows, and the
+    # earlier rainfall data must survive.
+    assert _count(db_path, "elevation_samples", reach_id) == 0
+    assert _count(db_path, "rainfall_observations", reach_id) == 2
+
+    # The database must remain writable after the failure (no dangling lock).
+    collect_elevations(reach_id, db_path=db_path, requester=_elevation_requester)
+    assert _count(db_path, "elevation_samples", reach_id) == 3
 
 
 def test_add_source_is_idempotent_on_natural_key(tmp_path):
