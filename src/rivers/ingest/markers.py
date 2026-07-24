@@ -38,6 +38,27 @@ def load_marker_rows(path):
     return rows
 
 
+def find_reach_id(river_name, reach_name, *, region=None, country=None, db_path=None):
+    """Return the id of an existing reach, or None. Read-only.
+
+    Matches the same (name, region, country) river identity that
+    :func:`create_reach` uses, so the orchestrator can reuse a reach on an
+    idempotent re-run instead of failing on 'already exists'.
+    """
+    options = {} if db_path is None else {"db_path": db_path}
+    with connect_database(**options) as conn:
+        row = conn.execute(
+            """
+            SELECT reaches.id AS id
+            FROM reaches JOIN rivers ON rivers.id = reaches.river_id
+            WHERE reaches.name = ? AND rivers.name = ?
+              AND rivers.region IS ? AND rivers.country IS ?
+            """,
+            (reach_name, river_name, region, country),
+        ).fetchone()
+    return row["id"] if row is not None else None
+
+
 def create_reach(
     river_name,
     reach_name,

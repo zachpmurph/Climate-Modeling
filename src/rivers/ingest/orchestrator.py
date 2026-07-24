@@ -36,7 +36,7 @@ from .common import request_json
 from .database import DEFAULT_DB_PATH
 from .elevation import collect_elevations
 from .export_profile import export_profile
-from .markers import create_reach
+from .markers import create_reach, find_reach_id
 from .parameters import import_geometry, import_roughness
 from .rainfall import collect_rainfall
 from .usgs_flow import collect_usgs_flow
@@ -94,12 +94,24 @@ def ingest_reach(definition_path, *, db_path=None, replace=False, requesters=Non
 
         db = DEFAULT_DB_PATH if db_path is None else db_path
 
-        reach_id = create_reach(
-            river["name"], reach["name"], _resolve(base_dir, definition["markers"]),
-            region=river.get("region"), country=river.get("country"),
-            notes=reach.get("notes") or river.get("notes"),
-            db_path=db, replace=replace,
+        # Idempotent re-run: reuse an existing reach when not replacing, so a
+        # batch can be re-run safely (data steps upsert). Pass --replace to
+        # rebuild the reach and its markers from the definition.
+        existing_id = find_reach_id(
+            river["name"], reach["name"],
+            region=river.get("region"), country=river.get("country"), db_path=db,
         )
+        if existing_id is not None and not replace:
+            reach_id = existing_id
+            result["steps"]["reach"] = {"reach_id": reach_id, "reused": True}
+        else:
+            reach_id = create_reach(
+                river["name"], reach["name"], _resolve(base_dir, definition["markers"]),
+                region=river.get("region"), country=river.get("country"),
+                notes=reach.get("notes") or river.get("notes"),
+                db_path=db, replace=replace,
+            )
+            result["steps"]["reach"] = {"reach_id": reach_id, "reused": False}
         result["reach_id"] = reach_id
 
         with warnings.catch_warnings(record=True) as captured:
@@ -199,7 +211,12 @@ def ingest_all(curated_dir, *, db_path=None, replace=False, requesters=None):
     exist on disk afterwards.
     """
     curated_dir = Path(curated_dir)
-    definition_paths = sorted(curated_dir.glob("*.json"))
+    # Only reviewed definitions, never generated sidecars/profiles that may be
+    # written next to them (e.g. <name>.profile.metadata.json, <name>.profile.json).
+    definition_paths = sorted(
+        p for p in curated_dir.glob("*.json")
+        if not p.name.endswith(".metadata.json") and not p.name.endswith(".profile.json")
+    )
     reaches = [
         ingest_reach(path, db_path=db_path, replace=replace, requesters=requesters)
         for path in definition_paths

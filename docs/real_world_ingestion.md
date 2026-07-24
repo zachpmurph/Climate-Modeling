@@ -127,8 +127,14 @@ python src/rivers/ingest/run_ingestion.py --all real_world_rivers/curated
   (reach + gauge + timestamp, reach + station, reach + interval, …) and providers
   upsert on it. `add_source` is idempotent on its metadata, so re-runs don't mint
   fresh source rows.
-- **Replacement** is explicit and per-invocation via `--replace`; it is never
-  baked into a curated definition.
+- **Re-running is idempotent.** Running a reach (or `--all`) again *without*
+  `--replace` reuses the existing reach and re-runs the data steps, which upsert
+  on natural keys — no duplicates, no error. `--all` also skips generated
+  sidecars (`*.profile.metadata.json`, `*.profile.json`) so they are never
+  mistaken for definitions.
+- **Replacement** is explicit and per-invocation via `--replace`, which rebuilds
+  the reach and its markers from the definition. It is never baked into a
+  curated definition.
 - **Caching:** no on-disk provider cache is shipped; `cache/` and `downloads/`
   directories under `real_world_rivers/` are gitignored if you add one.
 - **Atomicity & partial failure:** profile and metadata are written atomically

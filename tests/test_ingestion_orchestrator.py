@@ -90,6 +90,42 @@ def test_ingest_reach_is_rerunnable_without_duplicates(tmp_path):
     assert first["reach_id"] == second["reach_id"]
 
 
+def test_ingest_reach_rerun_without_replace_is_idempotent(tmp_path):
+    def_path = _make_definition(tmp_path)
+    db_path = tmp_path / "river.sqlite"
+
+    first = ingest_reach(def_path, db_path=db_path, requesters=_requesters())
+    second = ingest_reach(def_path, db_path=db_path, requesters=_requesters())  # no replace
+
+    assert first["status"] == "ok"
+    assert second["status"] == "ok", "re-running without --replace must reuse the reach, not fail"
+    assert first["reach_id"] == second["reach_id"]
+    assert second["steps"]["reach"]["reused"] is True
+
+
+def test_ingest_all_ignores_generated_sidecars_in_curated_dir(tmp_path):
+    curated = tmp_path / "curated"
+    curated.mkdir()
+    _make_definition(curated, name="one", output_name="one.profile.csv")
+
+    # First run writes one.profile.metadata.json (and .profile.csv) into curated/.
+    ingest_all(curated, db_path=tmp_path / "river.sqlite", requesters=_requesters())
+    assert (curated / "one.profile.metadata.json").exists()
+
+    # A second run must NOT treat that generated sidecar as a definition.
+    summary = ingest_all(curated, db_path=tmp_path / "river.sqlite", requesters=_requesters())
+    assert summary["total"] == 1, "generated .metadata.json must not be globbed as a definition"
+    assert summary["overall_success"] is True
+
+
+def test_ingest_all_empty_directory_is_not_success(tmp_path):
+    empty = tmp_path / "curated"
+    empty.mkdir()
+    summary = ingest_all(empty, db_path=tmp_path / "river.sqlite", requesters=_requesters())
+    assert summary["total"] == 0
+    assert summary["overall_success"] is False
+
+
 def test_ingest_all_reports_both_successes_and_failures(tmp_path):
     curated = tmp_path / "curated"
     curated.mkdir()
