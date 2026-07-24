@@ -1,0 +1,29 @@
+{
+  "river": {
+    "name": "Columbia",
+    "region": "Washington",
+    "country": "US",
+    "notes": "Hanford Reach: last free-flowing, non-tidal stretch of the Columbia in the US."
+  },
+  "reach": {
+    "name": "Hanford Reach",
+    "notes": "Priest Rapids Dam to Pasco. Marker order is upstream to downstream."
+  },
+  "markers": "../columbia_hanford_markers.csv",
+  "elevation": {
+    "provider": "open-meteo-dem",
+    "notes": "Copernicus GLO-90 DEM point samples at markers; slopes derived by endpoint difference."
+  },
+  "roughness": {
+    "file": "../columbia_hanford_roughness.csv",
+    "notes": "Reviewed Manning n. NOTE the unit convention documented in the file and in docs/ingestion_integration_requests.md."
+  },
+  "geometry": {
+    "file": "../columbia_hanford_geometry.csv",
+    "notes": "Literature width/depth estimate near Priest Rapids; classified as estimated."
+  },
+  "export": {
+    "output": "columbia_hanford.profile.csv",
+    "minimum_slope": 1e-6
+  }
+}

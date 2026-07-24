@@ -373,10 +373,12 @@ def validate_profile(rows, *, coordinates=None, adjustments=None):
     _check_coordinates(report, coordinates)
     _check_provenance(report, rows)
     for adjustment in adjustments or []:
+        station = adjustment.get("station_m")
+        where = f" at station {station:g} m" if isinstance(station, (int, float)) else ""
         report.add(
             INFO, "adjustment",
-            f"{adjustment.get('rule', 'adjustment')} applied to "
-            f"{adjustment.get('count', '?')} value(s).",
+            f"{adjustment.get('rule', 'adjustment')}{where}: "
+            f"{adjustment.get('original')} -> {adjustment.get('adjusted')}.",
             **adjustment,
         )
     return report

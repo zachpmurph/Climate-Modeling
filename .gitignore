@@ -1,3 +1,22 @@
 __pycache__/
 *.pyc
 .pytest_cache/
+
+# --- Generated real-world-river ingestion artifacts (reproducible from curated
+# definitions; never hand-edited). These are intentionally NOT committed. The
+# reviewed inputs (curated/*.json and the source marker/roughness/geometry CSVs)
+# and the schema ARE committed. Patterns are scoped so they do not shadow the
+# existing tracked data/real_world_rivers/columbia_hanford_profile.csv artifact.
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+
+# Generated profiles + provenance sidecars written next to curated definitions.
+real_world_rivers/curated/*.profile.csv
+real_world_rivers/curated/*.profile.json
+real_world_rivers/curated/*.metadata.json
+
+# Provider response caches and bulk downloads.
+real_world_rivers/**/cache/
+real_world_rivers/**/downloads/
