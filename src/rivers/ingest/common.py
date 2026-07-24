@@ -47,6 +47,23 @@ def request_json(base_url, params=None, timeout=30, max_retries=3, retry_delay=1
 
 
 def add_source(conn, name, source_type, url=None, citation=None, notes=None):
+    """Insert a provenance source, reusing an existing row with identical metadata.
+
+    ``add_source`` is idempotent on the natural key (name, source_type, url,
+    citation). Re-running an ingestion therefore does not mint a fresh
+    ``source_id`` every time, which is what keeps the observation-level UNIQUE
+    constraints (which do NOT include source_id) effective across runs. The
+    match uses SQL ``IS`` so NULL url/citation values compare correctly.
+    """
+    existing = conn.execute(
+        """
+        SELECT id FROM data_sources
+        WHERE name = ? AND source_type = ? AND url IS ? AND citation IS ?
+        """,
+        (name, source_type, url, citation),
+    ).fetchone()
+    if existing is not None:
+        return existing["id"]
     cursor = conn.execute(
         """
         INSERT INTO data_sources (name, source_type, url, citation, accessed_at, notes)

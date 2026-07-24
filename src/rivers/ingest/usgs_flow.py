@@ -130,8 +130,16 @@ def collect_usgs_flow(
             """
             INSERT INTO flow_observations
                 (reach_id, marker_id, gauge_id, observed_at, discharge_m3_per_min,
-                 discharge_original_value, discharge_original_unit, source_id, notes)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 discharge_original_value, discharge_original_unit, classification,
+                 source_id, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'observed', ?, ?)
+            ON CONFLICT (reach_id, gauge_id, observed_at) DO UPDATE SET
+                marker_id = excluded.marker_id,
+                discharge_m3_per_min = excluded.discharge_m3_per_min,
+                discharge_original_value = excluded.discharge_original_value,
+                discharge_original_unit = excluded.discharge_original_unit,
+                source_id = excluded.source_id,
+                notes = excluded.notes
             """,
             [
                 (
