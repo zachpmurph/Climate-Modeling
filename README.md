@@ -9,7 +9,7 @@ harness lets any solver run on any ingested river profile through a single CLI.
 
 ## Physics: what the solvers solve
 
-### Kinematic wave (`linear_advection.py`, `river_kinematic_wave.py`)
+### Kinematic wave (`linear_advection.py`)
 
 Solves the 1D kinematic wave equation for water depth $h(x, t)$:
 
@@ -72,6 +72,7 @@ The rationale for each transition is given alongside the change.
 | **3c — Real-river kinematic wave** | `01d808b` | New file `river_kinematic_wave.py` with per-cell slope and Manning's $n$ from a `RiverProfile` dataclass. Data pipeline (`collect_river_data.py`, `src/rivers/ingest/`) ingests USGS discharge, DEM-derived slopes, and roughness estimates into a local SQLite database; `export_profile.py` writes solver-ready CSV/JSON profiles. | Uniform-slope overland-flow models cannot represent real river channels whose geometry varies along the reach. Per-cell spatial variation is essential for using observed topography. |
 | **4a — Restructure** | `93c682d` | Moved all files into `src/general/` (solvers, viz) and `src/rivers/` (ingest, simulations). | As the repo grew beyond a single solver, `src/floods/` and `src/tools/` no longer described their contents. The new layout separates reusable numerical machinery (`general/`) from the river-application layer (`rivers/`). |
 | **4b — Solver-agnostic harness** | `69b519d` | `contract.py` defines `Domain`, `Scenario`, `SimulationResult`, `Solver` protocol, and `UnsupportedScenario`. `profile.py` houses `RiverProfile` loaders. Each solver exposes a `SOLVER` singleton; back-compat `run_model()` wrappers preserved. `registry.py` maps names to solvers; `run_simulation.py` is the unified CLI. | Adding a new solver previously required a new runner script and bespoke output handling. The contract layer means any solver can be swapped in by name, scenario knobs are validated up-front, and output is always a canonical `SimulationResult` with a mass-balance error in the JSON summary. |
+| **4c — Kinematic wave consolidated** | `a282b4f` `e1ec579` | Folded the real-river kinematic wave capability (per-cell slope and Manning's $n$, upstream inflow, rainfall) into `linear_advection.py` and removed the duplicate `river_kinematic_wave.py` and its pre-harness runner. `linear_advection.py` now runs standalone on a profile (or a built-in demo) and is the `kinematic_wave` solver in the harness. `--solver river_kinematic_wave` is replaced by `--solver kinematic_wave`. | The overland-flow file and the real-river file had diverged into near-duplicate kinematic wave solvers. Consolidating to one implementation removes the redundancy and the need for a separate file to run a real-profile simulation. |
 
 ---
 
@@ -115,7 +116,7 @@ python src/rivers/simulations/run_simulation.py PROFILE --solver SOLVER --t-fina
 | Flag | Default | Description |
 |---|---|---|
 | `PROFILE` | *(required)* | Path to CSV or JSON river profile |
-| `--solver` | `river_kinematic_wave` | One of: `river_kinematic_wave`, `saint_venant`, `kinematic_wave` |
+| `--solver` | *(pass explicitly)* | One of: `kinematic_wave`, `saint_venant` |
 | `--t-final` | *(required)* | Simulation duration, minutes |
 | `--record-interval` | `1.0` | Snapshot interval, minutes |
 | `--left-inflow` | `0.0` | Constant upstream inflow flux, m²/min |
@@ -128,7 +129,7 @@ python src/rivers/simulations/run_simulation.py PROFILE --solver SOLVER --t-fina
 ```bash
 python src/rivers/simulations/run_simulation.py \
     real_world_rivers/tools/example_river_profile.csv \
-    --solver river_kinematic_wave \
+    --solver kinematic_wave \
     --t-final 30 \
     --left-inflow 0.0006 \
     --run-name hanford_kw
@@ -144,9 +145,9 @@ python src/rivers/simulations/run_simulation.py \
     --run-name hanford_sv
 ```
 
-Each solver declares which `Scenario` knobs it supports. Passing an unsupported
-knob (e.g. `--left-inflow` with `--solver kinematic_wave`) raises `UnsupportedScenario`
-immediately rather than silently ignoring it.
+Each solver declares which `Scenario` knobs it supports. Passing a knob a solver
+doesn't support raises `UnsupportedScenario` immediately rather than silently
+ignoring it.
 
 ### Ingesting real river data
 
@@ -179,7 +180,7 @@ Then run any solver on the exported profile:
 ```bash
 python src/rivers/simulations/run_simulation.py \
     data/real_world_rivers/columbia_hanford_profile.csv \
-    --solver river_kinematic_wave --t-final 120 --left-inflow 0.015
+    --solver kinematic_wave --t-final 120 --left-inflow 0.015
 ```
 
 For programmatic use, `profile_to_domain_scenario()` in
@@ -189,11 +190,11 @@ a `(Domain, Scenario)` pair ready for `registry.dispatch()`.
 ### Running tests
 
 ```bash
-python -m pytest tests/                                           # full suite (35 tests)
+python -m pytest tests/                                           # full suite
 python -m pytest tests/test_linear_advection.py -v               # kinematic wave only
 python -m pytest tests/test_saint_venant_1d.py -v                # Saint-Venant only
 python -m pytest tests/test_run_simulation.py -v                 # harness + dispatch tests
-python -m pytest tests/test_linear_advection.py::test_mass_conservation  # single test
+python -m pytest tests/test_linear_advection.py::test_upstream_inflow_mass_balance  # single test
 ```
 
 ---
@@ -203,19 +204,16 @@ python -m pytest tests/test_linear_advection.py::test_mass_conservation  # singl
 ```
 src/general/solvers/contract.py                # Domain, Scenario, SimulationResult, Solver protocol
 src/general/solvers/profile.py                 # RiverProfile dataclass and CSV/JSON loaders
-src/general/solvers/linear_advection.py        # kinematic wave overland-flow solver
+src/general/solvers/linear_advection.py        # kinematic wave solver (per-cell profile; standalone + harness)
 src/general/solvers/saint_venant_1d.py         # 1D Saint-Venant (full dynamic wave) solver
-src/general/solvers/river_kinematic_wave.py    # kinematic wave solver for real river profiles
 src/general/viz/animate_depth.py               # animates a saved depth-vs-time table
 src/rivers/simulations/registry.py             # name → Solver mapping
 src/rivers/simulations/run_simulation.py       # unified CLI dispatcher
 src/rivers/simulations/ingest_to_simulate.py   # profile_path → (Domain, Scenario) helper
-src/rivers/simulations/run_river_kinematic_wave.py  # legacy runner (pre-harness)
 src/rivers/ingest/collect_river_data.py        # CLI for the real-river data pipeline
 src/rivers/ingest/                             # USGS, DEM, roughness importers + SQLite helpers
-tests/test_linear_advection.py                 # mass conservation + analytical steady-state
+tests/test_linear_advection.py                 # profile I/O, mass balance, analytical equilibrium
 tests/test_saint_venant_1d.py                  # conservation, equilibrium, boundary, dry-state
-tests/test_river_kinematic_wave.py             # profile I/O and mass balance
 tests/test_river_data_tools.py                 # data-pipeline unit tests
 tests/test_run_simulation.py                   # dispatch, UnsupportedScenario, result shapes
 data/                                          # simulation output: plots and time series CSVs
@@ -229,22 +227,21 @@ real_world_rivers/                             # example profiles and Columbia R
 
 | Solver name | File | Left inflow | Per-cell geometry | Two-field (h+q) | Grid |
 |---|---|---|---|---|---|
-| `kinematic_wave` | `linear_advection.py` | No (pinned near 0) | No (uniform S₀, n) | No | Internal L×10 |
-| `river_kinematic_wave` | `river_kinematic_wave.py` | Yes | Yes | No | Profile stations |
+| `kinematic_wave` | `linear_advection.py` | Yes | Yes | No | Profile stations |
 | `saint_venant` | `saint_venant_1d.py` | Yes (callable or const) | No (uniform S₀, n) | Yes | Internal L×10 |
 
-`kinematic_wave` and `saint_venant` reconstruct their own uniform grid at 10
-cells/metre from the domain length $L$. Their `SimulationResult.domain` reflects the
-internal grid so mass-balance arithmetic is always self-consistent, even though it
-differs from the input `Domain` cell count.
+`kinematic_wave` runs on the profile's own per-cell stations, honouring spatially
+varying slope and Manning's $n$. `saint_venant` still reconstructs its own uniform
+grid at 10 cells/metre from the domain length $L$; its `SimulationResult.domain`
+reflects that internal grid so mass-balance arithmetic stays self-consistent.
 
 ---
 
 ## Next steps
 
-- Expose `Nx` (or `dx`) as a parameter in `linear_advection.run_model` and
-  `saint_venant_1d.run_model` so those solvers can honour the input `Domain` grid
-  directly, removing the L×10 internal grid.
+- Expose `Nx` (or `dx`) as a parameter in `saint_venant_1d.run_model` so it can
+  honour the input `Domain` grid directly, removing the L×10 internal grid (the
+  `kinematic_wave` solver already runs on the profile grid).
 - Add per-cell slope and Manning's $n$ to the Saint-Venant solver so it can also
   run on real river profiles with spatially varying geometry.
 - Add spatial variation to the rainfall source in the overland-flow test case (the

@@ -36,23 +36,30 @@ Run the tests:
 
 ```
 python -m pytest tests/
-python -m pytest tests/test_linear_advection.py::test_mass_conservation  # single test
+python -m pytest tests/test_linear_advection.py::test_upstream_inflow_mass_balance  # single test
 ```
 
 Unified CLI (solver-agnostic harness):
 
 ```
 python src/rivers/simulations/run_simulation.py real_world_rivers/tools/example_river_profile.csv \
-    --solver river_kinematic_wave --t-final 10 --left-inflow 0.0006
+    --solver kinematic_wave --t-final 10 --left-inflow 0.0006
+```
+
+`linear_advection.py` can also be run standalone on a profile (or with no argument
+for a built-in demo):
+
+```
+python src/general/solvers/linear_advection.py real_world_rivers/tools/example_river_profile.csv
 ```
 
 `pytest.ini` sets `pythonpath = src`, so tests import model code as
 `from general.solvers import linear_advection` without an installed package or `__init__.py`
 (there is no `src/general/solvers/__init__.py` — `general.solvers` is a namespace package). Model
-functions (`run_model`, `r`, `c`, `q`, ...) are plain module-level functions in
-`linear_advection.py`, not wrapped in a class, so tests monkeypatch them directly
-(e.g. `monkeypatch.setattr(la, "r", other_func)`) to substitute things like a
-different rainfall source rather than passing them as parameters.
+functions (`run_model`, `q`, `c`, `make_profile`, `load_profile`, ...) are plain
+module-level functions in `linear_advection.py`, not wrapped in a class. Tests build a
+`RiverProfile` with `make_profile(...)` and call `run_model(profile, t_final_min,
+left_inflow_flux, ...)` directly rather than passing solver internals as parameters.
 
 ## Architecture: staged-development-in-place
 
@@ -74,7 +81,9 @@ Each solver in `src/general/solvers/` exposes a module-level `SOLVER` singleton 
 - `supports: frozenset[str]` — which `Scenario` knobs this solver honours
 - `run(domain: Domain, scenario: Scenario) -> SimulationResult`
 
-The back-compat `run_model(...)` function is preserved in each solver file so existing tests and `__main__` demos continue to work unchanged.
+Each solver file also keeps a plain `run_model(...)` function used by its tests and
+`__main__`. For `linear_advection.py` this is the profile-based
+`run_model(profile, t_final_min, left_inflow_flux, ...)`.
 
 `src/rivers/simulations/registry.py` maps solver names to instances. `src/rivers/simulations/run_simulation.py` is the unified CLI entry point.
 
@@ -82,23 +91,26 @@ The back-compat `run_model(...)` function is preserved in each solver file so ex
 
 - **Units:** meters and minutes throughout (not SI seconds) — keep this consistent
   when adding parameters or new source terms.
-- **Naming:** `u`/`h` = state variable (flow depth), `q` = flux, `c` = wave speed
-  (`dq/dh`), `S0` = bed slope, `n0` = Manning's roughness coefficient, `r(x, t)` =
-  source term (rainfall), `CFL` = Courant number target.
+- **Naming:** `depth`/`h` = state variable (flow depth), `q` = flux (per unit width),
+  `c` = wave speed (`dq/dh`), `slope`/`S0` = bed slope, `manning_n`/`n0` = Manning's
+  roughness, `cfl` = Courant number target. `q(depth, slope, manning_n)` and
+  `c(depth, slope, manning_n)` take per-cell slope and roughness (not module globals).
 - **Numerical scheme:** conservative finite-volume upwind in space, explicit Euler in
   time with operator splitting (flux update, then source addition). Time step is
   recomputed every iteration from the CFL condition against the current max wave
   speed — do not hardcode `dt`, since `c(h)` is nonlinear and a fixed step can go
   unstable as `h` grows.
-- Depth is clamped non-negative after every update, and the left boundary cell is
-  pinned near zero (no-inflow condition) each step — preserve both when restructuring
-  the update loop.
-- `run_model(L, T_final, record_interval=1.0)` returns a dict (`x`, `u_initial`,
-  `u_final`, `times`, `u_history`, `mass_source`, `mass_outflow`) rather than a bare
-  array. `mass_source`/`mass_outflow` are cumulative totals tracked over the interior
-  control volume (cells `1..Nx-1`) during the time loop — cell 0 is a
-  boundary-condition cell, not physical storage, so it's excluded from both. This is
-  what `tests/test_linear_advection.py::test_mass_conservation` checks against.
+- Depth is clamped non-negative after every update. The **left boundary is a flux
+  boundary**: the left interface carries the constant `left_inflow_flux` (0 for no
+  inflow), and interior interfaces carry the upwind cell's Manning flux — preserve
+  this when restructuring the update loop.
+- `run_model(profile, t_final_min, left_inflow_flux, record_interval_min=1.0, ...)`
+  returns a dict with `station_m`, `dx_m`, `slope`, `manning_n`, `times`,
+  `depth_history`, `depth_initial`, `depth_final`, and cumulative `mass_inflow`,
+  `mass_source`, `mass_outflow`. Mass balance is
+  `Δstorage == mass_inflow + mass_source − mass_outflow`, checked by
+  `tests/test_linear_advection.py::test_upstream_inflow_mass_balance` and
+  `::test_rainfall_source_mass_balance`.
 - `times`/`u_history` are snapshots taken every `record_interval` minutes (always
   including `t=0` and `t=T_final`), not every adaptive `dt` — the loop caps `dt` so it
   lands exactly on each recording mark rather than overshooting it, so snapshots are
