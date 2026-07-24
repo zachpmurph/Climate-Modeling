@@ -6,7 +6,9 @@ or fixture payloads. No test in this module touches the network.
 """
 
 import csv
-from urllib.error import URLError
+import json
+from pathlib import Path
+from urllib.error import HTTPError, URLError
 
 import pytest
 
@@ -14,6 +16,26 @@ from rivers.ingest import common
 from rivers.ingest.common import add_source, connect_database, redact_url, request_json
 from rivers.ingest.elevation import collect_elevations
 from rivers.ingest.markers import create_reach
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+class _FakeResponse:
+    def __init__(self, payload, url):
+        self._payload = json.dumps(payload).encode("utf-8")
+        self._url = url
+
+    def read(self, *args):
+        return self._payload
+
+    def geturl(self):
+        return self._url
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
 from rivers.ingest.rainfall import collect_rainfall
 from rivers.ingest.usgs_flow import collect_usgs_flow
 
@@ -153,6 +175,58 @@ def test_failed_provider_call_preserves_previously_stored_data(tmp_path):
     # The database must remain writable after the failure (no dangling lock).
     collect_elevations(reach_id, db_path=db_path, requester=_elevation_requester)
     assert _count(db_path, "elevation_samples", reach_id) == 3
+
+
+def test_request_json_retries_5xx_then_succeeds(monkeypatch):
+    attempts = {"n": 0}
+
+    def flaky_urlopen(request, timeout=None):
+        attempts["n"] += 1
+        if attempts["n"] < 3:
+            raise HTTPError(request.full_url, 503, "busy", {}, None)
+        return _FakeResponse({"ok": True}, "https://example.test/final")
+
+    monkeypatch.setattr(common, "urlopen", flaky_urlopen)
+    payload, url = request_json("https://example.test/x", {"a": "1"}, retry_delay=0)
+
+    assert payload == {"ok": True}
+    assert attempts["n"] == 3, "a 5xx response should be retried"
+
+
+def test_request_json_does_not_retry_4xx(monkeypatch):
+    attempts = {"n": 0}
+
+    def urlopen_404(request, timeout=None):
+        attempts["n"] += 1
+        raise HTTPError(request.full_url, 404, "not found", {}, None)
+
+    monkeypatch.setattr(common, "urlopen", urlopen_404)
+    with pytest.raises(common.ProviderRequestError):
+        request_json("https://example.test/x", {"a": "1"}, retry_delay=0)
+
+    assert attempts["n"] == 1, "a 4xx response must not be retried"
+
+
+def test_columbia_markers_rerun_dedupes_with_derived_float_stations(tmp_path):
+    # The real curated markers file has NO station_m column, so stations are
+    # derived from haversine (float values like 24107.839...). Re-running must
+    # still dedupe against those derived floats.
+    markers_csv = REPO_ROOT / "real_world_rivers" / "columbia_hanford_markers.csv"
+    db_path = tmp_path / "river.sqlite"
+    reach_id = create_reach("Columbia", "Hanford", markers_csv, country="US", db_path=db_path)
+
+    def elevation_requester(url, params):
+        count = len(params["latitude"].split(","))
+        return {"elevation": [100.0 - 10.0 * i for i in range(count)]}, "https://example.test/elev"
+
+    collect_elevations(reach_id, db_path=db_path, requester=elevation_requester)
+    collect_elevations(reach_id, db_path=db_path, requester=elevation_requester)
+
+    with connect_database(db_path=db_path) as conn:
+        elev = conn.execute("SELECT COUNT(*) FROM elevation_samples WHERE reach_id = ?", (reach_id,)).fetchone()[0]
+        slope = conn.execute("SELECT COUNT(*) FROM slope_samples WHERE reach_id = ?", (reach_id,)).fetchone()[0]
+    assert elev == 5, "derived-float stations must dedupe on re-run"
+    assert slope == 4
 
 
 def test_add_source_is_idempotent_on_natural_key(tmp_path):

@@ -114,3 +114,12 @@ def test_temporal_coverage_flags_gap_and_short_window():
     codes = {f.code for f in findings}
     assert "temporal_gap" in codes
     assert "temporal_coverage" in codes
+
+
+def test_temporal_coverage_handles_mixed_naive_and_utc_timestamps():
+    # Flow timestamps carry a trailing Z (aware); the window may be naive.
+    # Subtracting aware and naive datetimes would raise TypeError if not normalized.
+    times = ["2020-01-01T00:00:00Z", "2020-01-01T01:00:00Z"]
+    findings = validate_temporal_coverage(times, "2020-01-01T00:00", "2020-01-01T02:00", label="flow")
+    # Must not raise; findings is a list (possibly with a coverage warning).
+    assert isinstance(findings, list)

@@ -118,11 +118,38 @@ def _recommended_inflow(conn, reach_id, start=None, end=None):
     }
 
 
-def _all_sources(conn):
+def _reach_sources(conn, reach_id):
+    """Return only the data_sources actually referenced by this reach's rows.
+
+    Provenance must be traceable and reach-specific: a shared database can hold
+    many reaches, so listing every source row would let one reach's sidecar
+    claim provenance it does not have.
+    """
+    source_id_rows = conn.execute(
+        """
+        SELECT DISTINCT source_id FROM (
+            SELECT source_id FROM reach_markers            WHERE reach_id = ?
+            UNION SELECT source_id FROM elevation_samples  WHERE reach_id = ?
+            UNION SELECT source_id FROM slope_samples      WHERE reach_id = ?
+            UNION SELECT source_id FROM roughness_samples  WHERE reach_id = ?
+            UNION SELECT source_id FROM channel_geometry_samples WHERE reach_id = ?
+            UNION SELECT source_id FROM flow_observations  WHERE reach_id = ?
+            UNION SELECT source_id FROM rainfall_observations    WHERE reach_id = ?
+        )
+        WHERE source_id IS NOT NULL
+        """,
+        (reach_id,) * 7,
+    ).fetchall()
+    ids = [row["source_id"] for row in source_id_rows]
+    if not ids:
+        return []
+    placeholders = ",".join("?" for _ in ids)
     return [
         dict(row)
         for row in conn.execute(
-            "SELECT id, name, source_type, url, citation, accessed_at FROM data_sources ORDER BY id"
+            f"SELECT id, name, source_type, url, citation, accessed_at "
+            f"FROM data_sources WHERE id IN ({placeholders}) ORDER BY id",
+            ids,
         )
     ]
 
@@ -209,7 +236,7 @@ def export_profile(
 
         adjusted_slopes = len(adjustments)
         recommendation = _recommended_inflow(conn, reach_id, flow_start, flow_end)
-        sources = _all_sources(conn)
+        sources = _reach_sources(conn, reach_id)
 
         # Validate BEFORE writing anything: errors block export so we never leave
         # a misleading partial artifact on disk.

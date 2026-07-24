@@ -23,9 +23,14 @@ INFO = "info"
 # Plausible ranges for lowland-to-mountain natural channels. Values outside
 # these ranges are flagged as warnings (suspicious), never hard errors, because
 # extreme-but-real reaches exist and the modeller should decide.
-SLOPE_PLAUSIBLE_MIN = 1e-6
+SLOPE_PLAUSIBLE_MIN = 1e-6  # slope is dimensionless, so unit conventions don't shift it
 SLOPE_PLAUSIBLE_MAX = 0.1
-ROUGHNESS_PLAUSIBLE_MIN = 0.008
+# Manning's n range must span BOTH conventions present in this repo pending a
+# ruling (see docs/ingestion_integration_requests.md): standard SI n (~0.01-0.2)
+# and the meters-and-minutes converted n (SI ÷ 60, ~1.5e-4 to 3.3e-3, as used by
+# the curated Columbia data). The lower bound covers the converted convention so
+# legitimately-converted values are not flagged as suspicious.
+ROUGHNESS_PLAUSIBLE_MIN = 1e-4
 ROUGHNESS_PLAUSIBLE_MAX = 0.2
 
 CLASSIFICATION_LEVELS = ("observed", "derived", "estimated", "fallback")
@@ -294,13 +299,22 @@ def validate_temporal_coverage(times, start, end, *, label="observation", max_ga
     simple: naive ISO timestamps are compared lexically for coverage and parsed
     for gap sizing; unparseable timestamps produce an info finding.
     """
-    from datetime import datetime
+    from datetime import datetime, timezone
+
+    def _parse_utc(stamp):
+        # Normalize every timestamp to aware-UTC so naive provider timestamps
+        # (Open-Meteo rainfall) and 'Z'-suffixed ones (USGS flow) can be
+        # compared without raising TypeError on naive/aware subtraction.
+        value = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value
 
     findings = []
     parsed = []
     for stamp in times:
         try:
-            parsed.append(datetime.fromisoformat(stamp.replace("Z", "+00:00")))
+            parsed.append(_parse_utc(stamp))
         except (ValueError, AttributeError):
             findings.append(Finding(INFO, "temporal_unparsed",
                                      f"{label}: could not parse timestamp {stamp!r}.", {"timestamp": stamp}))
@@ -309,8 +323,8 @@ def validate_temporal_coverage(times, start, end, *, label="observation", max_ga
         return findings
     parsed.sort()
     try:
-        window_start = datetime.fromisoformat(start.replace("Z", "+00:00"))
-        window_end = datetime.fromisoformat(end.replace("Z", "+00:00"))
+        window_start = _parse_utc(start)
+        window_end = _parse_utc(end)
     except (ValueError, AttributeError):
         window_start = window_end = None
 

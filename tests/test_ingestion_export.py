@@ -110,6 +110,30 @@ def test_slope_floor_adjustment_is_recorded_with_original_and_adjusted(tmp_path)
     assert any(row["classification"]["slope"] == "fallback" for row in metadata["rows"])
 
 
+def test_metadata_sources_are_scoped_to_the_exported_reach(tmp_path):
+    db_path, reach_id = _build_reach(tmp_path)
+
+    # A second reach in the SAME database, with its own roughness source.
+    other_markers = tmp_path / "other_markers.csv"
+    _write_csv(
+        other_markers,
+        ["lat", "lon", "station_m", "label"],
+        [{"lat": 10.0, "lon": 10.0, "station_m": 0, "label": "a"},
+         {"lat": 10.0, "lon": 10.1, "station_m": 1000, "label": "b"}],
+    )
+    other_id = create_reach("Nile", "OtherReach", other_markers, db_path=db_path)
+    other_rough = tmp_path / "other_rough.csv"
+    _write_csv(other_rough, ["start_station_m", "end_station_m", "manning_n"],
+               [{"start_station_m": 0, "end_station_m": 1000, "manning_n": 0.05}])
+    import_roughness(other_id, other_rough, db_path=db_path)
+
+    output = tmp_path / "profile.csv"
+    metadata = export_profile(reach_id, output, db_path=db_path)
+
+    source_names = {s["name"] for s in metadata["sources"]}
+    assert "other_rough.csv" not in source_names, "sidecar must not claim another reach's sources"
+
+
 def test_export_aborts_and_writes_nothing_on_validation_error(tmp_path, monkeypatch):
     db_path, reach_id = _build_reach(tmp_path)
     output = tmp_path / "profile.csv"
