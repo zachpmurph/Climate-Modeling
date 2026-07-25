@@ -24,7 +24,7 @@ def parse_args():
     p.add_argument(
         "--solver",
         choices=sorted(SOLVERS),
-        default="saint_venant_1d",
+        default="saint_venant",
         help="Which solver to use",
     )
     p.add_argument("--t-final", type=float, required=True, help="Simulation duration in minutes")

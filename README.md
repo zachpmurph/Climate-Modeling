@@ -116,7 +116,7 @@ python src/rivers/simulations/run_simulation.py PROFILE --solver SOLVER --t-fina
 | Flag | Default | Description |
 |---|---|---|
 | `PROFILE` | *(required)* | Path to CSV or JSON river profile |
-| `--solver` | *(pass explicitly)* | One of: `kinematic_wave`, `saint_venant` |
+| `--solver` | `saint_venant` | One of: `kinematic_wave`, `saint_venant` |
 | `--t-final` | *(required)* | Simulation duration, minutes |
 | `--record-interval` | `1.0` | Snapshot interval, minutes |
 | `--left-inflow` | `0.0` | Constant upstream inflow flux, m²/min |
