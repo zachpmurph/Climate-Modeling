@@ -20,6 +20,20 @@ class Domain:
     manning_n: np.ndarray  # Manning roughness n
 
 
+@dataclass(frozen=True)
+class Domain2D:
+    """Cell-centred description of a rectangular 2-D river domain."""
+
+    x_m: np.ndarray          # x cell-centre positions, shape (nx,)
+    y_m: np.ndarray          # y cell-centre positions, shape (ny,)
+    dx_m: np.ndarray         # x cell widths, shape (nx,)
+    dy_m: np.ndarray         # y cell widths, shape (ny,)
+    slope_x: np.ndarray      # x bed slope, shape (nx, ny)
+    slope_y: np.ndarray      # y bed slope, shape (nx, ny)
+    manning_n: np.ndarray    # Manning roughness, shape (nx, ny)
+    bed_elevation_m: np.ndarray | None = None  # z_b, shape (nx, ny)
+
+
 @dataclass
 class Scenario:
     """Everything the solver needs beyond the domain geometry."""
@@ -28,23 +42,29 @@ class Scenario:
     record_interval_min: float = 1.0
     initial_depth_m: float | np.ndarray = 0.0
     initial_discharge: float | np.ndarray = 0.0
+    initial_discharge_y: float | np.ndarray = 0.0
     left_inflow: float | Callable[[float], float] = 0.0
     rainfall: Callable[[np.ndarray, float], np.ndarray] | None = None
+    rainfall_2d: Callable[[np.ndarray, np.ndarray, float], np.ndarray] | None = None
     cfl: float = 0.5
+    labels: tuple[str, ...] = ()
+    boundary_x: str = "inflow_outflow"
+    boundary_y: str = "wall"
 
 
 @dataclass
 class SimulationResult:
     """Canonical output every solver must produce."""
 
-    domain: Domain
+    domain: Domain | Domain2D
     times: np.ndarray               # shape (n_times,)
-    depth_history: np.ndarray       # shape (n_times, n_cells)
-    depth_initial: np.ndarray       # shape (n_cells,)
-    depth_final: np.ndarray         # shape (n_cells,)
+    depth_history: np.ndarray       # 1-D: (nt, nx); 2-D: (nt, nx, ny)
+    depth_initial: np.ndarray       # 1-D: (nx,); 2-D: (nx, ny)
+    depth_final: np.ndarray         # 1-D: (nx,); 2-D: (nx, ny)
     mass_inflow: float
     mass_source: float
     mass_outflow: float
+    mass_correction: float = 0.0
     extra: dict = field(default_factory=dict)
 
 
@@ -53,5 +73,5 @@ class Solver(Protocol):
     name: str
     supports: frozenset[str]
 
-    def run(self, domain: Domain, scenario: Scenario) -> SimulationResult:
+    def run(self, domain: Domain | Domain2D, scenario: Scenario) -> SimulationResult:
         ...

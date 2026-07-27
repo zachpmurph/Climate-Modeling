@@ -126,6 +126,32 @@ def test_profile_rainfall_adds_to_uniform_rainfall():
     assert result["mass_source"] == pytest.approx(expected_source)
 
 
+def test_callable_rainfall_is_evaluated_during_time_stepping():
+    profile = _uniform_profile(
+        n_cells=101,
+        length_m=10.0,
+        slope=0.05,
+        manning_n=0.05,
+    )
+    evaluation_times = []
+
+    def rainfall(x, t):
+        evaluation_times.append(t)
+        return np.full_like(x, 0.00001 if t < 0.01 else 0.00002)
+
+    la.run_model(
+        profile,
+        t_final_min=0.02,
+        left_inflow_flux=0.0,
+        base_depth_m=0.5,
+        rainfall=rainfall,
+    )
+
+    assert len(evaluation_times) > 1
+    assert min(evaluation_times) == 0.0
+    assert max(evaluation_times) > 0.0
+
+
 # ── analytical equilibrium ─────────────────────────────────────────────────
 def test_reaches_analytical_equilibrium():
     # Small uniform reach, zero upstream inflow, constant rainfall. The discrete

@@ -70,18 +70,39 @@ def _initial_depth(profile, base_depth_m, wave_center_m, wave_amplitude_m, wave_
     return np.maximum(depth, MIN_DEPTH)
 
 
-def _rainfall_source(profile, rainfall_rate_m_per_min, rainfall_start_min, rainfall_end_min, t_current):
+def _evaluate_rainfall(rainfall, stations_m, t_current):
+    if rainfall is None:
+        return np.zeros_like(stations_m, dtype=float)
+    values = np.asarray(rainfall(stations_m, t_current), dtype=float)
+    if values.ndim == 0:
+        values = np.full_like(stations_m, float(values), dtype=float)
+    if values.shape != stations_m.shape:
+        raise ValueError("rainfall must return one value per cell")
+    if not np.all(np.isfinite(values)) or np.any(values < 0):
+        raise ValueError("rainfall must return finite, non-negative rates")
+    return values
+
+
+def _rainfall_source(
+    profile,
+    rainfall_rate_m_per_min,
+    rainfall_start_min,
+    rainfall_end_min,
+    rainfall,
+    t_current,
+):
     if rainfall_end_min is not None and rainfall_end_min < rainfall_start_min:
         raise ValueError("rainfall_end_min must be greater than or equal to rainfall_start_min")
-    if t_current < rainfall_start_min:
-        return np.zeros_like(profile.station_m, dtype=float)
-    if rainfall_end_min is not None and t_current >= rainfall_end_min:
-        return np.zeros_like(profile.station_m, dtype=float)
 
     source = np.zeros_like(profile.station_m, dtype=float)
     if profile.rainfall_rate_m_per_min is not None:
         source += profile.rainfall_rate_m_per_min
-    source += rainfall_rate_m_per_min
+    uniform_is_active = t_current >= rainfall_start_min and (
+        rainfall_end_min is None or t_current < rainfall_end_min
+    )
+    if uniform_is_active:
+        source += rainfall_rate_m_per_min
+    source += _evaluate_rainfall(rainfall, profile.station_m, t_current)
     return source
 
 
@@ -98,12 +119,14 @@ def run_model(
     rainfall_start_min=0.0,
     rainfall_end_min=None,
     cfl=0.5,
+    rainfall=None,
 ):
     """Run a 1D river kinematic wave model with upstream inflow and rainfall.
 
     ``left_inflow_flux`` is the depth-area flux entering the left boundary in
     square meters per minute. Rainfall source terms are depth added per minute.
-    The model state is water depth in meters.
+    ``rainfall`` may be a callable ``rainfall(station_m, t_min)`` returning one
+    non-negative rate per cell. The model state is water depth in meters.
     """
     if t_final_min < 0:
         raise ValueError("t_final_min must be non-negative")
@@ -165,7 +188,14 @@ def run_model(
         interface_flux[0] = left_inflow_flux
         interface_flux[1:] = cell_flux
 
-        source = _rainfall_source(profile, rainfall_rate_m_per_min, rainfall_start_min, rainfall_end_min, t_current)
+        source = _rainfall_source(
+            profile,
+            rainfall_rate_m_per_min,
+            rainfall_start_min,
+            rainfall_end_min,
+            rainfall,
+            t_current,
+        )
         depth = depth - (dt / profile.dx_m) * (interface_flux[1:] - interface_flux[:-1])
         depth = depth + dt * source
         depth = np.maximum(depth, MIN_DEPTH)
@@ -257,11 +287,6 @@ class _KinematicWaveSolver:
         if callable(left_inflow):
             left_inflow = float(left_inflow(0.0))
 
-        rainfall_rate = 0.0
-        if scenario.rainfall is not None:
-            sample = scenario.rainfall(domain.x_m, 0.0)
-            rainfall_rate = float(np.mean(sample))
-
         base_depth_m = float(init_depth) if not isinstance(init_depth, np.ndarray) else 0.01
 
         result = run_model(
@@ -269,7 +294,7 @@ class _KinematicWaveSolver:
             t_final_min=scenario.t_final_min,
             left_inflow_flux=float(left_inflow),
             record_interval_min=scenario.record_interval_min,
-            rainfall_rate_m_per_min=rainfall_rate,
+            rainfall=scenario.rainfall,
             cfl=scenario.cfl,
             base_depth_m=base_depth_m,
         )

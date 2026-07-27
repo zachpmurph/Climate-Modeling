@@ -1,9 +1,9 @@
 # Climate-Modeling
 
-A repository for climate-related numerical models. Currently the active work is a 1D
-flood model built up incrementally from a simple linear advection solver to a
-full dynamic-wave solver running on real river geometry. A solver-agnostic dispatch
-harness lets any solver run on any ingested river profile through a single CLI.
+A repository for climate-related numerical models. The active flood models are
+a 1-D kinematic wave, a 1-D dynamic-wave solver, and a verified 2-D
+Saint-Venant solver. A solver-agnostic dispatch harness lets any solver run on
+an ingested river profile through a single CLI.
 
 ---
 
@@ -45,10 +45,37 @@ transients, steep wetting fronts, and backwater effects.
 **Numerical scheme:** Rusanov (local Lax-Friedrichs) face fluxes over a conservative
 finite-volume stencil, ghost-cell boundaries, explicit forward Euler time stepping,
 operator-split Manning friction (semi-implicit in a single-step sense), adaptive CFL
-time step.
+time step. The solver runs on the supplied profile grid and applies bed slope,
+Manning roughness, and rainfall independently in every cell.
 
 **Units:** meters and minutes throughout (Manning's $n$ is converted from the
 conventional s/m$^{1/3}$ units before use).
+
+### 2-D Saint-Venant (`saint_venant_2d.py`)
+
+Solves the Cartesian shallow-water system for
+$U = [h, hu, hv]^T$:
+
+$$
+\frac{\partial U}{\partial t}
++ \frac{\partial F(U)}{\partial x}
++ \frac{\partial G(U)}{\partial y}
+= S(U,z_b,R).
+$$
+
+The implementation uses first-order Rusanov face fluxes, hydrostatic
+reconstruction for well-balanced non-flat topography, a conservative draining
+limiter for wet/dry positivity, adaptive two-dimensional CFL stepping, and
+semi-implicit Manning friction. It supports reflecting walls,
+inflow/open-outflow x boundaries, and periodic verification domains.
+
+The Tier 3 verification matrix includes exact axial and diagonal wave
+convergence studies, a variable-depth manufactured pressure wave, non-flat lake
+at rest, quantitative 1-D reduction, wet radial dam-break symmetry, strict mass
+conservation, and a dry-bed dam break. See
+[the numerical method and verification report](docs/saint_venant_2d_numerics.md)
+and the machine-readable
+[`docs/validation/saint_venant_2d_results.json`](docs/validation/saint_venant_2d_results.json).
 
 ---
 
@@ -73,6 +100,10 @@ The rationale for each transition is given alongside the change.
 | **4a — Restructure** | `93c682d` | Moved all files into `src/general/` (solvers, viz) and `src/rivers/` (ingest, simulations). | As the repo grew beyond a single solver, `src/floods/` and `src/tools/` no longer described their contents. The new layout separates reusable numerical machinery (`general/`) from the river-application layer (`rivers/`). |
 | **4b — Solver-agnostic harness** | `69b519d` | `contract.py` defines `Domain`, `Scenario`, `SimulationResult`, `Solver` protocol, and `UnsupportedScenario`. `profile.py` houses `RiverProfile` loaders. Each solver exposes a `SOLVER` singleton; back-compat `run_model()` wrappers preserved. `registry.py` maps names to solvers; `run_simulation.py` is the unified CLI. | Adding a new solver previously required a new runner script and bespoke output handling. The contract layer means any solver can be swapped in by name, scenario knobs are validated up-front, and output is always a canonical `SimulationResult` with a mass-balance error in the JSON summary. |
 | **4c — Kinematic wave consolidated** | `a282b4f` `e1ec579` | Folded the real-river kinematic wave capability (per-cell slope and Manning's $n$, upstream inflow, rainfall) into `linear_advection.py` and removed the duplicate `river_kinematic_wave.py` and its pre-harness runner. `linear_advection.py` now runs standalone on a profile (or a built-in demo) and is the `kinematic_wave` solver in the harness. `--solver river_kinematic_wave` is replaced by `--solver kinematic_wave`. | The overland-flow file and the real-river file had diverged into near-duplicate kinematic wave solvers. Consolidating to one implementation removes the redundancy and the need for a separate file to run a real-profile simulation. |
+| **4d — Model-neutral flood reporting** | `6116048` | Added a reporting consumer for saved time-series CSV and summary JSON artifacts. It produces a self-contained interactive HTML report and versioned outcomes JSON with peak depth, timing, reach-threshold exceedance, and mass-balance diagnostics. | Reporting should evolve independently from numerical model development. Consuming saved artifacts prevents visualization code from coupling to solver internals and makes the interpretation boundary explicit. |
+| **4e — Profile-grid dynamic wave and forcing** | Current branch | Saint-Venant now runs on the supplied nonuniform profile grid with per-cell bed slope and Manning roughness. Both solvers accept spatially and temporally varying rainfall callables. Profile initial depth, rainfall, and labels are transferred into `Scenario`. | Reconstructing a uniform grid and using module-level coefficients discarded real-reach variation. Sampling rainfall only once also prevented event functions from changing through time. |
+| **4f — Integrated 2-D shallow water** | Current branch | Added `Domain2D` and a registered `saint_venant_2d` solver. The unified runner extrudes a profile across a requested width, applies spatial terrain, roughness, and rainfall, saves complete fields to NPZ, and produces plan-view area-based flood reports. | The standalone 2-D solver could not consume ingested profiles or participate in shared simulation and reporting workflows. |
+| **4g — Tier 3 numerical verification** | Current branch | Added explicit bed elevation, hydrostatic reconstruction, a conservative draining limiter, finite-state diagnostics, periodic verification boundaries, analytic convergence, non-flat equilibrium, 1-D reduction, radial symmetry, strict mass, and wet/dry gates. Pinned dependencies and clean-checkout CI preserve evidence. | Stability and visual plausibility do not establish PDE accuracy. The solver now has quantitative, reproducible evidence for first-order convergence, well-balancedness, positivity, multidimensional symmetry, and machine-precision conservation within its documented scope. |
 
 ---
 
@@ -116,12 +147,14 @@ python src/rivers/simulations/run_simulation.py PROFILE --solver SOLVER --t-fina
 | Flag | Default | Description |
 |---|---|---|
 | `PROFILE` | *(required)* | Path to CSV or JSON river profile |
-| `--solver` | `saint_venant` | One of: `kinematic_wave`, `saint_venant` |
+| `--solver` | `saint_venant` | One of: `kinematic_wave`, `saint_venant`, `saint_venant_2d` |
 | `--t-final` | *(required)* | Simulation duration, minutes |
 | `--record-interval` | `1.0` | Snapshot interval, minutes |
 | `--left-inflow` | `0.0` | Constant upstream inflow flux, m²/min |
 | `--rainfall-rate` | `0.0` | Uniform rainfall rate, m/min |
 | `--cfl` | `0.5` | CFL target (0 < CFL ≤ 1) |
+| `--width` | — | Channel width in metres; required for `saint_venant_2d` |
+| `--cross-cells` | `10` | Number of cells across a 2-D channel |
 | `--output-dir` | `data/real_world_rivers/runs/` | Output directory |
 | `--run-name` | `simulation` | Filename prefix for outputs |
 
@@ -145,9 +178,53 @@ python src/rivers/simulations/run_simulation.py \
     --run-name hanford_sv
 ```
 
+**Example — 2-D Saint-Venant on an extruded rectangular channel:**
+```bash
+python src/rivers/simulations/run_simulation.py \
+    real_world_rivers/tools/example_river_profile.csv \
+    --solver saint_venant_2d \
+    --width 100 \
+    --cross-cells 20 \
+    --t-final 10 \
+    --run-name hanford_sv2
+```
+
+The 2-D runner repeats profile slope, Manning roughness, initial depth, and
+rainfall across the requested width. It writes a full `<run>_fields.npz`, a
+summary JSON, and a cross-channel-mean CSV for compatibility with 1-D tools.
+Build laterally varying cases programmatically by passing a `Domain2D` directly.
+
 Each solver declares which `Scenario` knobs it supports. Passing a knob a solver
 doesn't support raises `UnsupportedScenario` immediately rather than silently
 ignoring it.
+
+Optional profile fields are applied automatically: `initial_depth_m` becomes the
+scenario initial condition, `rainfall_rate_m_per_min` becomes a spatial rainfall
+function, and `label` values are retained in `Scenario.labels`. The CLI
+`--rainfall-rate` is added to any rainfall already stored in the profile.
+
+For programmatic scenarios, `Scenario.rainfall` may be any callable with the
+signature `rainfall(x_m, t_min) -> rates_m_per_min`; all solvers evaluate it
+during time stepping. A 2-D case may instead set `Scenario.rainfall_2d` with
+`rainfall_2d(x_m, y_m, t_min) -> rates_m_per_min`.
+
+### Reporting saved flood outcomes
+
+Generate a self-contained interactive report from any harness time-series CSV:
+
+```bash
+python src/rivers/reporting/generate_flood_report.py \
+    data/real_world_rivers/runs/example_timeseries.csv \
+    --depth-threshold 0.5
+```
+
+For reviewed reach geometry, replace the uniform threshold with
+`--geometry PATH`, where the CSV contains `station_m` and
+`bankfull_depth_m`. The reporter writes both HTML and a versioned
+`.outcomes.json` artifact. For a 2-D run it auto-discovers the full field,
+displays a plan-view depth map, and reports threshold-exceedance area. See
+`docs/reporting_contract.md` for the stable model-to-report boundary and
+interpretation limits.
 
 ### Ingesting real river data
 
@@ -193,9 +270,20 @@ a `(Domain, Scenario)` pair ready for `registry.dispatch()`.
 python -m pytest tests/                                           # full suite
 python -m pytest tests/test_linear_advection.py -v               # kinematic wave only
 python -m pytest tests/test_saint_venant_1d.py -v                # Saint-Venant only
+python -m pytest tests/test_saint_venant_2d_verification.py -v   # 2-D Tier 3 gates
 python -m pytest tests/test_run_simulation.py -v                 # harness + dispatch tests
 python -m pytest tests/test_linear_advection.py::test_upstream_inflow_mass_balance  # single test
 ```
+
+Run the standalone verification matrix and emit machine-readable evidence:
+
+```bash
+python src/general/verification/verify_saint_venant_2d.py \
+    --output docs/validation/saint_venant_2d_results.json
+```
+
+Dependencies are pinned in `requirements.txt`. The GitHub Actions verification
+workflow runs the complete suite and matrix from a clean checkout.
 
 ---
 
@@ -206,16 +294,22 @@ src/general/solvers/contract.py                # Domain, Scenario, SimulationRes
 src/general/solvers/profile.py                 # RiverProfile dataclass and CSV/JSON loaders
 src/general/solvers/linear_advection.py        # kinematic wave solver (per-cell profile; standalone + harness)
 src/general/solvers/saint_venant_1d.py         # 1D Saint-Venant (full dynamic wave) solver
+src/general/solvers/saint_venant_2d.py         # verified 2D Saint-Venant solver
+src/general/verification/verify_saint_venant_2d.py # quantitative benchmark matrix
 src/general/viz/animate_depth.py               # animates a saved depth-vs-time table
 src/rivers/simulations/registry.py             # name → Solver mapping
 src/rivers/simulations/run_simulation.py       # unified CLI dispatcher
 src/rivers/simulations/ingest_to_simulate.py   # profile_path → (Domain, Scenario) helper
+src/rivers/reporting/generate_flood_report.py  # saved artifacts → HTML + outcomes JSON
 src/rivers/ingest/collect_river_data.py        # CLI for the real-river data pipeline
 src/rivers/ingest/                             # USGS, DEM, roughness importers + SQLite helpers
 tests/test_linear_advection.py                 # profile I/O, mass balance, analytical equilibrium
 tests/test_saint_venant_1d.py                  # conservation, equilibrium, boundary, dry-state
+tests/test_saint_venant_2d.py                  # stability, sources, boundaries, edge cases
+tests/test_saint_venant_2d_verification.py     # quantitative Tier 3 gates
 tests/test_river_data_tools.py                 # data-pipeline unit tests
 tests/test_run_simulation.py                   # dispatch, UnsupportedScenario, result shapes
+tests/test_flood_reporting.py                  # report validation, outcomes, HTML, CLI
 data/                                          # simulation output: plots and time series CSVs
 data/real_world_rivers/                        # SQL schema, local database, run outputs
 real_world_rivers/                             # example profiles and Columbia River inputs
@@ -225,26 +319,21 @@ real_world_rivers/                             # example profiles and Columbia R
 
 ## Solver capabilities at a glance
 
-| Solver name | File | Left inflow | Per-cell geometry | Two-field (h+q) | Grid |
+| Solver name | File | Left inflow | Spatial geometry | Momentum | Grid |
 |---|---|---|---|---|---|
 | `kinematic_wave` | `linear_advection.py` | Yes | Yes | No | Profile stations |
-| `saint_venant` | `saint_venant_1d.py` | Yes (callable or const) | No (uniform S₀, n) | Yes | Internal L×10 |
+| `saint_venant` | `saint_venant_1d.py` | Yes (callable or const) | Yes | Yes | Profile stations |
+| `saint_venant_2d` | `saint_venant_2d.py` | Yes (callable or const) | Yes, per 2-D cell | x and y | Profile × cross-channel cells |
 
-`kinematic_wave` runs on the profile's own per-cell stations, honouring spatially
-varying slope and Manning's $n$. `saint_venant` still reconstructs its own uniform
-grid at 10 cells/metre from the domain length $L$; its `SimulationResult.domain`
-reflects that internal grid so mass-balance arithmetic stays self-consistent.
+All solvers run on the profile's longitudinal stations and widths, honouring
+spatially varying slope, Manning's $n$, initial depth, and rainfall.
 
 ---
 
 ## Next steps
 
-- Expose `Nx` (or `dx`) as a parameter in `saint_venant_1d.run_model` so it can
-  honour the input `Domain` grid directly, removing the L×10 internal grid (the
-  `kinematic_wave` solver already runs on the profile grid).
-- Add per-cell slope and Manning's $n$ to the Saint-Venant solver so it can also
-  run on real river profiles with spatially varying geometry.
-- Add spatial variation to the rainfall source in the overland-flow test case (the
-  $r(x, t)$ closure already supports it).
+- Add measured cross-section geometry so unit-width discharge can be converted
+  consistently to whole-channel flow.
+- Save Saint-Venant discharge histories through the unified CLI alongside depth.
 - Extend the data pipeline to additional river systems beyond the Columbia River
   Hanford reach.

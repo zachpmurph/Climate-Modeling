@@ -65,24 +65,76 @@ def _rusanov_fluxes(h, q, left_inflow, t):
     return flux_h, flux_q, alpha
 
 
-def _validate_inputs(domain_length, final_time, record_interval, h_init, q_init):
-    if not np.isfinite(domain_length) or domain_length < 0.2:
-        raise ValueError("L must be finite and at least 0.2 m")
+def _cell_values(values, default, n_cells, name):
+    if values is None:
+        array = np.full(n_cells, default, dtype=float)
+    else:
+        array = np.asarray(values, dtype=float)
+        if array.ndim == 0:
+            array = np.full(n_cells, float(array), dtype=float)
+    if array.shape != (n_cells,) or not np.all(np.isfinite(array)):
+        raise ValueError(f"{name} must contain one finite value per cell")
+    return array
+
+
+def _prepare_grid(domain_length, x_m, dx_m, slope, manning_n):
+    if x_m is None:
+        if not np.isfinite(domain_length) or domain_length < 0.2:
+            raise ValueError("L must be finite and at least 0.2 m")
+        n_cells = int(domain_length * 10)
+        cell_widths = np.full(n_cells, domain_length / n_cells, dtype=float)
+        stations = np.linspace(
+            cell_widths[0] / 2,
+            domain_length - cell_widths[0] / 2,
+            n_cells,
+        )
+    else:
+        stations = np.asarray(x_m, dtype=float)
+        cell_widths = np.asarray(dx_m, dtype=float)
+        if stations.ndim != 1 or len(stations) < 2 or not np.all(np.isfinite(stations)):
+            raise ValueError("x_m must contain at least two finite cell stations")
+        if np.any(np.diff(stations) <= 0):
+            raise ValueError("x_m values must be strictly increasing")
+        if cell_widths.shape != stations.shape or not np.all(np.isfinite(cell_widths)):
+            raise ValueError("dx_m must contain one finite width per cell")
+        if np.any(cell_widths <= 0):
+            raise ValueError("dx_m values must be positive")
+        n_cells = len(stations)
+
+    bed_slope = _cell_values(slope, S0, n_cells, "slope")
+    roughness = _cell_values(manning_n, n0, n_cells, "manning_n")
+    if np.any(bed_slope < 0):
+        raise ValueError("slope values must be non-negative")
+    if np.any(roughness <= 0):
+        raise ValueError("manning_n values must be positive")
+    return stations, cell_widths, bed_slope, roughness
+
+
+def _validate_inputs(final_time, record_interval, n_cells, h_init, q_init):
     if not np.isfinite(final_time) or final_time < 0:
         raise ValueError("T_final must be finite and non-negative")
     if not np.isfinite(record_interval) or record_interval <= 0:
         raise ValueError("record_interval must be finite and positive")
 
-    nx = int(domain_length * 10)
     for name, values in (("h_init", h_init), ("q_init", q_init)):
         if values is None:
             continue
         array = np.asarray(values, dtype=float)
-        if array.shape != (nx,) or not np.all(np.isfinite(array)):
-            raise ValueError(f"{name} must contain {nx} finite values")
+        if array.shape != (n_cells,) or not np.all(np.isfinite(array)):
+            raise ValueError(f"{name} must contain {n_cells} finite values")
     if h_init is not None and np.any(np.asarray(h_init) < 0):
         raise ValueError("h_init cannot contain negative depths")
-    return nx
+
+
+def _evaluate_rainfall(rainfall, x_m, t):
+    values = np.asarray(rainfall(x_m, t), dtype=float)
+    if values.ndim == 0:
+        values = np.full_like(x_m, float(values), dtype=float)
+    if values.shape != x_m.shape:
+        raise ValueError("rainfall must return one value per cell")
+    if not np.all(np.isfinite(values)) or np.any(values < 0):
+        raise ValueError("rainfall must return finite, non-negative rates")
+    return values
 
 
 def _record_times(final_time, record_interval):
@@ -100,17 +152,35 @@ def run_model(
     h_init=None,
     q_init=None,
     left_inflow=None,
+    rainfall=None,
+    x_m=None,
+    dx_m=None,
+    slope=None,
+    manning_n=None,
+    cfl=None,
 ):
-    """Run the 1D Saint-Venant equations with unit-width discharge.
+    """Run the 1D Saint-Venant equations on a uniform or supplied cell grid.
 
     left_inflow is either a non-negative discharge in m^2/min or a callable
     of time returning that discharge. None is a closed/no-inflow upstream
-    boundary. The downstream boundary is zero-gradient free outflow.
+    boundary. rainfall is a callable ``rainfall(x_m, t_min)`` returning one
+    non-negative rate in m/min per cell. The downstream boundary is
+    zero-gradient free outflow.
     """
-    nx = _validate_inputs(L, T_final, record_interval, h_init, q_init)
-    dx = L / nx
-    x = np.linspace(dx / 2, L - dx / 2, nx)
-    center = 5.0
+    x, dx, bed_slope, roughness = _prepare_grid(
+        L,
+        x_m,
+        dx_m,
+        slope,
+        manning_n,
+    )
+    n_cells = len(x)
+    _validate_inputs(T_final, record_interval, n_cells, h_init, q_init)
+    cfl_value = CFL if cfl is None else float(cfl)
+    if not np.isfinite(cfl_value) or not (0 < cfl_value <= 1):
+        raise ValueError("cfl must be finite and in the interval (0, 1]")
+    rainfall_function = r if rainfall is None else rainfall
+    center = float(x[0] + 0.5 * (x[-1] - x[0]))
 
     if h_init is None:
         h = 0.01 * np.exp(-((x - center) ** 2) / 0.2)
@@ -119,7 +189,7 @@ def run_model(
     h = np.maximum(h, H_FLOOR)
 
     if q_init is None:
-        q = np.zeros(nx)
+        q = np.zeros(n_cells)
     else:
         q = np.asarray(q_init, dtype=float).copy()
     q[h <= H_FLOOR] = 0.0
@@ -140,32 +210,37 @@ def run_model(
 
     while t_current < T_final - 1e-12:
         flux_h, flux_q, interface_speed = _rusanov_fluxes(h, q, left_inflow, t_current)
-        max_speed = max(float(np.max(interface_speed)), 1e-12)
-        dt = min(CFL * dx / max_speed, T_final - t_current)
-        if t_current < 50 < t_current + dt:
+        cell_speed = np.maximum(interface_speed[:-1], interface_speed[1:])
+        moving = cell_speed > 1e-12
+        if np.any(moving):
+            dt = cfl_value * float(np.min(dx[moving] / cell_speed[moving]))
+        else:
+            dt = T_final - t_current
+        dt = min(dt, T_final - t_current)
+        if rainfall is None and t_current < 50 < t_current + dt:
             dt = 50 - t_current
 
         h_previous = h.copy()
         q_previous = q.copy()
-        source = np.asarray(r(x, t_current), dtype=float)
-        if source.shape != h.shape or not np.all(np.isfinite(source)):
-            raise ValueError("r(x, t) must return one finite source value per cell")
+        source = _evaluate_rainfall(rainfall_function, x, t_current)
 
         h_new = h - (dt / dx) * (flux_h[1:] - flux_h[:-1]) + dt * source
         q_new = q - (dt / dx) * (flux_q[1:] - flux_q[:-1])
 
         floor_addition = np.maximum(H_FLOOR - h_new, 0.0)
-        mass_floor_correction += float(np.sum(floor_addition) * dx)
+        mass_floor_correction += float(np.sum(floor_addition * dx))
         h_new = np.maximum(h_new, H_FLOOR)
 
         velocity_new = _velocity(h_new, q_new)
-        friction_coeff = n0**2 * np.abs(velocity_new) / h_new ** (4.0 / 3.0)
-        q_new = (q_new + dt * g * h_new * S0) / (1.0 + dt * g * friction_coeff)
+        friction_coeff = roughness**2 * np.abs(velocity_new) / h_new ** (4.0 / 3.0)
+        q_new = (q_new + dt * g * h_new * bed_slope) / (
+            1.0 + dt * g * friction_coeff
+        )
         q_new[h_new <= H_FLOOR] = 0.0
 
         mass_inflow += float(flux_h[0] * dt)
         mass_outflow += float(flux_h[-1] * dt)
-        mass_source += float(np.sum(source) * dx * dt)
+        mass_source += float(np.sum(source * dx) * dt)
 
         t_next = t_current + dt
         while (
@@ -185,6 +260,9 @@ def run_model(
 
     return {
         "x": x,
+        "dx_m": dx,
+        "slope": bed_slope,
+        "manning_n": roughness,
         "times": np.array(times),
         "h_history": np.array(h_history),
         "q_history": np.array(q_history),
@@ -212,40 +290,41 @@ def save_time_series_csv(result, path):
 
 class _SaintVenantSolver:
     name = "saint_venant"
-    supports = frozenset({"initial_depth", "initial_discharge", "left_inflow", "cfl"})
+    supports = frozenset(
+        {"initial_depth", "initial_discharge", "left_inflow", "rainfall", "cfl"}
+    )
 
     def run(self, domain: Domain, scenario: Scenario) -> SimulationResult:
-        import general.solvers.saint_venant_1d as _self_module
+        n_cells = len(domain.x_m)
 
-        L = float(domain.x_m[-1] + domain.dx_m[-1] / 2)
-        left_inflow = scenario.left_inflow  # float, callable, or 0.0 — run_model handles all
-        h_init = scenario.initial_depth_m if isinstance(scenario.initial_depth_m, np.ndarray) else None
-        q_init = scenario.initial_discharge if isinstance(scenario.initial_discharge, np.ndarray) else None
+        def state_array(value, name):
+            array = np.asarray(value, dtype=float)
+            if array.ndim == 0:
+                array = np.full(n_cells, float(array), dtype=float)
+            if array.shape != (n_cells,):
+                raise ValueError(f"{name} must contain one value per domain cell")
+            return array
 
-        old_cfl = _self_module.CFL
-        try:
-            _self_module.CFL = scenario.cfl
-            raw = run_model(
-                L,
-                scenario.t_final_min,
-                record_interval=scenario.record_interval_min,
-                h_init=h_init,
-                q_init=q_init,
-                left_inflow=left_inflow,
-            )
-        finally:
-            _self_module.CFL = old_cfl
-
-        x_int = raw["x"]
-        dx_int = x_int[1] - x_int[0] if len(x_int) > 1 else domain.dx_m[0]
-        internal_domain = Domain(
-            x_m=x_int,
-            dx_m=np.full_like(x_int, dx_int),
-            slope=np.full_like(x_int, float(domain.slope[0])),
-            manning_n=np.full_like(x_int, float(domain.manning_n[0])),
+        raw = run_model(
+            float(np.sum(domain.dx_m)),
+            scenario.t_final_min,
+            record_interval=scenario.record_interval_min,
+            h_init=state_array(scenario.initial_depth_m, "initial_depth_m"),
+            q_init=state_array(scenario.initial_discharge, "initial_discharge"),
+            left_inflow=scenario.left_inflow,
+            rainfall=(
+                scenario.rainfall
+                if scenario.rainfall is not None
+                else lambda x, t: np.zeros_like(x, dtype=float)
+            ),
+            x_m=domain.x_m,
+            dx_m=domain.dx_m,
+            slope=domain.slope,
+            manning_n=domain.manning_n,
+            cfl=scenario.cfl,
         )
         return SimulationResult(
-            domain=internal_domain,
+            domain=domain,
             times=raw["times"],
             depth_history=raw["h_history"],
             depth_initial=raw["h_initial"],

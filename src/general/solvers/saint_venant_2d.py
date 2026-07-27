@@ -1,24 +1,26 @@
-"""2D shallow-water (Saint-Venant) solver.
+"""Verified finite-volume solver for the two-dimensional shallow-water equations.
 
-Conservative finite-volume scheme with Rusanov (local Lax-Friedrichs) numerical
-fluxes in both x and y, an adaptive CFL time step, and a semi-implicit
-gravity/friction source (the same stable treatment used by saint_venant_1d.py).
+The conserved state is ``U = (h, hu, hv)`` on a Cartesian cell-centred grid.
+Rusanov fluxes are combined with hydrostatic reconstruction so a constant free
+surface over non-flat bed elevation is preserved. A conservative draining
+limiter scales outward numerical fluxes before the update, preventing negative
+depth without relying on a mass-adding depth floor.
 
-State per cell: water depth ``h`` and unit-width momenta ``hu`` (x) and ``hv`` (y),
-on a cell-centred (nx, ny) grid where axis 0 is x and axis 1 is y.
+Boundary modes:
 
-Boundaries:
-  * x = 0 : inflow — a prescribed unit-width discharge ``left_inflow`` (m^2/min),
-    imposed by mirroring the hu ghost about it (equal-depth ghost).
-  * x = L : open outflow — zero-gradient ghost.
-  * y = 0, y = W : reflecting solid walls — equal-depth ghost with the normal
-    momentum hv reflected (watertight) and tangential hu free-slip.
+* x ``inflow_outflow``: prescribed unit discharge at the left, zero-gradient
+  open boundary at the right.
+* y ``wall``: reflecting, free-slip walls.
+* x or y ``periodic``: periodic verification and benchmark domains.
 
-Units are meters and minutes throughout. Manning's n uses the meters-and-minutes
-form (SI n divided by 60) and g is 9.81 m/s^2 converted to m/min^2, matching
-saint_venant_1d.py; this file is internally consistent in that convention (see
-docs/ingestion_integration_requests.md for the separate 1D-kinematic-wave note).
+``momentum_source`` is an optional deterministic forcing hook used by
+manufactured-solution verification. Production scenarios leave it unset.
+
+Units are metres and minutes. Manning's n must use the corresponding
+minutes/metres convention (conventional SI n divided by 60).
 """
+
+from __future__ import annotations
 
 import csv
 from pathlib import Path
@@ -26,7 +28,9 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-# Units: meters and minutes throughout.
+from general.solvers.contract import Domain2D, Scenario, SimulationResult
+
+
 L = 10.0
 W = 5.0
 T_final = 30.0
@@ -34,88 +38,248 @@ S0x = 0.05
 S0y = 0.0
 MANNING_N_SECONDS = 0.05
 n0 = MANNING_N_SECONDS / 60.0
-g = 35316.0  # 9.81 m/s^2 converted to m/min^2.
-H_FLOOR = 1e-10
-CFL = 0.5
+g = 35316.0
+DRY_TOL = 1e-10
+POSITIVITY_TOL = 1e-12
+CFL = 0.45
 
 
 def r(t):
-    """Uniform rainfall source rate (m/min) at time t."""
+    """Default uniform rainfall source rate in m/min."""
     return 0.1
 
 
-def _velocity(h, mom):
-    vel = np.zeros_like(mom, dtype=float)
-    np.divide(mom, h, out=vel, where=h > H_FLOOR)
-    return vel
+def _velocity(h, momentum):
+    velocity = np.zeros_like(momentum, dtype=float)
+    np.divide(momentum, h, out=velocity, where=h > DRY_TOL)
+    return velocity
 
 
-def _wave_speed(h, mom):
-    return np.abs(_velocity(h, mom)) + np.sqrt(g * np.maximum(h, 0.0))
-
-
-def _flux_x(h, hu, hv):
+def _physical_flux_x(h, hu, hv):
     u = _velocity(h, hu)
     return hu, hu * u + 0.5 * g * h**2, hv * u
 
 
-def _flux_y(h, hu, hv):
+def _physical_flux_y(h, hu, hv):
     v = _velocity(h, hv)
     return hv, hu * v, hv * v + 0.5 * g * h**2
 
 
-def _rusanov_x(h, hu, hv, inflow):
-    """Rusanov x-fluxes on all (nx+1, ny) x-faces, with inflow/outflow ghosts."""
-    h_ext = np.concatenate([h[:1, :], h, h[-1:, :]], axis=0)
-    hu_ext = np.concatenate([2.0 * inflow - hu[:1, :], hu, hu[-1:, :]], axis=0)
-    hv_ext = np.concatenate([hv[:1, :], hv, hv[-1:, :]], axis=0)
-
-    h_l, h_r = h_ext[:-1, :], h_ext[1:, :]
-    hu_l, hu_r = hu_ext[:-1, :], hu_ext[1:, :]
-    hv_l, hv_r = hv_ext[:-1, :], hv_ext[1:, :]
-
-    fh_l, fhu_l, fhv_l = _flux_x(h_l, hu_l, hv_l)
-    fh_r, fhu_r, fhv_r = _flux_x(h_r, hu_r, hv_r)
-    alpha = np.maximum(_wave_speed(h_l, hu_l), _wave_speed(h_r, hu_r))
-
-    fh = 0.5 * (fh_l + fh_r) - 0.5 * alpha * (h_r - h_l)
-    fhu = 0.5 * (fhu_l + fhu_r) - 0.5 * alpha * (hu_r - hu_l)
-    fhv = 0.5 * (fhv_l + fhv_r) - 0.5 * alpha * (hv_r - hv_l)
-    return fh, fhu, fhv
-
-
-def _rusanov_y(h, hu, hv):
-    """Rusanov y-fluxes on all (nx, ny+1) y-faces, with reflecting-wall ghosts."""
-    h_ext = np.concatenate([h[:, :1], h, h[:, -1:]], axis=1)
-    hu_ext = np.concatenate([hu[:, :1], hu, hu[:, -1:]], axis=1)  # free-slip tangential
-    hv_ext = np.concatenate([-hv[:, :1], hv, -hv[:, -1:]], axis=1)  # reflected normal
-
-    h_b, h_t = h_ext[:, :-1], h_ext[:, 1:]
-    hu_b, hu_t = hu_ext[:, :-1], hu_ext[:, 1:]
-    hv_b, hv_t = hv_ext[:, :-1], hv_ext[:, 1:]
-
-    gh_b, ghu_b, ghv_b = _flux_y(h_b, hu_b, hv_b)
-    gh_t, ghu_t, ghv_t = _flux_y(h_t, hu_t, hv_t)
-    alpha = np.maximum(_wave_speed(h_b, hv_b), _wave_speed(h_t, hv_t))
-
-    gh = 0.5 * (gh_b + gh_t) - 0.5 * alpha * (h_t - h_b)
-    ghu = 0.5 * (ghu_b + ghu_t) - 0.5 * alpha * (hu_t - hu_b)
-    ghv = 0.5 * (ghv_b + ghv_t) - 0.5 * alpha * (hv_t - hv_b)
-    return gh, ghu, ghv
+def _wave_speed(h, momentum):
+    return np.abs(_velocity(h, momentum)) + np.sqrt(g * np.maximum(h, 0.0))
 
 
 def _record_times(final_time, record_interval):
     count = int(np.floor(final_time / record_interval + 1e-9))
     values = [index * record_interval for index in range(count + 1)]
-    if not values or values[-1] < final_time - 1e-9:
+    if values[-1] < final_time - 1e-9:
         values.append(float(final_time))
     return values
 
 
 def _grid(length, count):
     step = length / count
-    centers = np.linspace(step / 2, length - step / 2, count)
-    return centers, step
+    return np.linspace(step / 2, length - step / 2, count), np.full(count, step)
+
+
+def _field(value, default, shape, name):
+    array = np.asarray(default if value is None else value, dtype=float)
+    if array.ndim == 0:
+        array = np.full(shape, float(array))
+    if array.shape != shape or not np.all(np.isfinite(array)):
+        raise ValueError(f"{name} must be scalar or contain one finite value per cell")
+    return array
+
+
+def _bed_from_slopes(x, y, slope_x, slope_y):
+    """Reconstruct a bed datum from supplied positive-downhill slope fields.
+
+    Explicit ``bed_elevation_m`` is preferred. This compatibility reconstruction
+    integrates x slopes from the first x cell and y slopes from the first y cell.
+    For a non-integrable slope field the result is path-dependent, which is why
+    verification cases always provide bed elevation directly.
+    """
+    bed_x = np.zeros_like(slope_x)
+    if len(x) > 1:
+        spacing_x = np.diff(x)[:, None]
+        bed_x[1:, :] = -np.cumsum(
+            0.5 * (slope_x[:-1, :] + slope_x[1:, :]) * spacing_x,
+            axis=0,
+        )
+    bed_y = np.zeros_like(slope_y)
+    if len(y) > 1:
+        spacing_y = np.diff(y)[None, :]
+        bed_y[:, 1:] = -np.cumsum(
+            0.5 * (slope_y[:, :-1] + slope_y[:, 1:]) * spacing_y,
+            axis=1,
+        )
+    return bed_x + bed_y
+
+
+def _check_finite(time, **states):
+    for name, values in states.items():
+        if not np.all(np.isfinite(values)):
+            bad = np.argwhere(~np.isfinite(values))[0]
+            raise FloatingPointError(
+                f"{name} became non-finite at t={time:.16g} min, cell={tuple(bad)}"
+            )
+
+
+def _inflow_values(left_inflow, time, ny):
+    values = left_inflow(time) if callable(left_inflow) else left_inflow
+    values = np.asarray(values, dtype=float)
+    if values.ndim == 0:
+        values = np.full(ny, float(values))
+    if values.shape != (ny,) or not np.all(np.isfinite(values)) or np.any(values < 0):
+        raise ValueError(
+            f"left_inflow must return a finite non-negative scalar or shape ({ny},)"
+        )
+    return values
+
+
+def _extend_x(h, hu, hv, bed, boundary, inflow):
+    if boundary == "periodic":
+        return tuple(
+            np.concatenate([array[-1:, :], array, array[:1, :]], axis=0)
+            for array in (h, hu, hv, bed)
+        )
+    if boundary != "inflow_outflow":
+        raise ValueError("boundary_x must be 'inflow_outflow' or 'periodic'")
+    return (
+        np.concatenate([h[:1, :], h, h[-1:, :]], axis=0),
+        np.concatenate([2.0 * inflow[None, :] - hu[:1, :], hu, hu[-1:, :]], axis=0),
+        np.concatenate([hv[:1, :], hv, hv[-1:, :]], axis=0),
+        np.concatenate([bed[:1, :], bed, bed[-1:, :]], axis=0),
+    )
+
+
+def _extend_y(h, hu, hv, bed, boundary):
+    if boundary == "periodic":
+        return tuple(
+            np.concatenate([array[:, -1:], array, array[:, :1]], axis=1)
+            for array in (h, hu, hv, bed)
+        )
+    if boundary != "wall":
+        raise ValueError("boundary_y must be 'wall' or 'periodic'")
+    return (
+        np.concatenate([h[:, :1], h, h[:, -1:]], axis=1),
+        np.concatenate([hu[:, :1], hu, hu[:, -1:]], axis=1),
+        np.concatenate([-hv[:, :1], hv, -hv[:, -1:]], axis=1),
+        np.concatenate([bed[:, :1], bed, bed[:, -1:]], axis=1),
+    )
+
+
+def _hydrostatic_states(h_left, mom_x_left, mom_y_left, bed_left,
+                        h_right, mom_x_right, mom_y_right, bed_right):
+    surface_left = h_left + bed_left
+    surface_right = h_right + bed_right
+    face_bed = np.maximum(bed_left, bed_right)
+    depth_left = np.maximum(0.0, surface_left - face_bed)
+    depth_right = np.maximum(0.0, surface_right - face_bed)
+
+    scale_left = np.zeros_like(h_left)
+    scale_right = np.zeros_like(h_right)
+    np.divide(depth_left, h_left, out=scale_left, where=h_left > DRY_TOL)
+    np.divide(depth_right, h_right, out=scale_right, where=h_right > DRY_TOL)
+    return (
+        depth_left,
+        mom_x_left * scale_left,
+        mom_y_left * scale_left,
+        depth_right,
+        mom_x_right * scale_right,
+        mom_y_right * scale_right,
+    )
+
+
+def _rusanov_x(h, hu, hv, bed, boundary, inflow):
+    h_ext, hu_ext, hv_ext, bed_ext = _extend_x(h, hu, hv, bed, boundary, inflow)
+    h_l, h_r = h_ext[:-1, :], h_ext[1:, :]
+    hu_l, hu_r = hu_ext[:-1, :], hu_ext[1:, :]
+    hv_l, hv_r = hv_ext[:-1, :], hv_ext[1:, :]
+    bed_l, bed_r = bed_ext[:-1, :], bed_ext[1:, :]
+    hs_l, hus_l, hvs_l, hs_r, hus_r, hvs_r = _hydrostatic_states(
+        h_l, hu_l, hv_l, bed_l, h_r, hu_r, hv_r, bed_r
+    )
+    left_flux = _physical_flux_x(hs_l, hus_l, hvs_l)
+    right_flux = _physical_flux_x(hs_r, hus_r, hvs_r)
+    alpha = np.maximum(_wave_speed(hs_l, hus_l), _wave_speed(hs_r, hus_r))
+    flux = tuple(
+        0.5 * (left + right) - 0.5 * alpha * (state_r - state_l)
+        for left, right, state_l, state_r in zip(
+            left_flux, right_flux, (hs_l, hus_l, hvs_l), (hs_r, hus_r, hvs_r)
+        )
+    )
+    correction_left = 0.5 * g * (h_l**2 - hs_l**2)
+    correction_right = 0.5 * g * (h_r**2 - hs_r**2)
+    return (*flux, correction_left, correction_right)
+
+
+def _rusanov_y(h, hu, hv, bed, boundary):
+    h_ext, hu_ext, hv_ext, bed_ext = _extend_y(h, hu, hv, bed, boundary)
+    h_b, h_t = h_ext[:, :-1], h_ext[:, 1:]
+    hu_b, hu_t = hu_ext[:, :-1], hu_ext[:, 1:]
+    hv_b, hv_t = hv_ext[:, :-1], hv_ext[:, 1:]
+    bed_b, bed_t = bed_ext[:, :-1], bed_ext[:, 1:]
+    hs_b, hus_b, hvs_b, hs_t, hus_t, hvs_t = _hydrostatic_states(
+        h_b, hu_b, hv_b, bed_b, h_t, hu_t, hv_t, bed_t
+    )
+    bottom_flux = _physical_flux_y(hs_b, hus_b, hvs_b)
+    top_flux = _physical_flux_y(hs_t, hus_t, hvs_t)
+    alpha = np.maximum(_wave_speed(hs_b, hvs_b), _wave_speed(hs_t, hvs_t))
+    flux = tuple(
+        0.5 * (bottom + top) - 0.5 * alpha * (state_t - state_b)
+        for bottom, top, state_b, state_t in zip(
+            bottom_flux, top_flux, (hs_b, hus_b, hvs_b), (hs_t, hus_t, hvs_t)
+        )
+    )
+    correction_bottom = 0.5 * g * (h_b**2 - hs_b**2)
+    correction_top = 0.5 * g * (h_t**2 - hs_t**2)
+    return (*flux, correction_bottom, correction_top)
+
+
+def _draining_factors(h, source, dt, dx, dy, flux_h_x, flux_h_y):
+    area = dx[:, None] * dy[None, :]
+    outgoing = (
+        np.maximum(flux_h_x[1:, :], 0.0) * dy[None, :]
+        + np.maximum(-flux_h_x[:-1, :], 0.0) * dy[None, :]
+        + np.maximum(flux_h_y[:, 1:], 0.0) * dx[:, None]
+        + np.maximum(-flux_h_y[:, :-1], 0.0) * dx[:, None]
+    )
+    available = (h + dt * source) * area
+    theta = np.ones_like(h)
+    draining = dt * outgoing > available
+    np.divide(
+        available,
+        dt * outgoing,
+        out=theta,
+        where=draining,
+    )
+    return np.clip(theta, 0.0, 1.0)
+
+
+def _limit_face_fluxes(theta, flux_x, flux_y, boundary_x, boundary_y):
+    nx, ny = theta.shape
+    if boundary_x == "periodic":
+        donor_left = np.concatenate([theta[-1:, :], theta], axis=0)
+        donor_right = np.concatenate([theta, theta[:1, :]], axis=0)
+    else:
+        ones_x = np.ones((1, ny))
+        donor_left = np.concatenate([ones_x, theta], axis=0)
+        donor_right = np.concatenate([theta, ones_x], axis=0)
+    factor_x = np.where(flux_x[0] >= 0.0, donor_left, donor_right)
+
+    if boundary_y == "periodic":
+        donor_bottom = np.concatenate([theta[:, -1:], theta], axis=1)
+        donor_top = np.concatenate([theta, theta[:, :1]], axis=1)
+    else:
+        ones_y = np.ones((nx, 1))
+        donor_bottom = np.concatenate([ones_y, theta], axis=1)
+        donor_top = np.concatenate([theta, ones_y], axis=1)
+    factor_y = np.where(flux_y[0] >= 0.0, donor_bottom, donor_top)
+    return (
+        tuple(component * factor_x for component in flux_x),
+        tuple(component * factor_y for component in flux_y),
+    )
 
 
 def run_model(
@@ -127,100 +291,210 @@ def run_model(
     hu_init=None,
     hv_init=None,
     left_inflow=0.0,
+    rainfall=None,
+    x_m=None,
+    y_m=None,
+    dx_m=None,
+    dy_m=None,
+    slope_x=None,
+    slope_y=None,
+    manning_n=None,
+    bed_elevation_m=None,
+    momentum_source=None,
+    cfl=CFL,
+    boundary_x="inflow_outflow",
+    boundary_y="wall",
 ):
-    if not (np.isfinite(L) and np.isfinite(W) and L > 0 and W > 0):
-        raise ValueError("L and W must be finite and positive")
     if not np.isfinite(T_final) or T_final < 0:
         raise ValueError("T_final must be finite and non-negative")
-    if record_interval <= 0:
-        raise ValueError("record_interval must be positive")
-    inflow = float(left_inflow)
-    if not np.isfinite(inflow) or inflow < 0:
-        raise ValueError("left_inflow must be a finite, non-negative discharge")
+    if not np.isfinite(record_interval) or record_interval <= 0:
+        raise ValueError("record_interval must be finite and positive")
+    if not np.isfinite(cfl) or not (0 < cfl <= 0.5):
+        raise ValueError("2-D cfl must be finite and in (0, 0.5]")
+    if boundary_x not in {"inflow_outflow", "periodic"}:
+        raise ValueError("boundary_x must be 'inflow_outflow' or 'periodic'")
+    if boundary_y not in {"wall", "periodic"}:
+        raise ValueError("boundary_y must be 'wall' or 'periodic'")
+    if boundary_x == "periodic" and (
+        callable(left_inflow) or float(left_inflow) != 0.0
+    ):
+        raise ValueError("left_inflow must be zero when boundary_x is periodic")
 
-    nx, ny = int(L * 10), int(W * 10)
-    x, dx = _grid(L, nx)
-    y, dy = _grid(W, ny)
+    if x_m is None and y_m is None:
+        if not (np.isfinite(L) and np.isfinite(W) and L > 0 and W > 0):
+            raise ValueError("L and W must be finite and positive")
+        nx, ny = max(1, int(L * 10)), max(1, int(W * 10))
+        x, dx = _grid(L, nx)
+        y, dy = _grid(W, ny)
+    elif x_m is not None and y_m is not None and dx_m is not None and dy_m is not None:
+        x = np.asarray(x_m, dtype=float)
+        y = np.asarray(y_m, dtype=float)
+        dx = np.asarray(dx_m, dtype=float)
+        dy = np.asarray(dy_m, dtype=float)
+        if (
+            x.ndim != 1
+            or y.ndim != 1
+            or dx.shape != x.shape
+            or dy.shape != y.shape
+            or not np.all(np.isfinite(x))
+            or not np.all(np.isfinite(y))
+            or not np.all(np.isfinite(dx))
+            or not np.all(np.isfinite(dy))
+            or np.any(dx <= 0)
+            or np.any(dy <= 0)
+            or (len(x) > 1 and np.any(np.diff(x) <= 0))
+            or (len(y) > 1 and np.any(np.diff(y) <= 0))
+        ):
+            raise ValueError("Supplied x/y grids need increasing centres and positive widths")
+        nx, ny = len(x), len(y)
+    else:
+        raise ValueError("x_m, y_m, dx_m, and dy_m must be supplied together")
 
-    h = np.full((nx, ny), 0.01) if h_init is None else np.asarray(h_init, dtype=float).copy()
-    hu = np.zeros((nx, ny)) if hu_init is None else np.asarray(hu_init, dtype=float).copy()
-    hv = np.zeros((nx, ny)) if hv_init is None else np.asarray(hv_init, dtype=float).copy()
-    if not (h.shape == hu.shape == hv.shape == (nx, ny)):
-        raise ValueError(f"h_init/hu_init/hv_init must all have shape {(nx, ny)}")
-    h = np.maximum(h, H_FLOOR)
-    hu[h <= H_FLOOR] = 0.0
-    hv[h <= H_FLOOR] = 0.0
+    shape = (nx, ny)
+    bed_slope_x = _field(slope_x, S0x, shape, "slope_x")
+    bed_slope_y = _field(slope_y, S0y, shape, "slope_y")
+    roughness = _field(manning_n, n0, shape, "manning_n")
+    if np.any(roughness < 0):
+        raise ValueError("manning_n cannot be negative")
+    bed = (
+        _bed_from_slopes(x, y, bed_slope_x, bed_slope_y)
+        if bed_elevation_m is None
+        else _field(bed_elevation_m, 0.0, shape, "bed_elevation_m")
+    )
+
+    h = _field(h_init, 0.01, shape, "h_init").copy()
+    hu = _field(hu_init, 0.0, shape, "hu_init").copy()
+    hv = _field(hv_init, 0.0, shape, "hv_init").copy()
+    if np.any(h < 0):
+        raise ValueError("h_init cannot contain negative depths")
+    dry = h <= DRY_TOL
+    hu[dry] = 0.0
+    hv[dry] = 0.0
+    _check_finite(0.0, h=h, hu=hu, hv=hv)
 
     h_initial = h.copy()
-    record_times = _record_times(T_final, record_interval)
+    hu_initial = hu.copy()
+    hv_initial = hv.copy()
+    record_marks = _record_times(T_final, record_interval)
     times = [0.0]
     h_history = [h.copy()]
-    next_record_idx = 1
+    hu_history = [hu.copy()]
+    hv_history = [hv.copy()]
+    next_record = 1
 
     mass_inflow = 0.0
     mass_outflow = 0.0
     mass_source = 0.0
     mass_floor_correction = 0.0
     t_current = 0.0
+    area = dx[:, None] * dy[None, :]
+    rainfall_function = rainfall
 
-    while t_current < T_final - 1e-12:
-        # Adaptive 2D CFL step; guard the denominator so an all-dry domain (tiny
-        # wave speeds) can't divide by zero and hang.
-        ax = float(np.max(_wave_speed(h, hu)))
-        ay = float(np.max(_wave_speed(h, hv)))
-        denom = max(ax / dx + ay / dy, 1e-12)
-        dt = min(CFL / denom, T_final - t_current)
-        if next_record_idx < len(record_times):
-            dt = min(dt, record_times[next_record_idx] - t_current)
+    while t_current < T_final - 1e-14:
+        speed_x = _wave_speed(h, hu)
+        speed_y = _wave_speed(h, hv)
+        spectral_rate = speed_x / dx[:, None] + speed_y / dy[None, :]
+        max_rate = float(np.max(spectral_rate))
+        dt = T_final - t_current if max_rate <= 1e-14 else cfl / max_rate
+        dt = min(dt, T_final - t_current)
+        if next_record < len(record_marks):
+            dt = min(dt, record_marks[next_record] - t_current)
+        if dt <= 0 or not np.isfinite(dt):
+            raise FloatingPointError(f"Invalid time step {dt!r} at t={t_current}")
 
-        fh, fhu, fhv = _rusanov_x(h, hu, hv, inflow)
-        gh, ghu, ghv = _rusanov_y(h, hu, hv)
+        inflow = _inflow_values(left_inflow, t_current, ny)
+        x_raw = _rusanov_x(h, hu, hv, bed, boundary_x, inflow)
+        y_raw = _rusanov_y(h, hu, hv, bed, boundary_y)
+        source_value = r(t_current) if rainfall_function is None else rainfall_function(x, y, t_current)
+        source = _field(source_value, 0.0, shape, "rainfall")
+        if np.any(source < 0):
+            raise ValueError("rainfall cannot be negative")
 
-        div_h = (fh[1:, :] - fh[:-1, :]) / dx + (gh[:, 1:] - gh[:, :-1]) / dy
-        div_hu = (fhu[1:, :] - fhu[:-1, :]) / dx + (ghu[:, 1:] - ghu[:, :-1]) / dy
-        div_hv = (fhv[1:, :] - fhv[:-1, :]) / dx + (ghv[:, 1:] - ghv[:, :-1]) / dy
+        theta = _draining_factors(h, source, dt, dx, dy, x_raw[0], y_raw[0])
+        x_flux, y_flux = _limit_face_fluxes(
+            theta, x_raw[:3], y_raw[:3], boundary_x, boundary_y
+        )
+        fh, fhu, fhv = x_flux
+        gh, ghu, ghv = y_flux
+        corr_x_left, corr_x_right = x_raw[3], x_raw[4]
+        corr_y_bottom, corr_y_top = y_raw[3], y_raw[4]
 
-        source = np.full((nx, ny), float(r(t_current)))
-        h_new = h - dt * div_h + dt * source
-        hu_star = hu - dt * div_hu
-        hv_star = hv - dt * div_hv
+        h_new = h - dt * (
+            (fh[1:, :] - fh[:-1, :]) / dx[:, None]
+            + (gh[:, 1:] - gh[:, :-1]) / dy[None, :]
+        ) + dt * source
+        hu_star = hu - dt * (
+            ((fhu + corr_x_left)[1:, :] - (fhu + corr_x_right)[:-1, :])
+            / dx[:, None]
+            + (ghu[:, 1:] - ghu[:, :-1]) / dy[None, :]
+        )
+        hv_star = hv - dt * (
+            (fhv[1:, :] - fhv[:-1, :]) / dx[:, None]
+            + ((ghv + corr_y_bottom)[:, 1:] - (ghv + corr_y_top)[:, :-1])
+            / dy[None, :]
+        )
+        if momentum_source is not None:
+            momentum_values = momentum_source(x, y, t_current)
+            if not isinstance(momentum_values, (tuple, list)) or len(momentum_values) != 2:
+                raise ValueError("momentum_source must return (source_hu, source_hv)")
+            source_hu = _field(momentum_values[0], 0.0, shape, "source_hu")
+            source_hv = _field(momentum_values[1], 0.0, shape, "source_hv")
+            hu_star += dt * source_hu
+            hv_star += dt * source_hv
 
-        floor_addition = np.maximum(H_FLOOR - h_new, 0.0)
-        mass_floor_correction += float(np.sum(floor_addition) * dx * dy)
-        h_new = np.maximum(h_new, H_FLOOR)
+        negative = np.minimum(h_new, 0.0)
+        negative_volume = -float(np.sum(negative * area))
+        scale = max(1.0, float(np.sum(h * area)))
+        if negative_volume > POSITIVITY_TOL * scale:
+            raise FloatingPointError(
+                f"Positivity limiter failed at t={t_current + dt:.16g}: "
+                f"negative volume={negative_volume:.6e}"
+            )
+        mass_floor_correction += negative_volume
+        h_new = np.maximum(h_new, 0.0)
 
-        # Semi-implicit gravity (bed slope) + Manning friction, coupling u and v
-        # through the flow speed |U| (evaluated on the post-flux velocities).
-        u_s = _velocity(h_new, hu_star)
-        v_s = _velocity(h_new, hv_star)
-        speed = np.sqrt(u_s**2 + v_s**2)
-        friction = n0**2 * speed / h_new ** (4.0 / 3.0)
-        denom_src = 1.0 + dt * g * friction
-        hu_new = (hu_star + dt * g * h_new * S0x) / denom_src
-        hv_new = (hv_star + dt * g * h_new * S0y) / denom_src
-        hu_new[h_new <= H_FLOOR] = 0.0
-        hv_new[h_new <= H_FLOOR] = 0.0
+        u_star = _velocity(h_new, hu_star)
+        v_star = _velocity(h_new, hv_star)
+        speed = np.sqrt(u_star**2 + v_star**2)
+        friction = np.zeros_like(h_new)
+        wet = h_new > DRY_TOL
+        friction[wet] = roughness[wet] ** 2 * speed[wet] / h_new[wet] ** (4.0 / 3.0)
+        denominator = 1.0 + dt * g * friction
+        hu_new = hu_star / denominator
+        hv_new = hv_star / denominator
+        hu_new[~wet] = 0.0
+        hv_new[~wet] = 0.0
+        _check_finite(t_current + dt, h=h_new, hu=hu_new, hv=hv_new)
 
-        mass_inflow += float(np.sum(fh[0, :]) * dy * dt)
-        mass_outflow += float(np.sum(fh[-1, :]) * dy * dt)
-        mass_source += float(np.sum(source) * dx * dy * dt)
+        if boundary_x == "inflow_outflow":
+            mass_inflow += float(np.sum(fh[0, :] * dy) * dt)
+            mass_outflow += float(np.sum(fh[-1, :] * dy) * dt)
+        mass_source += float(np.sum(source * area) * dt)
 
         h, hu, hv = h_new, hu_new, hv_new
         t_current += dt
-
-        if next_record_idx < len(record_times) and t_current >= record_times[next_record_idx] - 1e-9:
-            times.append(record_times[next_record_idx])
+        if next_record < len(record_marks) and t_current >= record_marks[next_record] - 1e-12:
+            times.append(record_marks[next_record])
             h_history.append(h.copy())
-            next_record_idx += 1
+            hu_history.append(hu.copy())
+            hv_history.append(hv.copy())
+            next_record += 1
 
     return {
         "x": x,
         "y": y,
-        "times": np.array(times),
-        "h_history": np.array(h_history),  # (n_times, nx, ny)
+        "dx_m": dx,
+        "dy_m": dy,
+        "bed_elevation_m": bed,
+        "times": np.asarray(times),
+        "h_history": np.asarray(h_history),
+        "hu_history": np.asarray(hu_history),
+        "hv_history": np.asarray(hv_history),
         "h_initial": h_initial,
         "h_final": h,
+        "hu_initial": hu_initial,
         "hu_final": hu,
+        "hv_initial": hv_initial,
         "hv_final": hv,
         "mass_inflow": mass_inflow,
         "mass_outflow": mass_outflow,
@@ -229,11 +503,94 @@ def run_model(
     }
 
 
+class _SaintVenant2DSolver:
+    name = "saint_venant_2d"
+    supports = frozenset({
+        "initial_depth",
+        "initial_discharge",
+        "initial_discharge_y",
+        "left_inflow",
+        "rainfall",
+        "rainfall_2d",
+        "cfl",
+        "boundary_x",
+        "boundary_y",
+    })
+
+    def run(self, domain: Domain2D, scenario: Scenario) -> SimulationResult:
+        if not isinstance(domain, Domain2D):
+            raise TypeError("saint_venant_2d requires a Domain2D")
+        shape = (len(domain.x_m), len(domain.y_m))
+
+        def state(value, name):
+            array = np.asarray(value, dtype=float)
+            if array.ndim == 0:
+                array = np.full(shape, float(array))
+            elif array.shape == (shape[0],):
+                array = np.broadcast_to(array[:, None], shape).copy()
+            if array.shape != shape:
+                raise ValueError(f"{name} must be scalar, longitudinal, or have shape {shape}")
+            return array
+
+        if scenario.rainfall_2d is not None:
+            rainfall = scenario.rainfall_2d
+        elif scenario.rainfall is not None:
+            def rainfall(x, y, time):
+                del y
+                values = np.asarray(scenario.rainfall(x, time), dtype=float)
+                return np.broadcast_to(values[:, None], shape)
+        else:
+            rainfall = lambda x, y, time: np.zeros(shape)
+
+        raw = run_model(
+            T_final=scenario.t_final_min,
+            record_interval=scenario.record_interval_min,
+            h_init=state(scenario.initial_depth_m, "initial_depth_m"),
+            hu_init=state(scenario.initial_discharge, "initial_discharge"),
+            hv_init=state(scenario.initial_discharge_y, "initial_discharge_y"),
+            left_inflow=scenario.left_inflow,
+            rainfall=rainfall,
+            x_m=domain.x_m,
+            y_m=domain.y_m,
+            dx_m=domain.dx_m,
+            dy_m=domain.dy_m,
+            slope_x=domain.slope_x,
+            slope_y=domain.slope_y,
+            manning_n=domain.manning_n,
+            bed_elevation_m=domain.bed_elevation_m,
+            cfl=scenario.cfl,
+            boundary_x=scenario.boundary_x,
+            boundary_y=scenario.boundary_y,
+        )
+        return SimulationResult(
+            domain=domain,
+            times=raw["times"],
+            depth_history=raw["h_history"],
+            depth_initial=raw["h_initial"],
+            depth_final=raw["h_final"],
+            mass_inflow=raw["mass_inflow"],
+            mass_source=raw["mass_source"],
+            mass_outflow=raw["mass_outflow"],
+            mass_correction=raw["mass_floor_correction"],
+            extra={
+                "bed_elevation_m": raw["bed_elevation_m"],
+                "discharge_x_history": raw["hu_history"],
+                "discharge_y_history": raw["hv_history"],
+                "discharge_x_final": raw["hu_final"],
+                "discharge_y_final": raw["hv_final"],
+                "mass_floor_correction": raw["mass_floor_correction"],
+            },
+        )
+
+
+SOLVER = _SaintVenant2DSolver()
+
+
 def save_time_series_csv(result, path):
-    """Write a y-averaged depth-versus-time table compatible with animate_depth.py."""
+    """Write a y-averaged depth table for compatibility with 1-D viewers."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    depth_profiles = np.mean(result["h_history"], axis=2)  # average over y -> (n_times, nx)
+    depth_profiles = np.mean(result["h_history"], axis=2)
     with path.open("w", newline="") as handle:
         writer = csv.writer(handle)
         writer.writerow(["t"] + [f"{xi:.6f}" for xi in result["x"]])
@@ -243,10 +600,8 @@ def save_time_series_csv(result, path):
 
 if __name__ == "__main__":
     result = run_model()
-    h_init_profile = np.mean(result["h_initial"], axis=1)
-    h_final_profile = np.mean(result["h_final"], axis=1)
-    plt.plot(result["x"], h_init_profile, label="Initial")
-    plt.plot(result["x"], h_final_profile, label=f"After t = {T_final}", ls="--")
+    plt.plot(result["x"], np.mean(result["h_initial"], axis=1), label="Initial")
+    plt.plot(result["x"], np.mean(result["h_final"], axis=1), label="Final", ls="--")
     plt.legend()
     plt.xlabel("x (m)")
     plt.ylabel("y-averaged h (m)")

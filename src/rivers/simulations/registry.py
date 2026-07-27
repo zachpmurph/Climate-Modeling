@@ -1,12 +1,14 @@
 from general.solvers.contract import UnsupportedScenario
 import general.solvers.linear_advection as _la
 import general.solvers.saint_venant_1d as _sv
+import general.solvers.saint_venant_2d as _sv2
 
 import numpy as np
 
 SOLVERS = {
     "kinematic_wave": _la.SOLVER,
     "saint_venant": _sv.SOLVER,
+    "saint_venant_2d": _sv2.SOLVER,
 }
 
 
@@ -25,8 +27,14 @@ def _check_scenario(solver, scenario) -> None:
         "initial_discharge": lambda s: (
             isinstance(s.initial_discharge, np.ndarray) or float(s.initial_discharge) != 0.0
         ),
+        "initial_discharge_y": lambda s: (
+            isinstance(s.initial_discharge_y, np.ndarray) or float(s.initial_discharge_y) != 0.0
+        ),
         "rainfall": lambda s: s.rainfall is not None,
+        "rainfall_2d": lambda s: s.rainfall_2d is not None,
         "initial_depth": lambda s: isinstance(s.initial_depth_m, np.ndarray) or float(s.initial_depth_m) != 0.0,
+        "boundary_x": lambda s: s.boundary_x != "inflow_outflow",
+        "boundary_y": lambda s: s.boundary_y != "wall",
     }
     for knob, is_active in checks.items():
         if knob not in solver.supports and is_active(scenario):
