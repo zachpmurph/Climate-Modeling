@@ -3,7 +3,7 @@
 import pytest
 import numpy as np
 
-from general.solvers.contract import Domain, Scenario, UnsupportedScenario
+from general.solvers.contract import Domain, Domain2D, Scenario, UnsupportedScenario
 from rivers.simulations.registry import dispatch, SOLVERS
 from rivers.simulations.ingest_to_simulate import profile_to_domain_scenario
 
@@ -26,6 +26,7 @@ def _load_domain():
 def test_registry_contains_expected_solvers():
     assert "kinematic_wave" in SOLVERS
     assert "saint_venant" in SOLVERS
+    assert "saint_venant_2d" in SOLVERS
 
 
 def test_unknown_solver_raises():
@@ -143,3 +144,25 @@ def test_both_solvers_use_spatial_rainfall_function():
     for solver_name in ("kinematic_wave", "saint_venant"):
         result = dispatch(solver_name, domain, scenario)
         assert result.mass_source == pytest.approx(expected_source)
+
+
+def test_2d_solver_uses_extruded_profile_and_shared_scenario():
+    from general.solvers.profile import domain2d_from_profile, load_profile
+
+    profile = load_profile(PROFILE_PATH)
+    domain = domain2d_from_profile(profile, width_m=20.0, cross_cells=4)
+    scenario = _make_scenario(
+        t_final_min=0.1,
+        initial_depth_m=profile.initial_depth_m,
+        rainfall=lambda x, t: profile.rainfall_rate_m_per_min,
+    )
+    result = dispatch("saint_venant_2d", domain, scenario)
+
+    assert isinstance(result.domain, Domain2D)
+    assert result.depth_history.shape == (2, 5, 4)
+    assert np.allclose(domain.slope_x[:, 0], profile.slope)
+    assert np.allclose(domain.manning_n[:, -1], profile.manning_n)
+    expected_source = (
+        np.sum(profile.rainfall_rate_m_per_min * profile.dx_m) * 20.0 * 0.1
+    )
+    assert result.mass_source == pytest.approx(expected_source)

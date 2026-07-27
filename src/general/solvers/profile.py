@@ -5,7 +5,7 @@ from pathlib import Path
 
 import numpy as np
 
-from general.solvers.contract import Domain
+from general.solvers.contract import Domain, Domain2D
 
 MIN_DEPTH = 1e-10
 
@@ -174,4 +174,30 @@ def domain_from_profile(profile: RiverProfile) -> Domain:
         dx_m=profile.dx_m,
         slope=profile.slope,
         manning_n=profile.manning_n,
+    )
+
+
+def domain2d_from_profile(profile: RiverProfile, width_m: float, cross_cells: int) -> Domain2D:
+    """Extrude a 1-D profile across a rectangular channel.
+
+    Longitudinal slope and roughness are repeated across the channel. The
+    cross-channel bed slope is zero; callers needing richer terrain can build a
+    ``Domain2D`` directly.
+    """
+    if not np.isfinite(width_m) or width_m <= 0:
+        raise ValueError("width_m must be finite and positive")
+    if cross_cells < 1:
+        raise ValueError("cross_cells must be at least 1")
+
+    dy = float(width_m) / int(cross_cells)
+    y_m = np.linspace(0.5 * dy, float(width_m) - 0.5 * dy, int(cross_cells))
+    shape = (len(profile.station_m), int(cross_cells))
+    return Domain2D(
+        x_m=np.asarray(profile.station_m, dtype=float).copy(),
+        y_m=y_m,
+        dx_m=np.asarray(profile.dx_m, dtype=float).copy(),
+        dy_m=np.full(int(cross_cells), dy),
+        slope_x=np.broadcast_to(np.asarray(profile.slope)[:, None], shape).copy(),
+        slope_y=np.zeros(shape),
+        manning_n=np.broadcast_to(np.asarray(profile.manning_n)[:, None], shape).copy(),
     )

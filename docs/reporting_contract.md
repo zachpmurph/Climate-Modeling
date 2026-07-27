@@ -21,6 +21,11 @@ t_min,0,100,200
 This is the format already written by
 `src/rivers/simulations/run_simulation.py`.
 
+For a 2-D run, the summary additionally points to `<run>_fields.npz`. That
+artifact contains `x_m`, `y_m`, `dx_m`, `dy_m`, `times_min`, and `depth_m`
+with shape `(snapshot, x, y)`. The CSV remains a cross-channel mean for
+compatibility; the reporter automatically uses the NPZ for 2-D outcomes.
+
 ## Optional run summary
 
 An adjacent `<run>_summary.json` is discovered automatically for a
@@ -31,6 +36,7 @@ The reporter recognizes these numerical diagnostic fields when present:
 - `mass_inflow`
 - `mass_source`
 - `mass_outflow`
+- `mass_correction` (for explicitly tracked numerical floor corrections)
 - `mass_balance_error`
 
 Other scalar summary fields are displayed as run context. Unknown fields do not
@@ -55,13 +61,14 @@ The command writes:
 - A self-contained interactive HTML report.
 - A machine-readable `.outcomes.json` file with `schema_version: 1`.
 
-The outcomes include peak modeled depth, its time and station, maximum depth
-change, and—when a threshold exists—first exceedance time, maximum exceedance
-depth, and the maximum length and fraction of the modeled reach exceeding the
-threshold.
+For 1-D runs, outcomes include peak modeled depth, its time and station, maximum
+depth change, and threshold-exceedance length. For 2-D runs, the interactive
+plot is a plan-view depth map and outcomes include peak x/y location and
+threshold-exceedance area.
 
-These are screening outcomes from a 1-D model. They are not a 2-D inundation
-boundary and must not be presented as calibrated flood-risk conclusions.
+These are screening outcomes. A 1-D result is not an inundation boundary, and a
+2-D result is only as reliable as its terrain, boundary conditions, roughness,
+forcing, calibration, and validation.
 
 ## Command
 

@@ -76,6 +76,7 @@ The rationale for each transition is given alongside the change.
 | **4c — Kinematic wave consolidated** | `a282b4f` `e1ec579` | Folded the real-river kinematic wave capability (per-cell slope and Manning's $n$, upstream inflow, rainfall) into `linear_advection.py` and removed the duplicate `river_kinematic_wave.py` and its pre-harness runner. `linear_advection.py` now runs standalone on a profile (or a built-in demo) and is the `kinematic_wave` solver in the harness. `--solver river_kinematic_wave` is replaced by `--solver kinematic_wave`. | The overland-flow file and the real-river file had diverged into near-duplicate kinematic wave solvers. Consolidating to one implementation removes the redundancy and the need for a separate file to run a real-profile simulation. |
 | **4d — Model-neutral flood reporting** | `6116048` | Added a reporting consumer for saved time-series CSV and summary JSON artifacts. It produces a self-contained interactive HTML report and versioned outcomes JSON with peak depth, timing, reach-threshold exceedance, and mass-balance diagnostics. | Reporting should evolve independently from numerical model development. Consuming saved artifacts prevents visualization code from coupling to solver internals and makes the interpretation boundary explicit. |
 | **4e — Profile-grid dynamic wave and forcing** | Current branch | Saint-Venant now runs on the supplied nonuniform profile grid with per-cell bed slope and Manning roughness. Both solvers accept spatially and temporally varying rainfall callables. Profile initial depth, rainfall, and labels are transferred into `Scenario`. | Reconstructing a uniform grid and using module-level coefficients discarded real-reach variation. Sampling rainfall only once also prevented event functions from changing through time. |
+| **4f — Integrated 2-D shallow water** | Current branch | Added `Domain2D` and a registered `saint_venant_2d` solver. The unified runner extrudes a profile across a requested width, applies spatial terrain, roughness, and rainfall, saves complete fields to NPZ, and produces plan-view area-based flood reports. | The standalone 2-D solver could not consume ingested profiles or participate in shared simulation and reporting workflows. |
 
 ---
 
@@ -119,12 +120,14 @@ python src/rivers/simulations/run_simulation.py PROFILE --solver SOLVER --t-fina
 | Flag | Default | Description |
 |---|---|---|
 | `PROFILE` | *(required)* | Path to CSV or JSON river profile |
-| `--solver` | `saint_venant` | One of: `kinematic_wave`, `saint_venant` |
+| `--solver` | `saint_venant` | One of: `kinematic_wave`, `saint_venant`, `saint_venant_2d` |
 | `--t-final` | *(required)* | Simulation duration, minutes |
 | `--record-interval` | `1.0` | Snapshot interval, minutes |
 | `--left-inflow` | `0.0` | Constant upstream inflow flux, m²/min |
 | `--rainfall-rate` | `0.0` | Uniform rainfall rate, m/min |
 | `--cfl` | `0.5` | CFL target (0 < CFL ≤ 1) |
+| `--width` | — | Channel width in metres; required for `saint_venant_2d` |
+| `--cross-cells` | `10` | Number of cells across a 2-D channel |
 | `--output-dir` | `data/real_world_rivers/runs/` | Output directory |
 | `--run-name` | `simulation` | Filename prefix for outputs |
 
@@ -148,6 +151,22 @@ python src/rivers/simulations/run_simulation.py \
     --run-name hanford_sv
 ```
 
+**Example — 2-D Saint-Venant on an extruded rectangular channel:**
+```bash
+python src/rivers/simulations/run_simulation.py \
+    real_world_rivers/tools/example_river_profile.csv \
+    --solver saint_venant_2d \
+    --width 100 \
+    --cross-cells 20 \
+    --t-final 10 \
+    --run-name hanford_sv2
+```
+
+The 2-D runner repeats profile slope, Manning roughness, initial depth, and
+rainfall across the requested width. It writes a full `<run>_fields.npz`, a
+summary JSON, and a cross-channel-mean CSV for compatibility with 1-D tools.
+Build laterally varying cases programmatically by passing a `Domain2D` directly.
+
 Each solver declares which `Scenario` knobs it supports. Passing a knob a solver
 doesn't support raises `UnsupportedScenario` immediately rather than silently
 ignoring it.
@@ -158,8 +177,9 @@ function, and `label` values are retained in `Scenario.labels`. The CLI
 `--rainfall-rate` is added to any rainfall already stored in the profile.
 
 For programmatic scenarios, `Scenario.rainfall` may be any callable with the
-signature `rainfall(x_m, t_min) -> rates_m_per_min`; both solvers evaluate it
-during time stepping.
+signature `rainfall(x_m, t_min) -> rates_m_per_min`; all solvers evaluate it
+during time stepping. A 2-D case may instead set `Scenario.rainfall_2d` with
+`rainfall_2d(x_m, y_m, t_min) -> rates_m_per_min`.
 
 ### Reporting saved flood outcomes
 
@@ -174,8 +194,10 @@ python src/rivers/reporting/generate_flood_report.py \
 For reviewed reach geometry, replace the uniform threshold with
 `--geometry PATH`, where the CSV contains `station_m` and
 `bankfull_depth_m`. The reporter writes both HTML and a versioned
-`.outcomes.json` artifact. See `docs/reporting_contract.md` for the stable
-model-to-report boundary and interpretation limits.
+`.outcomes.json` artifact. For a 2-D run it auto-discovers the full field,
+displays a plan-view depth map, and reports threshold-exceedance area. See
+`docs/reporting_contract.md` for the stable model-to-report boundary and
+interpretation limits.
 
 ### Ingesting real river data
 
@@ -255,12 +277,13 @@ real_world_rivers/                             # example profiles and Columbia R
 
 ## Solver capabilities at a glance
 
-| Solver name | File | Left inflow | Per-cell geometry | Two-field (h+q) | Grid |
+| Solver name | File | Left inflow | Spatial geometry | Momentum | Grid |
 |---|---|---|---|---|---|
 | `kinematic_wave` | `linear_advection.py` | Yes | Yes | No | Profile stations |
 | `saint_venant` | `saint_venant_1d.py` | Yes (callable or const) | Yes | Yes | Profile stations |
+| `saint_venant_2d` | `saint_venant_2d.py` | Yes (callable or const) | Yes, per 2-D cell | x and y | Profile × cross-channel cells |
 
-Both solvers run on the profile's own cell stations and widths, honouring
+All solvers run on the profile's longitudinal stations and widths, honouring
 spatially varying slope, Manning's $n$, initial depth, and rainfall.
 
 ---

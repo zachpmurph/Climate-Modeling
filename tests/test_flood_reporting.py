@@ -6,8 +6,10 @@ import numpy as np
 import pytest
 
 from rivers.reporting.generate_flood_report import (
+    FieldSeries2D,
     TimeSeries,
     calculate_outcomes,
+    calculate_outcomes_2d,
     generate_report,
     load_time_series,
 )
@@ -140,3 +142,39 @@ def test_reporting_cli_runs_from_repository_root(tmp_path):
     assert completed.returncode == 0, completed.stderr
     assert report_path.exists()
     assert report_path.with_suffix(".outcomes.json").exists()
+
+
+def test_2d_outcomes_measure_area_and_report_plan_view(tmp_path):
+    fields = tmp_path / "example_fields.npz"
+    depth = np.array([
+        [[0.0, 0.0], [0.0, 0.0]],
+        [[0.0, 0.6], [0.8, 0.0]],
+    ])
+    np.savez_compressed(
+        fields,
+        x_m=[0.0, 10.0],
+        y_m=[1.0, 3.0],
+        dx_m=[10.0, 10.0],
+        dy_m=[2.0, 2.0],
+        times_min=[0.0, 1.0],
+        depth_m=depth,
+    )
+    timeseries = tmp_path / "example_timeseries.csv"
+    timeseries.write_text("t_min,0,10\n0,0,0\n1,0.3,0.4\n", encoding="utf-8")
+    summary = tmp_path / "example_summary.json"
+    summary.write_text(json.dumps({
+        "dimension": 2,
+        "fields_path": str(fields),
+        "mass_balance_error": 0.0,
+    }), encoding="utf-8")
+
+    report_path, outcomes_path = generate_report(
+        timeseries,
+        summary_path=summary,
+        depth_threshold_m=0.5,
+    )
+    outcomes = json.loads(outcomes_path.read_text(encoding="utf-8"))
+    assert outcomes["dimension"] == 2
+    assert outcomes["metrics"]["max_exceedance_area_m2"] == pytest.approx(40.0)
+    assert outcomes["metrics"]["peak_x_m"] == 10.0
+    assert 'id="depth-map"' in report_path.read_text(encoding="utf-8")

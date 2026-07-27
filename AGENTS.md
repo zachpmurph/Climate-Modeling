@@ -4,10 +4,10 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 
 ## What this repo is
 
-A growing collection of climate-related numerical models. Currently the only model
-under development is a 1D flood model (kinematic wave overland flow), living in
-`src/general/solvers/linear_advection.py`. See [README.md](README.md) for the physics, the
-governing equation, and a stage-by-stage development history.
+A growing collection of climate-related numerical models. Current flood solvers
+include a 1-D kinematic wave, 1-D Saint-Venant, and 2-D Saint-Venant model under
+`src/general/solvers/`. See [README.md](README.md) for the physics, governing
+equations, and stage-by-stage development history.
 
 Solvers now live under `src/general/solvers/` and share a common contract defined in
 `src/general/solvers/contract.py`. A unified harness in `src/rivers/simulations/`
@@ -46,6 +46,13 @@ python src/rivers/simulations/run_simulation.py real_world_rivers/tools/example_
     --solver kinematic_wave --t-final 10 --left-inflow 0.0006
 ```
 
+For a rectangular 2-D extrusion of the same profile:
+
+```
+python src/rivers/simulations/run_simulation.py real_world_rivers/tools/example_river_profile.csv \
+    --solver saint_venant_2d --width 100 --cross-cells 20 --t-final 10
+```
+
 `linear_advection.py` can also be run standalone on a profile (or with no argument
 for a built-in demo):
 
@@ -79,7 +86,7 @@ only in commit messages.
 Each solver in `src/general/solvers/` exposes a module-level `SOLVER` singleton that implements the `Solver` protocol from `src/general/solvers/contract.py`. The protocol requires:
 - `name: str` — registry key
 - `supports: frozenset[str]` — which `Scenario` knobs this solver honours
-- `run(domain: Domain, scenario: Scenario) -> SimulationResult`
+- `run(domain: Domain | Domain2D, scenario: Scenario) -> SimulationResult`
 
 Each solver file also keeps a plain `run_model(...)` function used by its tests and
 `__main__`. For `linear_advection.py` this is the profile-based
@@ -87,11 +94,18 @@ Each solver file also keeps a plain `run_model(...)` function used by its tests 
 
 `src/rivers/simulations/registry.py` maps solver names to instances. `src/rivers/simulations/run_simulation.py` is the unified CLI entry point.
 
-Both registered solvers run on the supplied `Domain` grid and must honor its
-per-cell `dx_m`, `slope`, and `manning_n`. `scenario_from_profile(...)` transfers
+All registered solvers run on the supplied grid and must honor its spatial cell
+widths, slopes, and `manning_n`. `scenario_from_profile(...)` transfers
 the optional profile initial depth, rainfall rates, and labels into `Scenario`.
 `Scenario.rainfall` is evaluated as `rainfall(x_m, t_min)` during time stepping;
 do not reduce it to a single spatial or temporal sample.
+
+`saint_venant_2d` requires `Domain2D`; the CLI constructs one by extruding the
+longitudinal profile across `--width`. Programmatic cases may supply full
+`slope_x`, `slope_y`, and `manning_n` fields. `Scenario.rainfall` is broadcast
+across y, while `Scenario.rainfall_2d(x_m, y_m, t_min)` can provide lateral
+variation. The harness saves full 2-D fields to `<run>_fields.npz` and a
+cross-channel-mean CSV for compatibility.
 
 ## Model conventions
 

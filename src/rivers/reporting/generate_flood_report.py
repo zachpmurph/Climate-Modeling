@@ -28,6 +28,16 @@ class TimeSeries:
     depth_m: np.ndarray
 
 
+@dataclass(frozen=True)
+class FieldSeries2D:
+    x_m: np.ndarray
+    y_m: np.ndarray
+    dx_m: np.ndarray
+    dy_m: np.ndarray
+    times_min: np.ndarray
+    depth_m: np.ndarray
+
+
 def _finite_array(values, name):
     array = np.asarray(values, dtype=float)
     if not np.all(np.isfinite(array)):
@@ -71,6 +81,31 @@ def load_time_series(path):
         raise ValueError("Time-series depth shape does not match its coordinates")
 
     return TimeSeries(stations_m=stations, times_min=times, depth_m=depth)
+
+
+def load_field_series_2d(path):
+    """Load and validate a full 2-D field artifact written by the harness."""
+    with np.load(path) as data:
+        required = {"x_m", "y_m", "dx_m", "dy_m", "times_min", "depth_m"}
+        missing = required.difference(data.files)
+        if missing:
+            raise ValueError(f"2-D field artifact is missing: {sorted(missing)}")
+        series = FieldSeries2D(
+            x_m=_finite_array(data["x_m"], "x coordinates"),
+            y_m=_finite_array(data["y_m"], "y coordinates"),
+            dx_m=_finite_array(data["dx_m"], "x cell widths"),
+            dy_m=_finite_array(data["dy_m"], "y cell widths"),
+            times_min=_finite_array(data["times_min"], "times"),
+            depth_m=_finite_array(data["depth_m"], "depth"),
+        )
+    expected = (len(series.times_min), len(series.x_m), len(series.y_m))
+    if series.depth_m.shape != expected:
+        raise ValueError(f"2-D depth field must have shape {expected}")
+    if np.any(series.depth_m < 0) or np.any(series.dx_m <= 0) or np.any(series.dy_m <= 0):
+        raise ValueError("2-D depths must be non-negative and cell widths positive")
+    if np.any(np.diff(series.x_m) <= 0) or np.any(np.diff(series.y_m) <= 0):
+        raise ValueError("2-D coordinates must be strictly increasing")
+    return series
 
 
 def load_summary(path):
@@ -207,6 +242,7 @@ def calculate_outcomes(series, summary=None, threshold_m=None, threshold_source=
             "mass_inflow",
             "mass_source",
             "mass_outflow",
+            "mass_correction",
             "mass_balance_error",
         )
     }
@@ -215,6 +251,64 @@ def calculate_outcomes(series, summary=None, threshold_m=None, threshold_source=
 
     return {
         "schema_version": REPORT_SCHEMA_VERSION,
+        "metrics": metrics,
+        "mass_balance": mass_balance,
+        "warnings": warnings,
+    }
+
+
+def calculate_outcomes_2d(series, summary=None, threshold_m=None, threshold_source=None):
+    """Calculate depth and inundated-area outcomes from a full 2-D field."""
+    summary = summary or {}
+    peak_index = np.unravel_index(int(np.argmax(series.depth_m)), series.depth_m.shape)
+    time_i, x_i, y_i = peak_index
+    cell_area = series.dx_m[:, None] * series.dy_m[None, :]
+    depth_change = series.depth_m - series.depth_m[0]
+    metrics = {
+        "max_depth_m": float(series.depth_m[peak_index]),
+        "peak_time_min": float(series.times_min[time_i]),
+        "peak_x_m": float(series.x_m[x_i]),
+        "peak_y_m": float(series.y_m[y_i]),
+        "max_depth_change_m": float(np.max(depth_change)),
+        "duration_min": float(series.times_min[-1] - series.times_min[0]),
+        "domain_area_m2": float(np.sum(cell_area)),
+        "grid_shape": [len(series.x_m), len(series.y_m)],
+        "snapshot_count": int(len(series.times_min)),
+    }
+    warnings = ["Screening output only: inundation outcomes depend on input terrain and boundary quality."]
+
+    threshold = None if threshold_m is None else _finite_array(threshold_m, "threshold")
+    if threshold is not None:
+        if threshold.ndim == 0:
+            threshold = np.full((len(series.x_m), len(series.y_m)), float(threshold))
+        elif threshold.shape == (len(series.x_m),):
+            threshold = np.broadcast_to(threshold[:, None], cell_area.shape)
+        if threshold.shape != cell_area.shape or np.any(threshold < 0):
+            raise ValueError("2-D threshold must be scalar, longitudinal, or match the grid")
+        exceedance = series.depth_m - threshold[None, :, :]
+        exceeded = exceedance > 0
+        affected_area = np.sum(exceeded * cell_area[None, :, :], axis=(1, 2))
+        max_i = int(np.argmax(affected_area))
+        first = np.flatnonzero(affected_area > 0)
+        metrics.update({
+            "threshold": {"source": threshold_source or "uniform_depth_threshold"},
+            "max_exceedance_depth_m": float(max(0.0, np.max(exceedance))),
+            "max_exceedance_area_m2": float(affected_area[max_i]),
+            "max_exceedance_fraction": float(affected_area[max_i] / np.sum(cell_area)),
+            "max_exceedance_time_min": float(series.times_min[max_i]),
+            "first_exceedance_time_min": float(series.times_min[first[0]]) if len(first) else None,
+        })
+    else:
+        metrics["threshold"] = None
+        warnings.append("No depth threshold was supplied; threshold-exceedance area was not calculated.")
+
+    mass_balance = {
+        key: _optional_number(summary, key)
+        for key in ("mass_inflow", "mass_source", "mass_outflow", "mass_correction", "mass_balance_error")
+    }
+    return {
+        "schema_version": REPORT_SCHEMA_VERSION,
+        "dimension": 2,
         "metrics": metrics,
         "mass_balance": mass_balance,
         "warnings": warnings,
@@ -264,6 +358,7 @@ def render_report(series, outcome, summary, title):
         "mass_inflow",
         "mass_source",
         "mass_outflow",
+        "mass_correction",
         "mass_balance_error",
     }
     run_rows = "".join(
@@ -452,6 +547,60 @@ slider.addEventListener("input", update);
 """
 
 
+def render_report_2d(series, outcome, summary, title):
+    """Render an interactive plan-view depth heatmap."""
+    metrics = outcome["metrics"]
+    payload = {
+        "x": series.x_m.tolist(),
+        "y": series.y_m.tolist(),
+        "times": series.times_min.tolist(),
+        "depth": series.depth_m.tolist(),
+        "maxDepth": metrics["max_depth_m"],
+    }
+    warnings = "".join(f"<li>{html.escape(item)}</li>" for item in outcome["warnings"])
+    area = metrics.get("max_exceedance_area_m2")
+    return f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{html.escape(title)}</title>
+<style>
+:root{{color-scheme:light dark;--bg:#f5f7f8;--panel:#fff;--text:#13212a;--muted:#596a73;--border:#d8e0e4}}
+@media(prefers-color-scheme:dark){{:root{{--bg:#10191e;--panel:#17242b;--text:#eef5f7;--muted:#a9bbc4;--border:#34464f}}}}
+*{{box-sizing:border-box}} body{{margin:0;background:var(--bg);color:var(--text);font:15px system-ui,sans-serif}}
+main{{max-width:1000px;margin:auto;padding:24px}} .cards{{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}}
+.card,.plot{{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px}} .value{{font-size:1.5rem}}
+.plot{{margin-top:16px}} canvas{{width:100%;height:auto;image-rendering:pixelated}} label{{display:flex;gap:12px;align-items:center;margin-top:12px}}
+input{{flex:1}} .muted{{color:var(--muted)}} li{{margin:.4rem 0}}
+</style></head><body><main>
+<h1>{html.escape(title)}</h1>
+<div class="cards">
+<div class="card"><div class="muted">Peak depth</div><div class="value">{metrics["max_depth_m"]:.3f} m</div></div>
+<div class="card"><div class="muted">Peak location</div><div class="value">{metrics["peak_x_m"]:.1f}, {metrics["peak_y_m"]:.1f} m</div></div>
+<div class="card"><div class="muted">Maximum affected area</div><div class="value">{("Not assessed" if area is None else f"{area:.1f} m²")}</div></div>
+</div>
+<section class="plot"><canvas id="depth-map" width="900" height="460" role="img" aria-label="Plan-view water-depth map"></canvas>
+<label for="time-slider"><span>Time: <strong id="time-value"></strong></span>
+<input id="time-slider" type="range" min="0" max="{len(series.times_min)-1}" value="0" step="1"></label></section>
+<h2>Use limitations</h2><ul>{warnings}</ul>
+</main><script>
+const report={_json_for_script(payload)};
+const canvas=document.getElementById("depth-map"),ctx=canvas.getContext("2d");
+const slider=document.getElementById("time-slider"),timeValue=document.getElementById("time-value");
+function color(v){{const z=Math.max(0,Math.min(1,v/Math.max(report.maxDepth,1e-12)));
+const r=Math.round(238-220*z),g=Math.round(246-105*z),b=Math.round(250-45*z);return `rgb(${{r}},${{g}},${{b}})`}}
+function draw(){{const k=Number(slider.value),nx=report.x.length,ny=report.y.length;
+ctx.clearRect(0,0,canvas.width,canvas.height);const left=68,top=20,w=canvas.width-left-20,h=canvas.height-top-52;
+for(let i=0;i<nx;i++)for(let j=0;j<ny;j++){{ctx.fillStyle=color(report.depth[k][i][j]);
+ctx.fillRect(left+i*w/nx,top+(ny-1-j)*h/ny,Math.ceil(w/nx),Math.ceil(h/ny));}}
+ctx.strokeStyle=getComputedStyle(document.body).color;ctx.strokeRect(left,top,w,h);ctx.fillStyle=getComputedStyle(document.body).color;
+ctx.font="14px system-ui";ctx.fillText("x = "+report.x[0].toFixed(1)+" m",left,canvas.height-12);
+ctx.textAlign="right";ctx.fillText("x = "+report.x[nx-1].toFixed(1)+" m",left+w,canvas.height-12);ctx.textAlign="start";
+ctx.save();ctx.translate(18,top+h/2);ctx.rotate(-Math.PI/2);ctx.textAlign="center";ctx.fillText("Cross-channel y",0,0);ctx.restore();
+timeValue.textContent=report.times[k].toFixed(2)+" min";}}
+slider.addEventListener("input",draw);draw();
+</script></body></html>"""
+
+
 def _default_summary_path(timeseries_path):
     stem = timeseries_path.stem
     if stem.endswith("_timeseries"):
@@ -465,6 +614,7 @@ def generate_report(
     timeseries_path,
     *,
     summary_path=None,
+    fields_path=None,
     geometry_path=None,
     depth_threshold_m=None,
     output_path=None,
@@ -472,14 +622,21 @@ def generate_report(
     title=None,
 ):
     timeseries_path = Path(timeseries_path)
-    series = load_time_series(timeseries_path)
     summary_path = Path(summary_path) if summary_path else _default_summary_path(timeseries_path)
     summary = load_summary(summary_path)
+    if fields_path is None and summary.get("dimension") == 2 and summary.get("fields_path"):
+        fields_path = Path(summary["fields_path"])
+        if not fields_path.exists() and summary_path is not None:
+            fields_path = summary_path.parent / fields_path.name
+    fields_path = Path(fields_path) if fields_path else None
+    is_2d = fields_path is not None
+    series = load_field_series_2d(fields_path) if is_2d else load_time_series(timeseries_path)
+    report_stations = series.x_m if is_2d else series.stations_m
 
     if geometry_path is not None and depth_threshold_m is not None:
         raise ValueError("Choose bankfull geometry or a uniform depth threshold, not both")
     if geometry_path is not None:
-        threshold = load_bankfull_depths(geometry_path, series.stations_m)
+        threshold = load_bankfull_depths(geometry_path, report_stations)
         threshold_source = "bankfull_depth_profile"
     elif depth_threshold_m is not None:
         if not math.isfinite(depth_threshold_m) or depth_threshold_m < 0:
@@ -490,9 +647,14 @@ def generate_report(
         threshold = None
         threshold_source = None
 
-    outcome = calculate_outcomes(series, summary, threshold, threshold_source)
+    outcome = (
+        calculate_outcomes_2d(series, summary, threshold, threshold_source)
+        if is_2d
+        else calculate_outcomes(series, summary, threshold, threshold_source)
+    )
     outcome["sources"] = {
         "timeseries": str(timeseries_path),
+        "fields": None if fields_path is None else str(fields_path),
         "summary": None if summary_path is None else str(summary_path),
         "geometry": None if geometry_path is None else str(geometry_path),
     }
@@ -507,7 +669,11 @@ def generate_report(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     outcome_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(
-        render_report(series, outcome, summary, report_title),
+        (
+            render_report_2d(series, outcome, summary, report_title)
+            if is_2d
+            else render_report(series, outcome, summary, report_title)
+        ),
         encoding="utf-8",
     )
     outcome_path.write_text(
@@ -523,6 +689,7 @@ def parse_args(argv=None):
     )
     parser.add_argument("timeseries", type=Path, help="Simulation depth time-series CSV")
     parser.add_argument("--summary", type=Path, help="Run summary JSON; auto-detected when adjacent")
+    parser.add_argument("--fields", type=Path, help="Full 2-D NPZ field artifact; auto-detected from summary")
     threshold = parser.add_mutually_exclusive_group()
     threshold.add_argument(
         "--geometry",
@@ -546,6 +713,7 @@ def main(argv=None):
         report_path, outcome_path = generate_report(
             args.timeseries,
             summary_path=args.summary,
+            fields_path=args.fields,
             geometry_path=args.geometry,
             depth_threshold_m=args.depth_threshold,
             output_path=args.output,
