@@ -45,7 +45,8 @@ transients, steep wetting fronts, and backwater effects.
 **Numerical scheme:** Rusanov (local Lax-Friedrichs) face fluxes over a conservative
 finite-volume stencil, ghost-cell boundaries, explicit forward Euler time stepping,
 operator-split Manning friction (semi-implicit in a single-step sense), adaptive CFL
-time step.
+time step. The solver runs on the supplied profile grid and applies bed slope,
+Manning roughness, and rainfall independently in every cell.
 
 **Units:** meters and minutes throughout (Manning's $n$ is converted from the
 conventional s/m$^{1/3}$ units before use).
@@ -74,6 +75,7 @@ The rationale for each transition is given alongside the change.
 | **4b — Solver-agnostic harness** | `69b519d` | `contract.py` defines `Domain`, `Scenario`, `SimulationResult`, `Solver` protocol, and `UnsupportedScenario`. `profile.py` houses `RiverProfile` loaders. Each solver exposes a `SOLVER` singleton; back-compat `run_model()` wrappers preserved. `registry.py` maps names to solvers; `run_simulation.py` is the unified CLI. | Adding a new solver previously required a new runner script and bespoke output handling. The contract layer means any solver can be swapped in by name, scenario knobs are validated up-front, and output is always a canonical `SimulationResult` with a mass-balance error in the JSON summary. |
 | **4c — Kinematic wave consolidated** | `a282b4f` `e1ec579` | Folded the real-river kinematic wave capability (per-cell slope and Manning's $n$, upstream inflow, rainfall) into `linear_advection.py` and removed the duplicate `river_kinematic_wave.py` and its pre-harness runner. `linear_advection.py` now runs standalone on a profile (or a built-in demo) and is the `kinematic_wave` solver in the harness. `--solver river_kinematic_wave` is replaced by `--solver kinematic_wave`. | The overland-flow file and the real-river file had diverged into near-duplicate kinematic wave solvers. Consolidating to one implementation removes the redundancy and the need for a separate file to run a real-profile simulation. |
 | **4d — Model-neutral flood reporting** | `6116048` | Added a reporting consumer for saved time-series CSV and summary JSON artifacts. It produces a self-contained interactive HTML report and versioned outcomes JSON with peak depth, timing, reach-threshold exceedance, and mass-balance diagnostics. | Reporting should evolve independently from numerical model development. Consuming saved artifacts prevents visualization code from coupling to solver internals and makes the interpretation boundary explicit. |
+| **4e — Profile-grid dynamic wave and forcing** | Current branch | Saint-Venant now runs on the supplied nonuniform profile grid with per-cell bed slope and Manning roughness. Both solvers accept spatially and temporally varying rainfall callables. Profile initial depth, rainfall, and labels are transferred into `Scenario`. | Reconstructing a uniform grid and using module-level coefficients discarded real-reach variation. Sampling rainfall only once also prevented event functions from changing through time. |
 
 ---
 
@@ -149,6 +151,15 @@ python src/rivers/simulations/run_simulation.py \
 Each solver declares which `Scenario` knobs it supports. Passing a knob a solver
 doesn't support raises `UnsupportedScenario` immediately rather than silently
 ignoring it.
+
+Optional profile fields are applied automatically: `initial_depth_m` becomes the
+scenario initial condition, `rainfall_rate_m_per_min` becomes a spatial rainfall
+function, and `label` values are retained in `Scenario.labels`. The CLI
+`--rainfall-rate` is added to any rainfall already stored in the profile.
+
+For programmatic scenarios, `Scenario.rainfall` may be any callable with the
+signature `rainfall(x_m, t_min) -> rates_m_per_min`; both solvers evaluate it
+during time stepping.
 
 ### Reporting saved flood outcomes
 
@@ -247,23 +258,17 @@ real_world_rivers/                             # example profiles and Columbia R
 | Solver name | File | Left inflow | Per-cell geometry | Two-field (h+q) | Grid |
 |---|---|---|---|---|---|
 | `kinematic_wave` | `linear_advection.py` | Yes | Yes | No | Profile stations |
-| `saint_venant` | `saint_venant_1d.py` | Yes (callable or const) | No (uniform S₀, n) | Yes | Internal L×10 |
+| `saint_venant` | `saint_venant_1d.py` | Yes (callable or const) | Yes | Yes | Profile stations |
 
-`kinematic_wave` runs on the profile's own per-cell stations, honouring spatially
-varying slope and Manning's $n$. `saint_venant` still reconstructs its own uniform
-grid at 10 cells/metre from the domain length $L$; its `SimulationResult.domain`
-reflects that internal grid so mass-balance arithmetic stays self-consistent.
+Both solvers run on the profile's own cell stations and widths, honouring
+spatially varying slope, Manning's $n$, initial depth, and rainfall.
 
 ---
 
 ## Next steps
 
-- Expose `Nx` (or `dx`) as a parameter in `saint_venant_1d.run_model` so it can
-  honour the input `Domain` grid directly, removing the L×10 internal grid (the
-  `kinematic_wave` solver already runs on the profile grid).
-- Add per-cell slope and Manning's $n$ to the Saint-Venant solver so it can also
-  run on real river profiles with spatially varying geometry.
-- Add spatial variation to the rainfall source in the overland-flow test case (the
-  $r(x, t)$ closure already supports it).
+- Add measured cross-section geometry so unit-width discharge can be converted
+  consistently to whole-channel flow.
+- Save Saint-Venant discharge histories through the unified CLI alongside depth.
 - Extend the data pipeline to additional river systems beyond the Columbia River
   Hanford reach.

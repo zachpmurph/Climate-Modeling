@@ -10,8 +10,8 @@ SRC_ROOT = Path(__file__).resolve().parents[2]
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
-from general.solvers.contract import Scenario
 from general.solvers.profile import domain_from_profile, load_profile
+from rivers.simulations.ingest_to_simulate import scenario_from_profile
 from rivers.simulations.registry import SOLVERS, dispatch
 
 
@@ -43,16 +43,12 @@ def main():
     profile = load_profile(args.profile)
     domain = domain_from_profile(profile)
 
-    rainfall_fn = None
-    if args.rainfall_rate > 0:
-        rate = args.rainfall_rate
-        rainfall_fn = lambda x, t: np.full_like(x, rate)
-
-    scenario = Scenario(
+    scenario = scenario_from_profile(
+        profile,
         t_final_min=args.t_final,
         record_interval_min=args.record_interval,
         left_inflow=args.left_inflow,
-        rainfall=rainfall_fn,
+        rainfall_rate_m_per_min=args.rainfall_rate,
         cfl=args.cfl,
     )
 

@@ -87,6 +87,12 @@ Each solver file also keeps a plain `run_model(...)` function used by its tests 
 
 `src/rivers/simulations/registry.py` maps solver names to instances. `src/rivers/simulations/run_simulation.py` is the unified CLI entry point.
 
+Both registered solvers run on the supplied `Domain` grid and must honor its
+per-cell `dx_m`, `slope`, and `manning_n`. `scenario_from_profile(...)` transfers
+the optional profile initial depth, rainfall rates, and labels into `Scenario`.
+`Scenario.rainfall` is evaluated as `rainfall(x_m, t_min)` during time stepping;
+do not reduce it to a single spatial or temporal sample.
+
 ## Model conventions
 
 - **Units:** meters and minutes throughout (not SI seconds) — keep this consistent

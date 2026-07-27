@@ -31,6 +31,7 @@ class Scenario:
     left_inflow: float | Callable[[float], float] = 0.0
     rainfall: Callable[[np.ndarray, float], np.ndarray] | None = None
     cfl: float = 0.5
+    labels: tuple[str, ...] = ()
 
 
 @dataclass
