@@ -90,14 +90,23 @@ def collect_rainfall(
         conn.executemany(
             """
             INSERT INTO rainfall_observations
-                (reach_id, marker_id, observed_at, precipitation_mm, interval_min, source_id)
-            VALUES (?, ?, ?, ?, ?, ?)
+                (reach_id, marker_id, observed_at, precipitation_mm,
+                 precipitation_original_value, precipitation_original_unit,
+                 interval_min, classification, source_id)
+            VALUES (?, ?, ?, ?, ?, 'mm', ?, 'observed', ?)
+            ON CONFLICT (reach_id, marker_id, observed_at) DO UPDATE SET
+                precipitation_mm = excluded.precipitation_mm,
+                precipitation_original_value = excluded.precipitation_original_value,
+                precipitation_original_unit = excluded.precipitation_original_unit,
+                interval_min = excluded.interval_min,
+                source_id = excluded.source_id
             """,
             [
                 (
                     reach_id,
                     marker["id"],
                     item["observed_at"],
+                    item["precipitation_mm"],
                     item["precipitation_mm"],
                     item["interval_min"],
                     source_id,

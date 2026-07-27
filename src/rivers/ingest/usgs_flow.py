@@ -1,22 +1,12 @@
 import warnings
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from .common import add_source, connect_database, get_markers, request_json
+from .common import add_source, connect_database, get_markers, redact_url, request_json
 
 
 CONTINUOUS_URL = "https://api.waterdata.usgs.gov/ogcapi/v0/collections/continuous/items"
 USGS_CITATION = "U.S. Geological Survey Water Data APIs, continuous values."
 DISCHARGE_PARAMETER = "00060"
 CFS_TO_M3_PER_MIN = 0.028316846592 * 60.0
-
-
-def _redact_api_key(url):
-    parts = urlsplit(url)
-    query = [
-        (key, "REDACTED" if key.lower() == "api_key" else value)
-        for key, value in parse_qsl(parts.query, keep_blank_values=True)
-    ]
-    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
 
 
 def discharge_to_m3_per_min(value, unit):
@@ -88,7 +78,7 @@ def fetch_usgs_flow(site_id, start, end, *, api_key=None, requester=request_json
         )
     if not observations:
         raise ValueError(f"No discharge observations returned for {monitoring_location_id}")
-    return observations, _redact_api_key(url), monitoring_location_id
+    return observations, redact_url(url), monitoring_location_id
 
 
 def collect_usgs_flow(
@@ -130,8 +120,16 @@ def collect_usgs_flow(
             """
             INSERT INTO flow_observations
                 (reach_id, marker_id, gauge_id, observed_at, discharge_m3_per_min,
-                 discharge_original_value, discharge_original_unit, source_id, notes)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 discharge_original_value, discharge_original_unit, classification,
+                 source_id, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'observed', ?, ?)
+            ON CONFLICT (reach_id, gauge_id, observed_at) DO UPDATE SET
+                marker_id = excluded.marker_id,
+                discharge_m3_per_min = excluded.discharge_m3_per_min,
+                discharge_original_value = excluded.discharge_original_value,
+                discharge_original_unit = excluded.discharge_original_unit,
+                source_id = excluded.source_id,
+                notes = excluded.notes
             """,
             [
                 (

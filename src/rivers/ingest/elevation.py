@@ -53,8 +53,13 @@ def collect_elevations(reach_id, *, db_path=None, replace=False, requester=reque
         conn.executemany(
             """
             INSERT INTO elevation_samples
-                (reach_id, marker_id, station_m, elevation_m, method, source_id)
-            VALUES (?, ?, ?, ?, ?, ?)
+                (reach_id, marker_id, station_m, elevation_m, method, classification, source_id)
+            VALUES (?, ?, ?, ?, ?, 'observed', ?)
+            ON CONFLICT (reach_id, station_m) DO UPDATE SET
+                marker_id = excluded.marker_id,
+                elevation_m = excluded.elevation_m,
+                method = excluded.method,
+                source_id = excluded.source_id
             """,
             [
                 (reach_id, marker["id"], marker["station_m"], elevation, "GLO-90 point sample", source_id)
@@ -72,8 +77,14 @@ def collect_elevations(reach_id, *, db_path=None, replace=False, requester=reque
             """
             INSERT INTO slope_samples
                 (reach_id, start_station_m, end_station_m, slope,
-                 elevation_start_m, elevation_end_m, method, source_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                 elevation_start_m, elevation_end_m, method, classification, source_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'derived', ?)
+            ON CONFLICT (reach_id, start_station_m, end_station_m) DO UPDATE SET
+                slope = excluded.slope,
+                elevation_start_m = excluded.elevation_start_m,
+                elevation_end_m = excluded.elevation_end_m,
+                method = excluded.method,
+                source_id = excluded.source_id
             """,
             [
                 (reach_id, start, end, slope, elev_start, elev_end, "DEM endpoint difference", source_id)

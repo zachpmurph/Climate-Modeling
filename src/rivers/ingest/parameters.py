@@ -17,7 +17,10 @@ def import_roughness(reach_id, path, *, db_path=None, replace=False):
         manning_n = float(row["manning_n"])
         if end <= start or manning_n <= 0:
             raise ValueError(f"Invalid roughness row {index}: require end > start and manning_n > 0")
-        values.append((start, end, manning_n, row.get("method", "reviewed input"), row.get("notes")))
+        classification = row.get("classification") or "estimated"
+        values.append(
+            (start, end, manning_n, row.get("method", "reviewed input"), classification, row.get("notes"))
+        )
 
     options = {} if db_path is None else {"db_path": db_path}
     with connect_database(**options) as conn:
@@ -34,10 +37,19 @@ def import_roughness(reach_id, path, *, db_path=None, replace=False):
         conn.executemany(
             """
             INSERT INTO roughness_samples
-                (reach_id, start_station_m, end_station_m, manning_n, method, source_id, notes)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+                (reach_id, start_station_m, end_station_m, manning_n, method, classification, source_id, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (reach_id, start_station_m, end_station_m) DO UPDATE SET
+                manning_n = excluded.manning_n,
+                method = excluded.method,
+                classification = excluded.classification,
+                source_id = excluded.source_id,
+                notes = excluded.notes
             """,
-            [(reach_id, start, end, value, method, source_id, notes) for start, end, value, method, notes in values],
+            [
+                (reach_id, start, end, value, method, classification, source_id, notes)
+                for start, end, value, method, classification, notes in values
+            ],
         )
     return {"sample_count": len(values), "source_id": source_id}
 
@@ -53,7 +65,10 @@ def import_geometry(reach_id, path, *, db_path=None, replace=False):
             raise ValueError(f"Geometry row {index} needs width_m or bankfull_depth_m")
         if (width is not None and width <= 0) or (depth is not None and depth <= 0):
             raise ValueError(f"Geometry row {index} values must be positive")
-        values.append((station, width, depth, row.get("method", "reviewed input"), row.get("notes")))
+        classification = row.get("classification") or "observed"
+        values.append(
+            (station, width, depth, row.get("method", "reviewed input"), classification, row.get("notes"))
+        )
 
     options = {} if db_path is None else {"db_path": db_path}
     with connect_database(**options) as conn:
@@ -66,15 +81,23 @@ def import_geometry(reach_id, path, *, db_path=None, replace=False):
             "reviewed channel geometry",
             url=str(Path(path).resolve()),
         )
-        for station, width, depth, method, notes in values:
+        for station, width, depth, method, classification, notes in values:
             marker = min(markers, key=lambda row: abs(row["station_m"] - station))
             conn.execute(
                 """
                 INSERT INTO channel_geometry_samples
                     (reach_id, marker_id, station_m, width_m, bankfull_depth_m,
-                     method, source_id, notes)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                     method, classification, source_id, notes)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (reach_id, station_m) DO UPDATE SET
+                    marker_id = excluded.marker_id,
+                    width_m = excluded.width_m,
+                    bankfull_depth_m = excluded.bankfull_depth_m,
+                    method = excluded.method,
+                    classification = excluded.classification,
+                    source_id = excluded.source_id,
+                    notes = excluded.notes
                 """,
-                (reach_id, marker["id"], station, width, depth, method, source_id, notes),
+                (reach_id, marker["id"], station, width, depth, method, classification, source_id, notes),
             )
     return {"sample_count": len(values), "source_id": source_id}

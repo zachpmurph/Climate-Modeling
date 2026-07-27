@@ -1,5 +1,18 @@
 PRAGMA foreign_keys = ON;
 
+-- Schema version marker. When this file changes in a way that alters existing
+-- tables, delete and re-initialize the (reproducible, gitignored) database:
+--   rm data/real_world_rivers/river_inputs.sqlite
+--   python -m rivers.ingest.collect_river_data init
+-- initialize_database() uses CREATE TABLE IF NOT EXISTS, so column/constraint
+-- changes do NOT migrate an existing .sqlite file in place.
+--
+-- Provenance classification convention (the `classification` column):
+--   observed  -- a measured / provider-reported value for this reach
+--   derived   -- computed from other stored values (e.g. slope from elevations)
+--   estimated -- an expert / literature value not measured for this reach
+--   fallback  -- a default substituted because the real value was missing
+
 CREATE TABLE IF NOT EXISTS data_sources (
     id INTEGER PRIMARY KEY,
     name TEXT NOT NULL,
@@ -7,7 +20,11 @@ CREATE TABLE IF NOT EXISTS data_sources (
     url TEXT,
     citation TEXT,
     accessed_at TEXT,
-    notes TEXT
+    notes TEXT,
+    -- Natural key: identical provider metadata reuses one source row, so
+    -- re-running ingestion does not mint a fresh source_id every time and the
+    -- observation-level UNIQUE constraints below stay effective across runs.
+    UNIQUE (name, source_type, url, citation)
 );
 
 CREATE TABLE IF NOT EXISTS rivers (
@@ -52,9 +69,11 @@ CREATE TABLE IF NOT EXISTS elevation_samples (
     station_m REAL NOT NULL,
     elevation_m REAL NOT NULL,
     method TEXT,
+    classification TEXT NOT NULL DEFAULT 'observed',
     source_id INTEGER REFERENCES data_sources(id),
     notes TEXT,
-    UNIQUE (reach_id, station_m, source_id)
+    -- Logical identity is the reach + station, independent of which run fetched it.
+    UNIQUE (reach_id, station_m)
 );
 
 CREATE TABLE IF NOT EXISTS slope_samples (
@@ -66,8 +85,10 @@ CREATE TABLE IF NOT EXISTS slope_samples (
     elevation_start_m REAL,
     elevation_end_m REAL,
     method TEXT,
+    classification TEXT NOT NULL DEFAULT 'derived',
     source_id INTEGER REFERENCES data_sources(id),
-    notes TEXT
+    notes TEXT,
+    UNIQUE (reach_id, start_station_m, end_station_m)
 );
 
 CREATE TABLE IF NOT EXISTS roughness_samples (
@@ -77,8 +98,10 @@ CREATE TABLE IF NOT EXISTS roughness_samples (
     end_station_m REAL,
     manning_n REAL NOT NULL,
     method TEXT,
+    classification TEXT NOT NULL DEFAULT 'estimated',
     source_id INTEGER REFERENCES data_sources(id),
-    notes TEXT
+    notes TEXT,
+    UNIQUE (reach_id, start_station_m, end_station_m)
 );
 
 CREATE TABLE IF NOT EXISTS channel_geometry_samples (
@@ -89,10 +112,12 @@ CREATE TABLE IF NOT EXISTS channel_geometry_samples (
     width_m REAL,
     bankfull_depth_m REAL,
     method TEXT,
+    classification TEXT NOT NULL DEFAULT 'observed',
     source_id INTEGER REFERENCES data_sources(id),
     notes TEXT,
     CHECK (width_m IS NULL OR width_m > 0),
-    CHECK (bankfull_depth_m IS NULL OR bankfull_depth_m > 0)
+    CHECK (bankfull_depth_m IS NULL OR bankfull_depth_m > 0),
+    UNIQUE (reach_id, station_m)
 );
 
 CREATE TABLE IF NOT EXISTS flow_observations (
@@ -105,8 +130,12 @@ CREATE TABLE IF NOT EXISTS flow_observations (
     discharge_original_value REAL,
     discharge_original_unit TEXT,
     stage_m REAL,
+    method TEXT,
+    classification TEXT NOT NULL DEFAULT 'observed',
     source_id INTEGER REFERENCES data_sources(id),
-    notes TEXT
+    notes TEXT,
+    -- One logical discharge reading per gauge per timestamp on a reach.
+    UNIQUE (reach_id, gauge_id, observed_at)
 );
 
 CREATE TABLE IF NOT EXISTS rainfall_observations (
@@ -115,12 +144,17 @@ CREATE TABLE IF NOT EXISTS rainfall_observations (
     marker_id INTEGER REFERENCES reach_markers(id) ON DELETE SET NULL,
     observed_at TEXT NOT NULL,
     precipitation_mm REAL NOT NULL,
+    precipitation_original_value REAL,
+    precipitation_original_unit TEXT,
     interval_min REAL NOT NULL,
+    method TEXT,
+    classification TEXT NOT NULL DEFAULT 'observed',
     source_id INTEGER REFERENCES data_sources(id),
     notes TEXT,
     CHECK (precipitation_mm >= 0),
     CHECK (interval_min > 0),
-    UNIQUE (reach_id, marker_id, observed_at, source_id)
+    -- One logical precipitation reading per marker per timestamp on a reach.
+    UNIQUE (reach_id, marker_id, observed_at)
 );
 
 CREATE TABLE IF NOT EXISTS model_runs (
