@@ -4,10 +4,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo is
 
-A growing collection of climate-related numerical models. Currently the only model
-under development is a 1D flood model (kinematic wave overland flow), living in
-`src/general/solvers/linear_advection.py`. See [README.md](README.md) for the physics, the
-governing equation, and a stage-by-stage development history.
+A growing collection of climate-related numerical models. Current flood solvers
+include a 1-D kinematic wave, 1-D Saint-Venant, and verified 2-D Saint-Venant
+model under `src/general/solvers/`. See [README.md](README.md) for the physics,
+governing equations, and stage-by-stage development history.
 
 Solvers now live under `src/general/solvers/` and share a common contract defined in
 `src/general/solvers/contract.py`. A unified harness in `src/rivers/simulations/`
@@ -15,8 +15,8 @@ dispatches to any registered solver by name.
 
 ## Commands
 
-There is no build system or linter configured. Dependencies are `numpy`, `matplotlib`,
-and `pytest` (no requirements file exists — install them directly if missing).
+There is no build system or linter configured. Dependencies are pinned in
+`requirements.txt`.
 
 Run the solver:
 
@@ -37,6 +37,7 @@ Run the tests:
 ```
 python -m pytest tests/
 python -m pytest tests/test_linear_advection.py::test_upstream_inflow_mass_balance  # single test
+python src/general/verification/verify_saint_venant_2d.py
 ```
 
 Unified CLI (solver-agnostic harness):
@@ -79,13 +80,19 @@ only in commit messages.
 Each solver in `src/general/solvers/` exposes a module-level `SOLVER` singleton that implements the `Solver` protocol from `src/general/solvers/contract.py`. The protocol requires:
 - `name: str` — registry key
 - `supports: frozenset[str]` — which `Scenario` knobs this solver honours
-- `run(domain: Domain, scenario: Scenario) -> SimulationResult`
+- `run(domain: Domain | Domain2D, scenario: Scenario) -> SimulationResult`
 
 Each solver file also keeps a plain `run_model(...)` function used by its tests and
 `__main__`. For `linear_advection.py` this is the profile-based
 `run_model(profile, t_final_min, left_inflow_flux, ...)`.
 
 `src/rivers/simulations/registry.py` maps solver names to instances. `src/rivers/simulations/run_simulation.py` is the unified CLI entry point.
+
+The 2-D solver uses explicit `Domain2D.bed_elevation_m`, well-balanced
+hydrostatic reconstruction, and a conservative draining limiter. Numerical-core
+changes must preserve the gates in
+`tests/test_saint_venant_2d_verification.py` and the reference matrix in
+`docs/validation/saint_venant_2d_results.json`.
 
 ## Model conventions
 

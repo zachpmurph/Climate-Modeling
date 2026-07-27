@@ -50,7 +50,9 @@ def test_mass_conservation(monkeypatch):
         + result["mass_source"]
         + result["mass_floor_correction"]
     )
-    assert delta == pytest.approx(expected, rel=1e-6, abs=1e-9)
+    scale = max(abs(storage_initial), abs(storage_final), abs(expected), 1.0)
+    assert abs(delta - expected) / scale < 1e-12
+    assert result["mass_floor_correction"] < 1e-14
     assert result["mass_inflow"] > 0.0
     assert result["mass_source"] > 0.0
 
@@ -69,7 +71,7 @@ def test_lake_at_rest_stays_at_rest(monkeypatch):
         left_inflow=0.0,
     )
 
-    assert np.allclose(result["h_final"], 0.5, atol=1e-12)
+    assert np.allclose(result["h_final"], 0.5, rtol=0.0, atol=1e-12)
     assert np.max(np.abs(result["hu_final"])) == pytest.approx(0.0, abs=1e-12)
     assert np.max(np.abs(result["hv_final"])) == pytest.approx(0.0, abs=1e-12)
 
@@ -91,3 +93,93 @@ def test_problem_uniform_in_y_stays_uniform_in_y(monkeypatch):
     spread = np.max(np.ptp(h_final, axis=1))  # max variation across y over all x
     assert spread == pytest.approx(0.0, abs=1e-10)
     assert np.max(np.abs(result["hv_final"])) == pytest.approx(0.0, abs=1e-10)
+
+
+def test_rainfall_on_partially_wet_domain_is_positive_and_conservative():
+    nx, ny = 20, 10
+    shape = (nx, ny)
+    depth = np.zeros(shape)
+    depth[: nx // 2, :] = 0.02
+    zero = np.zeros(shape)
+    rate = 0.0004
+    result = sv2.run_model(
+        L=2.0,
+        W=1.0,
+        T_final=0.1,
+        record_interval=0.05,
+        h_init=depth,
+        hu_init=zero,
+        hv_init=zero,
+        rainfall=lambda x, y, time: np.full(shape, rate),
+        slope_x=zero,
+        slope_y=zero,
+        manning_n=zero,
+        bed_elevation_m=zero,
+        boundary_x="periodic",
+        boundary_y="periodic",
+    )
+
+    dx = result["dx_m"][:, None]
+    dy = result["dy_m"][None, :]
+    initial_volume = float(np.sum(depth * dx * dy))
+    final_volume = float(np.sum(result["h_final"] * dx * dy))
+    expected_rain = rate * 2.0 * 1.0 * 0.1
+    assert np.min(result["h_history"]) >= 0.0
+    assert final_volume - initial_volume == pytest.approx(expected_rain, rel=1e-12, abs=1e-14)
+    assert result["mass_source"] == pytest.approx(expected_rain, rel=1e-12, abs=1e-14)
+    assert result["mass_floor_correction"] < 1e-14
+
+
+def test_nonfinite_dynamics_fail_with_diagnostic():
+    shape = (10, 10)
+    with np.errstate(over="ignore", invalid="ignore"):
+        with pytest.raises(FloatingPointError, match="Invalid time step|non-finite"):
+            sv2.run_model(
+                L=1.0,
+                W=1.0,
+                T_final=0.01,
+                h_init=np.ones(shape),
+                hu_init=np.full(shape, 1e308),
+                hv_init=np.full(shape, 1e308),
+                rainfall=lambda x, y, time: np.zeros(shape),
+                slope_x=np.zeros(shape),
+                slope_y=np.zeros(shape),
+                manning_n=np.zeros(shape),
+                bed_elevation_m=np.zeros(shape),
+            )
+
+
+def test_periodic_wet_dry_front_crosses_domain_edge_conservatively():
+    nx, ny = 24, 12
+    length, width = 2.4, 1.2
+    dx = np.full(nx, length / nx)
+    dy = np.full(ny, width / ny)
+    x = (np.arange(nx) + 0.5) * dx[0]
+    y = (np.arange(ny) + 0.5) * dy[0]
+    depth = np.zeros((nx, ny))
+    depth[[0, 1, -2, -1], :] = 0.1
+    zero = np.zeros_like(depth)
+    result = sv2.run_model(
+        T_final=0.005,
+        record_interval=0.005,
+        h_init=depth,
+        hu_init=zero,
+        hv_init=zero,
+        x_m=x,
+        y_m=y,
+        dx_m=dx,
+        dy_m=dy,
+        slope_x=zero,
+        slope_y=zero,
+        manning_n=zero,
+        bed_elevation_m=zero,
+        rainfall=lambda x, y, time: zero,
+        boundary_x="periodic",
+        boundary_y="periodic",
+    )
+    cell_area = dx[:, None] * dy[None, :]
+    initial_volume = float(np.sum(depth * cell_area))
+    final_volume = float(np.sum(result["h_final"] * cell_area))
+    assert np.min(result["h_history"]) >= 0.0
+    assert abs(final_volume - initial_volume) / initial_volume < 1e-12
+    assert result["mass_floor_correction"] < 1e-14

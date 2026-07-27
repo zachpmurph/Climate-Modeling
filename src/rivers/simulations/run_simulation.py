@@ -100,10 +100,13 @@ def main(argv=None):
             y_m=result.domain.y_m,
             dx_m=result.domain.dx_m,
             dy_m=result.domain.dy_m,
+            bed_elevation_m=result.extra["bed_elevation_m"],
             times_min=result.times,
             depth_m=result.depth_history,
             depth_initial_m=result.depth_initial,
             depth_final_m=result.depth_final,
+            discharge_x_m2_per_min=result.extra["discharge_x_history"],
+            discharge_y_m2_per_min=result.extra["discharge_y_history"],
             discharge_x_final=result.extra["discharge_x_final"],
             discharge_y_final=result.extra["discharge_y_final"],
         )

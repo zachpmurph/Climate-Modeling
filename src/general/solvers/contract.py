@@ -31,6 +31,7 @@ class Domain2D:
     slope_x: np.ndarray      # x bed slope, shape (nx, ny)
     slope_y: np.ndarray      # y bed slope, shape (nx, ny)
     manning_n: np.ndarray    # Manning roughness, shape (nx, ny)
+    bed_elevation_m: np.ndarray | None = None  # z_b, shape (nx, ny)
 
 
 @dataclass
@@ -47,6 +48,8 @@ class Scenario:
     rainfall_2d: Callable[[np.ndarray, np.ndarray, float], np.ndarray] | None = None
     cfl: float = 0.5
     labels: tuple[str, ...] = ()
+    boundary_x: str = "inflow_outflow"
+    boundary_y: str = "wall"
 
 
 @dataclass

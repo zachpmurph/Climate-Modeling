@@ -33,6 +33,8 @@ def _check_scenario(solver, scenario) -> None:
         "rainfall": lambda s: s.rainfall is not None,
         "rainfall_2d": lambda s: s.rainfall_2d is not None,
         "initial_depth": lambda s: isinstance(s.initial_depth_m, np.ndarray) or float(s.initial_depth_m) != 0.0,
+        "boundary_x": lambda s: s.boundary_x != "inflow_outflow",
+        "boundary_y": lambda s: s.boundary_y != "wall",
     }
     for knob, is_active in checks.items():
         if knob not in solver.supports and is_active(scenario):

@@ -1,0 +1,136 @@
+{
+  "schema_version": 1,
+  "solver": "saint_venant_2d",
+  "passed": true,
+  "environment": {
+    "python": "3.14.4",
+    "numpy": "2.4.4",
+    "platform": "Windows-11-10.0.26200-SP0"
+  },
+  "cases": {
+    "analytic_shear_wave": {
+      "case": "periodic_analytic_shear_wave",
+      "resolutions": [
+        20,
+        40,
+        80
+      ],
+      "l2_velocity_y_errors": [
+        0.2539650899858519,
+        0.14080680227758735,
+        0.07426067851034672
+      ],
+      "pairwise_orders": [
+        0.8509131666784594,
+        0.923046629155435
+      ],
+      "fitted_order": 0.8869798979169471,
+      "acceptance": {
+        "errors_strictly_decrease": true,
+        "finest_l2_error_below_0_08": true,
+        "fitted_order_between_0_7_and_1_3": true
+      }
+    },
+    "analytic_diagonal_vortex_wave": {
+      "case": "periodic_analytic_diagonal_vortex_wave",
+      "resolutions": [
+        24,
+        48,
+        96
+      ],
+      "l2_vector_velocity_errors": [
+        0.1750609676262928,
+        0.10216738782413409,
+        0.05539097392386112
+      ],
+      "pairwise_orders": [
+        0.7769226932888965,
+        0.8832119462837147
+      ],
+      "fitted_order": 0.8300673197863062,
+      "acceptance": {
+        "errors_strictly_decrease": true,
+        "finest_l2_error_below_0_06": true,
+        "fitted_order_between_0_7_and_1_3": true
+      }
+    },
+    "manufactured_pressure_wave": {
+      "case": "manufactured_variable_depth_pressure_wave",
+      "resolutions": [
+        20,
+        40,
+        80
+      ],
+      "combined_l2_errors": [
+        0.0022164034204793345,
+        0.0010605555807454655,
+        0.0005200640051503779
+      ],
+      "pairwise_orders": [
+        1.0634002681513486,
+        1.0280591362588074
+      ],
+      "fitted_order": 1.0457297022050764,
+      "acceptance": {
+        "errors_strictly_decrease": true,
+        "finest_l2_error_below_0_001": true,
+        "fitted_order_between_0_7_and_1_3": true
+      }
+    },
+    "nonflat_lake_at_rest": {
+      "case": "nonflat_lake_at_rest",
+      "max_depth_error_m": 0.0,
+      "max_abs_hu_m2_per_min": 2.4529162616100477e-14,
+      "max_abs_hv_m2_per_min": 1.1631763587939198e-14,
+      "acceptance": {
+        "depth_error_below_1e_12": true,
+        "momentum_below_1e_11": true
+      }
+    },
+    "one_dimensional_reduction": {
+      "case": "one_dimensional_reduction",
+      "depth_l2_difference_m": 2.8788016160702595e-09,
+      "discharge_l2_difference_m2_per_min": 1.1762032616064441e-07,
+      "max_transverse_discharge_m2_per_min": 0.0,
+      "acceptance": {
+        "depth_l2_below_1e_8": true,
+        "discharge_l2_below_1e_6": true,
+        "transverse_discharge_below_1e_12": true
+      }
+    },
+    "radial_dam_break": {
+      "case": "wet_background_radial_dam_break",
+      "grid_size": 64,
+      "max_angular_depth_range_m": 0.0017887098536882445,
+      "normalized_angular_deviation": 0.01192473235792163,
+      "quarter_turn_symmetry_error_m": 0.0,
+      "acceptance": {
+        "normalized_angular_deviation_below_0_02": true,
+        "quarter_turn_error_below_1e_12": true
+      }
+    },
+    "mass_conservation": {
+      "case": "strict_periodic_mass_conservation",
+      "initial_volume_m3": 1.2,
+      "final_volume_m3": 1.2,
+      "residual_m3": 0.0,
+      "relative_residual": 0.0,
+      "mass_floor_correction_m3": 0.0,
+      "acceptance": {
+        "relative_residual_below_1e_12": true,
+        "floor_correction_below_1e_14": true
+      }
+    },
+    "wet_dry_dam_break": {
+      "case": "wet_dry_radial_dam_break",
+      "minimum_recorded_depth_m": 0.0,
+      "relative_mass_residual": 1.7842870038618588e-16,
+      "mass_floor_correction_m3": 0.0,
+      "acceptance": {
+        "all_depths_nonnegative": true,
+        "relative_mass_residual_below_1e_12": true,
+        "floor_correction_below_1e_14": true
+      }
+    }
+  }
+}

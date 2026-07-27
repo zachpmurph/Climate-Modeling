@@ -15,8 +15,8 @@ dispatches to any registered solver by name.
 
 ## Commands
 
-There is no build system or linter configured. Dependencies are `numpy`, `matplotlib`,
-and `pytest` (no requirements file exists — install them directly if missing).
+There is no build system or linter configured. Dependencies are pinned in
+`requirements.txt`.
 
 Run the solver:
 
@@ -37,6 +37,7 @@ Run the tests:
 ```
 python -m pytest tests/
 python -m pytest tests/test_linear_advection.py::test_upstream_inflow_mass_balance  # single test
+python src/general/verification/verify_saint_venant_2d.py  # quantitative 2-D matrix
 ```
 
 Unified CLI (solver-agnostic harness):
@@ -106,6 +107,19 @@ longitudinal profile across `--width`. Programmatic cases may supply full
 across y, while `Scenario.rainfall_2d(x_m, y_m, t_min)` can provide lateral
 variation. The harness saves full 2-D fields to `<run>_fields.npz` and a
 cross-channel-mean CSV for compatibility.
+
+`Domain2D.bed_elevation_m` is the authoritative topography used by the
+well-balanced hydrostatic reconstruction. Profile extrusion derives it from
+longitudinal slope. Do not replace the hydrostatic face corrections with a
+cell-centred `g*h*slope` source: that would break the non-flat lake-at-rest
+invariant. The 2-D draining limiter must scale a donor's flux consistently on
+the shared face; do not reintroduce a mass-adding depth floor.
+
+Any numerical-core change to `saint_venant_2d.py` must pass both
+`tests/test_saint_venant_2d_verification.py` and the standalone verification
+matrix. If an intentional method change alters quantitative reference values,
+document the reason, rerun the full grid study, and update
+`docs/validation/saint_venant_2d_results.json`.
 
 ## Model conventions
 

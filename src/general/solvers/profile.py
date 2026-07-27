@@ -192,6 +192,11 @@ def domain2d_from_profile(profile: RiverProfile, width_m: float, cross_cells: in
     dy = float(width_m) / int(cross_cells)
     y_m = np.linspace(0.5 * dy, float(width_m) - 0.5 * dy, int(cross_cells))
     shape = (len(profile.station_m), int(cross_cells))
+    bed_profile = np.zeros(len(profile.station_m), dtype=float)
+    if len(bed_profile) > 1:
+        station_spacing = np.diff(profile.station_m)
+        face_slope = 0.5 * (profile.slope[:-1] + profile.slope[1:])
+        bed_profile[1:] = -np.cumsum(face_slope * station_spacing)
     return Domain2D(
         x_m=np.asarray(profile.station_m, dtype=float).copy(),
         y_m=y_m,
@@ -200,4 +205,5 @@ def domain2d_from_profile(profile: RiverProfile, width_m: float, cross_cells: in
         slope_x=np.broadcast_to(np.asarray(profile.slope)[:, None], shape).copy(),
         slope_y=np.zeros(shape),
         manning_n=np.broadcast_to(np.asarray(profile.manning_n)[:, None], shape).copy(),
+        bed_elevation_m=np.broadcast_to(bed_profile[:, None], shape).copy(),
     )

@@ -162,6 +162,9 @@ def test_2d_solver_uses_extruded_profile_and_shared_scenario():
     assert result.depth_history.shape == (2, 5, 4)
     assert np.allclose(domain.slope_x[:, 0], profile.slope)
     assert np.allclose(domain.manning_n[:, -1], profile.manning_n)
+    assert domain.bed_elevation_m.shape == (5, 4)
+    assert np.allclose(domain.bed_elevation_m, domain.bed_elevation_m[:, :1])
+    assert np.all(np.diff(domain.bed_elevation_m[:, 0]) < 0)
     expected_source = (
         np.sum(profile.rainfall_rate_m_per_min * profile.dx_m) * 20.0 * 0.1
     )
