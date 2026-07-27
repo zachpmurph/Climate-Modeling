@@ -73,6 +73,7 @@ The rationale for each transition is given alongside the change.
 | **4a — Restructure** | `93c682d` | Moved all files into `src/general/` (solvers, viz) and `src/rivers/` (ingest, simulations). | As the repo grew beyond a single solver, `src/floods/` and `src/tools/` no longer described their contents. The new layout separates reusable numerical machinery (`general/`) from the river-application layer (`rivers/`). |
 | **4b — Solver-agnostic harness** | `69b519d` | `contract.py` defines `Domain`, `Scenario`, `SimulationResult`, `Solver` protocol, and `UnsupportedScenario`. `profile.py` houses `RiverProfile` loaders. Each solver exposes a `SOLVER` singleton; back-compat `run_model()` wrappers preserved. `registry.py` maps names to solvers; `run_simulation.py` is the unified CLI. | Adding a new solver previously required a new runner script and bespoke output handling. The contract layer means any solver can be swapped in by name, scenario knobs are validated up-front, and output is always a canonical `SimulationResult` with a mass-balance error in the JSON summary. |
 | **4c — Kinematic wave consolidated** | `a282b4f` `e1ec579` | Folded the real-river kinematic wave capability (per-cell slope and Manning's $n$, upstream inflow, rainfall) into `linear_advection.py` and removed the duplicate `river_kinematic_wave.py` and its pre-harness runner. `linear_advection.py` now runs standalone on a profile (or a built-in demo) and is the `kinematic_wave` solver in the harness. `--solver river_kinematic_wave` is replaced by `--solver kinematic_wave`. | The overland-flow file and the real-river file had diverged into near-duplicate kinematic wave solvers. Consolidating to one implementation removes the redundancy and the need for a separate file to run a real-profile simulation. |
+| **4d — Model-neutral flood reporting** | `6116048` | Added a reporting consumer for saved time-series CSV and summary JSON artifacts. It produces a self-contained interactive HTML report and versioned outcomes JSON with peak depth, timing, reach-threshold exceedance, and mass-balance diagnostics. | Reporting should evolve independently from numerical model development. Consuming saved artifacts prevents visualization code from coupling to solver internals and makes the interpretation boundary explicit. |
 
 ---
 
@@ -149,6 +150,22 @@ Each solver declares which `Scenario` knobs it supports. Passing a knob a solver
 doesn't support raises `UnsupportedScenario` immediately rather than silently
 ignoring it.
 
+### Reporting saved flood outcomes
+
+Generate a self-contained interactive report from any harness time-series CSV:
+
+```bash
+python src/rivers/reporting/generate_flood_report.py \
+    data/real_world_rivers/runs/example_timeseries.csv \
+    --depth-threshold 0.5
+```
+
+For reviewed reach geometry, replace the uniform threshold with
+`--geometry PATH`, where the CSV contains `station_m` and
+`bankfull_depth_m`. The reporter writes both HTML and a versioned
+`.outcomes.json` artifact. See `docs/reporting_contract.md` for the stable
+model-to-report boundary and interpretation limits.
+
 ### Ingesting real river data
 
 The data pipeline collects DEM-derived slopes, Manning's roughness, and USGS discharge
@@ -210,12 +227,14 @@ src/general/viz/animate_depth.py               # animates a saved depth-vs-time 
 src/rivers/simulations/registry.py             # name → Solver mapping
 src/rivers/simulations/run_simulation.py       # unified CLI dispatcher
 src/rivers/simulations/ingest_to_simulate.py   # profile_path → (Domain, Scenario) helper
+src/rivers/reporting/generate_flood_report.py  # saved artifacts → HTML + outcomes JSON
 src/rivers/ingest/collect_river_data.py        # CLI for the real-river data pipeline
 src/rivers/ingest/                             # USGS, DEM, roughness importers + SQLite helpers
 tests/test_linear_advection.py                 # profile I/O, mass balance, analytical equilibrium
 tests/test_saint_venant_1d.py                  # conservation, equilibrium, boundary, dry-state
 tests/test_river_data_tools.py                 # data-pipeline unit tests
 tests/test_run_simulation.py                   # dispatch, UnsupportedScenario, result shapes
+tests/test_flood_reporting.py                  # report validation, outcomes, HTML, CLI
 data/                                          # simulation output: plots and time series CSVs
 data/real_world_rivers/                        # SQL schema, local database, run outputs
 real_world_rivers/                             # example profiles and Columbia River inputs
