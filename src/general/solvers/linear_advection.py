@@ -91,9 +91,9 @@ def run_model(
     left_inflow_flux,
     record_interval_min=1.0,
     base_depth_m=0.01,
-    wave_center_m=None,
+    wave_center_m=2.0,
     wave_amplitude_m=0.0,
-    wave_width_m=None,
+    wave_width_m=2.0,
     rainfall_rate_m_per_min=0.0,
     rainfall_start_min=0.0,
     rainfall_end_min=None,
@@ -292,10 +292,12 @@ SOLVER = _KinematicWaveSolver()
 def _demo_profile():
     """A uniform reach used when the script is run with no profile argument."""
     n_cells = 101
+    x=np.linspace(0.0, 10.0, n_cells)
     return make_profile(
         station_m=np.linspace(0.0, 10.0, n_cells),
         slope=np.full(n_cells, 0.05),
         manning_n=np.full(n_cells, 0.05),
+        #initial_depth_m=0.1 * np.exp(-((x - 3.0) ** 2) / (2 * 1.0 ** 2))
     )
 
 

@@ -96,7 +96,7 @@ def _record_times(final_time, record_interval):
 def run_model(
     L,
     T_final,
-    record_interval=0.5,
+    record_interval=0.05,
     h_init=None,
     q_init=None,
     left_inflow=None,
