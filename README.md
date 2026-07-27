@@ -228,8 +228,33 @@ interpretation limits.
 
 ### Ingesting real river data
 
-The data pipeline collects DEM-derived slopes, Manning's roughness, and USGS discharge
-for a reach, stores them in a local SQLite database, and exports a solver-ready profile:
+The data pipeline turns authoritative provider data (DEM-derived slopes, Manning's
+roughness, USGS discharge, Open-Meteo rainfall) into a validated, provenance-rich,
+model-ready profile. Full reference: [docs/real_world_ingestion.md](docs/real_world_ingestion.md).
+
+**Config-driven (recommended).** A curated JSON reach definition under
+`real_world_rivers/curated/` declares the river/reach identifiers, marker centreline,
+provider windows, roughness/geometry sources, and export options. `run_ingestion`
+runs the whole pipeline — collect → validate → export — for one reach or a whole
+directory, exiting non-zero if any reach fails or a declared export is missing (so it
+is safe to gate a pipeline on):
+
+```bash
+# One curated reach
+python -m rivers.ingest.run_ingestion real_world_rivers/curated/columbia_hanford.json
+
+# Every *.json definition in a directory
+python -m rivers.ingest.run_ingestion --all real_world_rivers/curated
+```
+
+Each export writes the profile plus a `.metadata.json` provenance sidecar in which
+every value is classified `observed` / `derived` / `estimated` / `fallback`, alongside
+validation findings — errors block export; warnings are retained. SQLite databases and
+generated profiles are reproducible and git-ignored; curated definitions and the
+reviewed source CSVs are committed.
+
+**Manual (component-level).** The same stages can be driven one at a time with
+`collect_river_data.py`, e.g. when building or inspecting a reach interactively:
 
 ```bash
 # Initialise the database
@@ -238,12 +263,10 @@ python src/rivers/ingest/collect_river_data.py --db data/real_world_rivers/river
 # Import a reach centreline (CSV, JSON, or GeoJSON LineString)
 python src/rivers/ingest/collect_river_data.py create-reach \
     --river "Columbia" --reach "Hanford" \
-    --markers real_world_rivers/columbia/hanford_markers.csv
+    --markers real_world_rivers/columbia_hanford_markers.csv
 
-# Fetch DEM elevations and derive slopes
+# Fetch DEM elevations and derive slopes; fetch USGS continuous discharge
 python src/rivers/ingest/collect_river_data.py fetch-elevation --reach-id 1
-
-# Fetch USGS continuous discharge
 python src/rivers/ingest/collect_river_data.py fetch-flow \
     --reach-id 1 --site 12472800 --start 2024-01-01T00:00:00Z --end 2024-01-31T00:00:00Z
 
@@ -301,13 +324,22 @@ src/rivers/simulations/registry.py             # name → Solver mapping
 src/rivers/simulations/run_simulation.py       # unified CLI dispatcher
 src/rivers/simulations/ingest_to_simulate.py   # profile_path → (Domain, Scenario) helper
 src/rivers/reporting/generate_flood_report.py  # saved artifacts → HTML + outcomes JSON
-src/rivers/ingest/collect_river_data.py        # CLI for the real-river data pipeline
-src/rivers/ingest/                             # USGS, DEM, roughness importers + SQLite helpers
+src/rivers/ingest/run_ingestion.py             # config-driven ingestion CLI (one reach or --all)
+src/rivers/ingest/orchestrator.py              # runs a curated reach definition end to end
+src/rivers/ingest/collect_river_data.py        # low-level per-step data pipeline CLI
+src/rivers/ingest/validation.py                # profile validation gate (error/warning/info)
+src/rivers/ingest/                             # USGS, DEM, roughness/geometry importers + SQLite helpers
+real_world_rivers/curated/                     # reviewed curated reach definitions (JSON)
+docs/real_world_ingestion.md                   # ingestion guide: sources, config, validation, provenance
 tests/test_linear_advection.py                 # profile I/O, mass balance, analytical equilibrium
 tests/test_saint_venant_1d.py                  # conservation, equilibrium, boundary, dry-state
 tests/test_saint_venant_2d.py                  # stability, sources, boundaries, edge cases
 tests/test_saint_venant_2d_verification.py     # quantitative Tier 3 gates
 tests/test_river_data_tools.py                 # data-pipeline unit tests
+tests/test_ingestion_orchestrator.py           # config-driven ingest: single + batch, exit status
+tests/test_ingestion_validation.py             # validation severities and export gating
+tests/test_ingestion_export.py                 # atomic export + provenance sidecar
+tests/test_ingestion_reliability.py            # dedup, retries, credential redaction
 tests/test_run_simulation.py                   # dispatch, UnsupportedScenario, result shapes
 tests/test_flood_reporting.py                  # report validation, outcomes, HTML, CLI
 data/                                          # simulation output: plots and time series CSVs
