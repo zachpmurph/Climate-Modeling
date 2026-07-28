@@ -1,0 +1,71 @@
+# Real-basin model validation
+
+**Validation** measures how well the model reproduces *real observations*, as
+opposed to **verification** (`src/general/verification/`, `docs/tier3_assessment.md`),
+which measures agreement with *exact solutions*. A profile that passes ingestion
+validation and a solver that passes Tier-3 verification are still **not** validated
+against a real river until this step is done.
+
+The reusable harness lives in `src/rivers/validation/` and is fully offline-tested
+(`tests/test_validation.py`); the live run below additionally needs network access
+to the data providers.
+
+## What you need
+
+A reach with **two gauges**:
+
+- an **upstream** gauge whose observed discharge drives the model (the boundary
+  condition), and
+- a **downstream** gauge whose observed discharge is the **validation target** the
+  model tries to reproduce.
+
+Plus channel **width** at the downstream station, to convert between whole-channel
+discharge (m³/min, as gauges report) and the model's unit-width flux (m²/min).
+
+## Workflow
+
+1. **Ingest** the reach with both gauges (a curated definition with two `flow`
+   sections, or two `fetch-flow` calls at the upstream and downstream markers), then
+   export a profile — see [real_world_ingestion.md](real_world_ingestion.md).
+
+2. **Drive the model with the observed upstream hydrograph.** Convert the upstream
+   discharge series `Q_up(t)` [m³/min] to unit-width flux `q_up(t) = Q_up(t) / width_up`
+   and pass it as a time-varying `left_inflow` callable to `run_model` (or
+   `--left-inflow` for a constant approximation).
+
+3. **Extract the predicted downstream hydrograph** from the run: the discharge at the
+   downstream station (`q_history[:, station]` for Saint-Venant, or the Manning flux
+   `q(h)` for the kinematic wave), times the local width to get whole-channel m³/min.
+
+4. **Score it** against the observed downstream series:
+
+   ```python
+   from rivers.validation.compare import evaluate_series
+
+   scores = evaluate_series(obs_times, obs_downstream_q,
+                            model_times, model_downstream_q)
+   print(scores["nse"], scores["rmse"], scores["percent_bias"])
+   ```
+
+   `evaluate_series` interpolates the model series onto the observation timestamps
+   and returns Nash-Sutcliffe efficiency (`nse`), `rmse`, mean `bias`,
+   `percent_bias`, and Pearson `pearson_r`.
+
+## Interpreting the scores
+
+- **NSE = 1** perfect; **> 0.75** good; **0.5–0.75** fair; **≤ 0** the model is no
+  better than predicting the observed mean.
+- **percent_bias** near 0 is unbiased; large magnitude means systematic over/under
+  prediction (often a geometry or roughness issue).
+
+## Caveats
+
+- This is **validation, not calibration.** Do **not** tune Manning's *n* to maximise
+  NSE and then call the model "calibrated" — that fits *n* to absorb structural and
+  unit errors. Roughness is emitted in the meters-and-minutes convention
+  (see [ingestion_integration_requests.md](ingestion_integration_requests.md)); a
+  large bias is a signal to investigate geometry/inputs, not to re-fit *n*.
+- The 1-D solvers assume unit-width flow with reviewed width; lateral inflows,
+  tributaries, and backwater are not represented and will show up as bias.
+- A clean single-event window (a rising/falling limb between two gauges with no major
+  tributary in between) is the most interpretable first validation case.
