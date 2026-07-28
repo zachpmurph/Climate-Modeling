@@ -5,7 +5,7 @@ import sqlite3
 import pytest
 
 from general.solvers.profile import load_profile
-from rivers.ingest.common import haversine_m
+from rivers.ingest.common import haversine_m, source_path
 from rivers.ingest.elevation import collect_elevations, parse_elevations
 from rivers.ingest.export_profile import export_profile
 from rivers.ingest.markers import create_reach, load_marker_rows
@@ -60,6 +60,13 @@ def test_marker_import_infers_stations(tmp_path):
 
     assert rows[0]["station_m"] == 0
     assert rows[1]["station_m"] == pytest.approx(haversine_m(40.0, -120.0, 39.99, -120.0))
+
+
+def test_local_source_paths_are_portable_inside_repository():
+    path = source_path("real_world_rivers/columbia_hanford_markers.csv")
+
+    assert path == "real_world_rivers/columbia_hanford_markers.csv"
+    assert "\\" not in path
 
 
 def test_provider_parsers_and_unit_conversion():

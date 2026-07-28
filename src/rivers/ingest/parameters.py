@@ -1,6 +1,12 @@
 from pathlib import Path
 
-from .common import add_source, connect_database, get_markers, read_structured_rows
+from .common import (
+    add_source,
+    connect_database,
+    get_markers,
+    read_structured_rows,
+    source_path,
+)
 
 
 def _optional_float(row, name):
@@ -31,7 +37,7 @@ def import_roughness(reach_id, path, *, db_path=None, replace=False):
             conn,
             Path(path).name,
             "reviewed roughness input",
-            url=str(Path(path).resolve()),
+            url=source_path(path),
             notes="Manning n values must be reviewed against channel material and calibration evidence.",
         )
         conn.executemany(
@@ -79,7 +85,7 @@ def import_geometry(reach_id, path, *, db_path=None, replace=False):
             conn,
             Path(path).name,
             "reviewed channel geometry",
-            url=str(Path(path).resolve()),
+            url=source_path(path),
         )
         for station, width, depth, method, classification, notes in values:
             marker = min(markers, key=lambda row: abs(row["station_m"] - station))

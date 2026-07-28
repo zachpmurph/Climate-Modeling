@@ -17,6 +17,15 @@ from rivers.simulations.registry import SOLVERS, dispatch
 
 
 DEFAULT_OUTPUT_DIR = Path("data") / "real_world_rivers" / "runs"
+REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _portable_path(path):
+    resolved = Path(path).resolve()
+    try:
+        return resolved.relative_to(REPO_ROOT).as_posix()
+    except ValueError:
+        return str(resolved)
 
 
 def parse_args(argv=None):
@@ -46,11 +55,27 @@ def parse_args(argv=None):
     )
     p.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     p.add_argument("--run-name", default="simulation")
+    p.add_argument(
+        "--map-markers",
+        type=Path,
+        help="Ordered centerline/marker CSV to record for geographic visualization",
+    )
+    p.add_argument(
+        "--map-geometry",
+        type=Path,
+        help="Channel geometry CSV to record for geographic visualization",
+    )
     return p.parse_args(argv)
 
 
 def main(argv=None):
     args = parse_args(argv)
+
+    if (args.map_markers is None) != (args.map_geometry is None):
+        raise SystemExit("error: --map-markers and --map-geometry must be supplied together")
+    for map_path in (args.map_markers, args.map_geometry):
+        if map_path is not None and not map_path.is_file():
+            raise SystemExit(f"error: map input does not exist: {map_path}")
 
     profile = load_profile(args.profile)
     if args.solver == "saint_venant_2d":
@@ -140,6 +165,11 @@ def main(argv=None):
             "nx": len(result.domain.x_m),
             "ny": len(result.domain.y_m),
             "width_m": float(np.sum(result.domain.dy_m)),
+        }
+    if args.map_markers is not None:
+        summary["map_inputs"] = {
+            "markers": _portable_path(args.map_markers),
+            "geometry": _portable_path(args.map_geometry),
         }
     json_path = out / f"{args.run_name}_summary.json"
     json_path.write_text(json.dumps(summary, indent=2))

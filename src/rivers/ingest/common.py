@@ -9,7 +9,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
-from .database import DEFAULT_DB_PATH, initialize_database
+from .database import DEFAULT_DB_PATH, REPO_ROOT, initialize_database
 
 
 USER_AGENT = "Climate-Modeling river-data collector/1.0"
@@ -120,6 +120,15 @@ def add_source(conn, name, source_type, url=None, citation=None, notes=None):
         (name, source_type, url, citation, utc_now(), notes),
     )
     return cursor.lastrowid
+
+
+def source_path(path):
+    """Return a portable source path for files inside this repository."""
+    resolved = Path(path).resolve()
+    try:
+        return resolved.relative_to(REPO_ROOT).as_posix()
+    except ValueError:
+        return str(resolved)
 
 
 def get_reach(conn, reach_id):

@@ -104,6 +104,7 @@ The rationale for each transition is given alongside the change.
 | **4e — Profile-grid dynamic wave and forcing** | Current branch | Saint-Venant now runs on the supplied nonuniform profile grid with per-cell bed slope and Manning roughness. Both solvers accept spatially and temporally varying rainfall callables. Profile initial depth, rainfall, and labels are transferred into `Scenario`. | Reconstructing a uniform grid and using module-level coefficients discarded real-reach variation. Sampling rainfall only once also prevented event functions from changing through time. |
 | **4f — Integrated 2-D shallow water** | Current branch | Added `Domain2D` and a registered `saint_venant_2d` solver. The unified runner extrudes a profile across a requested width, applies spatial terrain, roughness, and rainfall, saves complete fields to NPZ, and produces plan-view area-based flood reports. | The standalone 2-D solver could not consume ingested profiles or participate in shared simulation and reporting workflows. |
 | **4g — Tier 3 numerical verification** | Current branch | Added explicit bed elevation, hydrostatic reconstruction, a conservative draining limiter, finite-state diagnostics, periodic verification boundaries, analytic convergence, non-flat equilibrium, 1-D reduction, radial symmetry, strict mass, and wet/dry gates. Pinned dependencies and clean-checkout CI preserve evidence. | Stability and visual plausibility do not establish PDE accuracy. The solver now has quantitative, reproducible evidence for first-order convergence, well-balancedness, positivity, multidimensional symmetry, and machine-precision conservation within its documented scope. |
+| **4h — Geographic flood screening** | Current branch | Added an interactive topographic map that animates canonical saved depth time series along a reviewed river centerline. The runner can record portable marker and geometry paths in its summary so the map command auto-discovers them. | Existing reports quantify outcomes but do not place a 1-D result in geographic context. The map makes scenario review easier while explicitly retaining the distinction between estimated cross-section width and a terrain-resolving 2-D inundation boundary. |
 
 ---
 
@@ -226,6 +227,29 @@ displays a plan-view depth map, and reports threshold-exceedance area. See
 `docs/reporting_contract.md` for the stable model-to-report boundary and
 interpretation limits.
 
+### Geographic flood animation
+
+To pair a run with reviewed map inputs, record its ordered centerline and channel
+geometry in the run summary:
+
+```bash
+python src/rivers/simulations/run_simulation.py \
+    real_world_rivers/tools/example_river_profile.csv \
+    --solver kinematic_wave --t-final 30 --run-name example_map \
+    --map-markers real_world_rivers/tools/example_markers.csv \
+    --map-geometry real_world_rivers/tools/example_geometry.csv
+
+python src/rivers/visualization/animate_flood_map.py \
+    data/real_world_rivers/runs/example_map_timeseries.csv
+```
+
+The second command writes a neighboring `_flood_map.html` with playback,
+scrubbing, depth tooltips, and an OpenTopoMap basemap. Leaflet and map tiles
+require an internet connection when the HTML is opened. The polygons are
+screening estimates: 1-D depths are spread across an estimated cross-section,
+and a 2-D run's canonical CSV contains its cross-channel mean. Use the standard
+2-D flood report and full NPZ field for area-based 2-D outcomes.
+
 ### Ingesting real river data
 
 The data pipeline turns authoritative provider data (DEM-derived slopes, Manning's
@@ -324,6 +348,7 @@ src/rivers/simulations/registry.py             # name → Solver mapping
 src/rivers/simulations/run_simulation.py       # unified CLI dispatcher
 src/rivers/simulations/ingest_to_simulate.py   # profile_path → (Domain, Scenario) helper
 src/rivers/reporting/generate_flood_report.py  # saved artifacts → HTML + outcomes JSON
+src/rivers/visualization/animate_flood_map.py  # saved time series → geographic HTML animation
 src/rivers/ingest/run_ingestion.py             # config-driven ingestion CLI (one reach or --all)
 src/rivers/ingest/orchestrator.py              # runs a curated reach definition end to end
 src/rivers/ingest/collect_river_data.py        # low-level per-step data pipeline CLI

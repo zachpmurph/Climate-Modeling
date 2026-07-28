@@ -1,9 +1,12 @@
 """Tests for the unified run_simulation dispatch harness."""
 
+import json
+
 import pytest
 import numpy as np
 
 from general.solvers.contract import Domain, Domain2D, Scenario, UnsupportedScenario
+from rivers.simulations import run_simulation
 from rivers.simulations.registry import dispatch, SOLVERS
 from rivers.simulations.ingest_to_simulate import profile_to_domain_scenario
 
@@ -169,3 +172,33 @@ def test_2d_solver_uses_extruded_profile_and_shared_scenario():
         np.sum(profile.rainfall_rate_m_per_min * profile.dx_m) * 20.0 * 0.1
     )
     assert result.mass_source == pytest.approx(expected_source)
+
+
+def test_runner_records_portable_map_inputs(tmp_path):
+    output_dir = tmp_path / "runs"
+    markers = "real_world_rivers/tools/example_markers.csv"
+    geometry = "real_world_rivers/tools/example_geometry.csv"
+
+    run_simulation.main(
+        [
+            PROFILE_PATH,
+            "--solver",
+            "kinematic_wave",
+            "--t-final",
+            "0",
+            "--output-dir",
+            str(output_dir),
+            "--run-name",
+            "mapped",
+            "--map-markers",
+            markers,
+            "--map-geometry",
+            geometry,
+        ]
+    )
+
+    summary = json.loads((output_dir / "mapped_summary.json").read_text(encoding="utf-8"))
+    assert summary["map_inputs"] == {
+        "markers": markers,
+        "geometry": geometry,
+    }

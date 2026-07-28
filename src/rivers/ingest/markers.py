@@ -1,6 +1,12 @@
 from pathlib import Path
 
-from .common import add_source, connect_database, read_structured_rows, stations_from_coordinates
+from .common import (
+    add_source,
+    connect_database,
+    read_structured_rows,
+    source_path,
+    stations_from_coordinates,
+)
 
 
 def load_marker_rows(path):
@@ -115,7 +121,7 @@ def create_reach(
             conn,
             Path(marker_path).name,
             "reviewed centerline",
-            url=str(Path(marker_path).resolve()),
+            url=source_path(marker_path),
             notes="Marker order is upstream to downstream.",
         )
         conn.executemany(
