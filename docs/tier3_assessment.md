@@ -31,9 +31,13 @@ uses a two-dimensional Gaussian bed bump and constant `h + z_b`. After
 `0.1 min`, maximum depth error is `0 m`; maximum momenta are
 `2.45e-14` and `1.16e-14 m²/min`.
 
-**Gap:** None for fully wet Cartesian lake-at-rest states. Shoreline balance is
-covered indirectly by positivity tests but could be expanded with additional
-partially dry topographies.
+**Gap:** None for fully wet Cartesian lake-at-rest states. Draining wet/dry fronts
+over **non-flat** bed topography are now covered directly by
+`tests/test_saint_venant_2d.py::test_wet_dry_front_over_nonflat_bed_is_positive_and_conservative`
+(a frictionless dome draining over a Gaussian bed bump), which holds positivity and
+periodic-watertight conservation to machine precision — closing the earlier
+partially-dry-topography gap. A steady partially-dry shoreline *equilibrium* over a
+slope remains the one untested sub-case.
 
 ### Check 2: 1D reduction
 

@@ -183,3 +183,48 @@ def test_periodic_wet_dry_front_crosses_domain_edge_conservatively():
     assert np.min(result["h_history"]) >= 0.0
     assert abs(final_volume - initial_volume) / initial_volume < 1e-12
     assert result["mass_floor_correction"] < 1e-14
+
+
+def test_wet_dry_front_over_nonflat_bed_is_positive_and_conservative():
+    # The draining limiter's hardest, previously-untested corner: a wet/dry front
+    # advancing over NON-FLAT bed topography (every other wet/dry case uses a flat
+    # bed). A raised water dome sits on a Gaussian bed bump and drains, frictionless,
+    # down the bump's sloping flanks into dry cells. With periodic boundaries the
+    # domain is watertight, so volume must be conserved and depth must stay >= 0.
+    nx, ny = 24, 24
+    length = width = 2.4
+    dx = np.full(nx, length / nx)
+    dy = np.full(ny, width / ny)
+    x = (np.arange(nx) + 0.5) * dx[0]
+    y = (np.arange(ny) + 0.5) * dy[0]
+    xx, yy = np.meshgrid(x, y, indexing="ij")
+    bed = 0.1 * np.exp(-(((xx - 1.2) ** 2 + (yy - 1.2) ** 2) / 0.4 ** 2))  # decays ~0 at edges
+    depth = np.zeros((nx, ny))
+    core = (np.abs(xx - 1.2) < 0.3) & (np.abs(yy - 1.2) < 0.3)
+    depth[core] = 0.08  # raised dome -> not in hydrostatic balance -> drains over the slope
+    zero = np.zeros((nx, ny))
+
+    result = sv2.run_model(
+        T_final=0.02,
+        record_interval=0.01,
+        h_init=depth,
+        hu_init=zero,
+        hv_init=zero,
+        x_m=x,
+        y_m=y,
+        dx_m=dx,
+        dy_m=dy,
+        slope_x=zero,
+        slope_y=zero,
+        manning_n=zero,  # frictionless: most stressful for positivity at the front
+        bed_elevation_m=bed,
+        rainfall=lambda x, y, time: zero,
+        boundary_x="periodic",
+        boundary_y="periodic",
+    )
+    cell_area = dx[:, None] * dy[None, :]
+    initial_volume = float(np.sum(depth * cell_area))
+    final_volume = float(np.sum(result["h_final"] * cell_area))
+    assert np.min(result["h_history"]) >= 0.0
+    assert abs(final_volume - initial_volume) / initial_volume < 1e-12
+    assert result["mass_floor_correction"] < 1e-14
