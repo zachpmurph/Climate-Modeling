@@ -9,61 +9,46 @@ validation and metadata rather than silently picking a convention.
 
 ---
 
-## 1. Manning's *n* unit convention — RESOLVED: SI
+## 1. Manning's *n* unit convention — RESOLVED: meters-and-minutes
 
-**Decision (model owner, 2026-07-24): Manning's *n* is expressed in SI units
-(s·m^(−1/3)) at the model-facing boundary.**
+**Resolution (2026-07-28): profiles carry Manning's *n* in the model's
+meters-and-minutes convention, i.e. the SI value divided by 60. No solver change
+is required.**
 
-### What this now requires
+### Why meters-and-minutes (and why the earlier "SI" note was wrong)
 
-- **Ingestion side (done):** roughness is emitted and validated as SI *n*. The
-  validation plausibility range is the SI range (~0.008–0.2), and the curated
-  `real_world_rivers/columbia_hanford_roughness.csv` now carries the raw SI value
-  `0.028` (previously the ÷60 form `0.000467`).
-- **Model side (OUTSTANDING — owned by the model developer, not ingestion):** the
-  solver's `q = (1/n)·h^(5/3)·√S` (and the matching `c`) has **no seconds→minutes
-  factor**, so with SI *n* it produces velocity/flux in **m/s**, while the repo's
-  stated convention is meters-and-minutes. To make the model consistent with the
-  SI decision, multiply `q` and `c` by **60** (s→min) in
-  `src/general/solvers/river_kinematic_wave.py`. Until that factor is added, model
-  output built from SI *n* will be a factor of 60 too fast. Ingestion does not and
-  will not make this change.
+The whole model stack is meters-and-minutes: `g = 35316` (9.81 m/s² × 3600),
+times in minutes, and `CLAUDE.md` states "meters and minutes throughout". Manning's
+law `q = (1/n)·h^(5/3)·√S` yields **m²/min** precisely when *n* is the
+meters-and-minutes value `n = SI/60`; with a raw SI *n* the same formula yields an
+m²/s magnitude mislabelled as m²/min. The Saint-Venant solvers already default to
+`n0 = MANNING_N_SECONDS/60`. So the only correct model-facing convention is
+meters-and-minutes.
 
-### The original problem (for the record)
+An earlier note here claimed the *solver* owed a "×60" factor. That was mistaken:
+`tests/test_solver_consistency.py` demonstrates that `kinematic_wave` and
+`saint_venant` **already converge to the same Manning normal depth** for the same
+profile — the two solver families interpret *n* identically. There is nothing to
+change in the solvers. The only thing that was wrong was the *data*: a briefly
+adopted "SI" decision had `columbia_hanford_roughness.csv` carrying `0.028`, which
+the meters-and-minutes solvers would interpret 60× off.
 
-The 1D kinematic-wave solver computes discharge per unit width as
+### What this requires (all on the ingestion side, done)
 
-```
-q = (1 / n) * h^(5/3) * sqrt(S)      # river_kinematic_wave.py
-```
+- Reviewed roughness CSVs carry the **meters-and-minutes** value (`SI/60`), with
+  the SI origin documented in the row's `method`/notes. `columbia_hanford_roughness.csv`
+  carries `0.000467` (= SI `0.028` / 60).
+- The validation plausibility range is the meters-and-minutes band
+  (`~1e-4 … 4e-3`).
+- `tests/test_solver_consistency.py` is the guardrail: it fails if either solver
+  ever diverges from the shared Manning convention.
 
-with **no factor converting seconds to minutes**, yet the repository states its
-unit convention is *meters and minutes* (see `CLAUDE.md` → Model conventions).
-Manning's equation is unit-system dependent. With a Manning's *n* taken from the
-standard SI tables (e.g. gravel ≈ 0.035, in units of s·m^(−1/3)), the formula
-above yields a velocity in **m/s**, not m/min. To obtain m/min from the same
-formula you must either multiply the result by 60 or, equivalently, divide *n*
-by 60.
+### Optional future nicety
 
-The repo currently contains **both conventions at once**:
-
-| Source | Manning's *n* value | Implied convention |
-|---|---|---|
-| `tests/test_river_data_tools.py` | `0.035`, `0.04` | raw SI (s-based) |
-| `real_world_rivers/columbia_hanford_roughness.csv` | `0.000467` | SI ÷ 60 (m-and-min), *documented in the file itself* |
-
-Originally the repo contained **both conventions at once** — `test_river_data_tools.py`
-used raw SI *n* (`0.035`, `0.04`) while `columbia_hanford_roughness.csv` used the
-÷60 form (`0.000467`). The SI decision above resolves this in favour of raw SI:
-the test data was already SI, and the Columbia file has been changed to its raw SI
-value `0.028`.
-
-### Follow-up ingestion can do once the model factor lands
-
-Once the solver's ×60 factor is in place, ingestion can optionally *derive* the
-SI *n* from a documented source value and record the derivation with provenance
-(original value, method, result) rather than relying on a hand-entered SI number
-in the reviewed CSV. Not needed for correctness; offered if useful.
+Ingestion could accept a documented SI roughness and *derive* the m-and-min value
+(÷60) at import, recording the original SI value, the factor, and the result as
+`derived` provenance — so reviewers can enter SI directly. Not required for
+correctness; the reviewed CSV convention above already yields correct model input.
 
 ---
 

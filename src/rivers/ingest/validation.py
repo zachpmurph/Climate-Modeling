@@ -25,12 +25,13 @@ INFO = "info"
 # extreme-but-real reaches exist and the modeller should decide.
 SLOPE_PLAUSIBLE_MIN = 1e-6  # slope is dimensionless, so unit conventions don't shift it
 SLOPE_PLAUSIBLE_MAX = 0.1
-# Manning's n is emitted in SI units (s.m^(-1/3)), per the resolved convention
-# (see docs/ingestion_integration_requests.md). Typical natural-channel SI values
-# span roughly 0.01 (smooth) to 0.15 (heavily vegetated); this range is a little
-# wider so only clearly-wrong values are flagged as suspicious.
-ROUGHNESS_PLAUSIBLE_MIN = 0.008
-ROUGHNESS_PLAUSIBLE_MAX = 0.2
+# Manning's n is emitted in the model's meters-and-minutes convention (SI n / 60),
+# per the resolved convention (see docs/ingestion_integration_requests.md). Typical
+# natural-channel SI values ~0.01 (smooth) to 0.2 (heavily vegetated) become
+# ~1.7e-4 to ~3.3e-3 once divided by 60; the range is a little wider so only
+# clearly-wrong values are flagged as suspicious.
+ROUGHNESS_PLAUSIBLE_MIN = 1.0e-4
+ROUGHNESS_PLAUSIBLE_MAX = 4.0e-3
 
 CLASSIFICATION_LEVELS = ("observed", "derived", "estimated", "fallback")
 

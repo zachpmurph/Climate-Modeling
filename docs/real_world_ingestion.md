@@ -19,7 +19,7 @@ models, interpret flood outcomes, or calibrate anything.
 | Discharge (flow) | **USGS** Water Data OGC API, parameter `00060` (continuous) | US gauges only. A gauge reading is applied at one marker; extending it along the reach is an assumption. |
 | Precipitation (rainfall) | Open-Meteo Historical Weather API (reanalysis) | Hourly, preceding-hour sum. Sampled at a **single marker** unless a `marker_order` is given per call; reanalysis is a model product, not a rain gauge. |
 | Channel geometry (width, depth) | Reviewed input CSV | Not fetched; supplied and reviewed by a human. Often a **literature estimate** — classify accordingly. |
-| Roughness (Manning's *n*) | Reviewed input CSV | Not fetched; expert/literature value. Emitted in **SI units** (s·m^(−1/3)) — see [ingestion_integration_requests.md](ingestion_integration_requests.md) for the convention decision and the outstanding solver change it implies. |
+| Roughness (Manning's *n*) | Reviewed input CSV | Not fetched; expert/literature value. Emitted in the model's **meters-and-minutes** convention (SI *n* ÷ 60) — see [ingestion_integration_requests.md](ingestion_integration_requests.md). |
 
 Guardrails: the pipeline never invents missing observations, and estimated or
 fallback values are labelled as such (see *Provenance classification*).
@@ -99,9 +99,9 @@ The lower-level per-step CLI (`collect_river_data.py`: `create-reach`,
 - The schema is `data/real_world_rivers/schema.sql`. It separates raw provider
   values, normalized values, and derived quantities, and every sample/observation
   carries a `source_id` and a `classification`.
-- **Manning's *n* is emitted in SI units** (s·m^(−1/3)). This convention was
-  decided by the model owner; note the solver still needs a ×60 (s→min) factor to
-  be consistent with it. See
+- **Manning's *n* is emitted in the model's meters-and-minutes convention**
+  (SI *n* ÷ 60). Both solvers already interpret it consistently — verified by
+  `tests/test_solver_consistency.py`. See
   [ingestion_integration_requests.md](ingestion_integration_requests.md).
 
 ### Schema changes require a re-init
@@ -225,10 +225,10 @@ covered without network by `tests/test_ingestion_orchestrator.py` and
 
 A profile passing validation is **not** calibrated. Known assumptions to revisit:
 
-1. **Manning's *n* values** — SI convention (decided), but the magnitudes are
-   literature/estimated, not calibrated against observed stage/flow. The solver
-   still owes a ×60 factor for that convention (see
-   [ingestion_integration_requests.md](ingestion_integration_requests.md)).
+1. **Manning's *n* values** — emitted in the meters-and-minutes convention (the
+   solvers agree on it; see [ingestion_integration_requests.md](ingestion_integration_requests.md)),
+   but the magnitudes are literature/estimated, **not** calibrated against observed
+   stage/flow.
 2. **DEM slopes** — GLO-90 point samples over long marker spacings; endpoint
    differencing smooths real bed variation and can require the slope floor.
 3. **Single-point forcing** — rainfall (and often flow) sampled at one marker and
