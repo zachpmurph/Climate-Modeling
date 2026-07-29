@@ -133,8 +133,8 @@ def test_collection_and_profile_export_pipeline(tmp_path):
         roughness_path,
         ["start_station_m", "end_station_m", "manning_n", "method"],
         [
-            {"start_station_m": 0, "end_station_m": 1000, "manning_n": 0.035, "method": "survey"},
-            {"start_station_m": 1000, "end_station_m": 2000, "manning_n": 0.04, "method": "survey"},
+            {"start_station_m": 0, "end_station_m": 1000, "manning_n": 0.035 / 60, "method": "survey"},
+            {"start_station_m": 1000, "end_station_m": 2000, "manning_n": 0.04 / 60, "method": "survey"},
         ],
     )
     import_roughness(reach_id, roughness_path, db_path=db_path)
@@ -209,7 +209,9 @@ def test_collection_and_profile_export_pipeline(tmp_path):
         150 * CFS_TO_M3_PER_MIN / 10
     )
     assert profile.slope[0] == pytest.approx(1e-6)
-    assert profile.manning_n.tolist() == pytest.approx([0.035, 0.04, 0.04])
+    assert profile.manning_n.tolist() == pytest.approx(
+        [0.035 / 60, 0.04 / 60, 0.04 / 60]
+    )
     assert profile.rainfall_rate_m_per_min.tolist() == pytest.approx([1e-5] * 3)
     assert output_path.with_suffix(".metadata.json").exists()
 

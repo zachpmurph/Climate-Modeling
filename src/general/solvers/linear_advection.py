@@ -450,7 +450,7 @@ def _demo_profile():
     return make_profile(
         station_m=np.linspace(0.0, 10.0, n_cells),
         slope=np.full(n_cells, 0.05),
-        manning_n=np.full(n_cells, 0.05),
+        manning_n=np.full(n_cells, 0.05 / 60.0),
         #initial_depth_m=0.1 * np.exp(-((x - 3.0) ** 2) / (2 * 1.0 ** 2))
     )
 

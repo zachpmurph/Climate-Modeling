@@ -141,7 +141,9 @@ def test_profile_resampling_preserves_length_and_observation_identity():
     assert np.sum(derived.dx_m) == pytest.approx(np.sum(source.dx_m))
     assert derived.station_m[[0, -1]].tolist() == [0.0, 4000.0]
     assert derived.slope[1] == pytest.approx(0.0011)
-    assert derived.manning_n[1] == pytest.approx(0.0365)
+    assert derived.manning_n[1] == pytest.approx(
+        (0.035 + 0.038) / (2.0 * 60.0)
+    )
     assert derived.labels[0] == "upstream"
     assert derived.labels[1] == ""
     assert derived.labels[2] == "upper_mid"

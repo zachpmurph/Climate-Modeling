@@ -36,6 +36,9 @@ def test_load_profile_csv():
 
     assert np.allclose(profile.station_m, [0, 1000, 2000, 3000, 4000])
     assert np.all(profile.dx_m > 0)
+    assert profile.manning_n.tolist() == pytest.approx(
+        [0.035 / 60, 0.038 / 60, 0.040 / 60, 0.042 / 60, 0.045 / 60]
+    )
     assert np.allclose(profile.initial_depth_m, [0.04, 0.04, 0.04, 0.04, 0.04])
     assert profile.rainfall_rate_m_per_min is not None
     assert profile.labels[0] == "upstream"
