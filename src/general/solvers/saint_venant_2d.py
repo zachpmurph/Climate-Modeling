@@ -137,6 +137,15 @@ def _inflow_values(left_inflow, time, ny):
     return values
 
 
+def _cap_dt_at_forcing_breakpoints(dt, time, *forcings):
+    for forcing in forcings:
+        for breakpoint in getattr(forcing, "breakpoints_min", ()):
+            if time + 1e-12 < breakpoint < time + dt - 1e-12:
+                dt = float(breakpoint - time)
+                break
+    return dt
+
+
 def _extend_x(h, hu, hv, bed, boundary, inflow):
     if boundary == "periodic":
         return tuple(
@@ -399,6 +408,9 @@ def run_model(
         dt = min(dt, T_final - t_current)
         if next_record < len(record_marks):
             dt = min(dt, record_marks[next_record] - t_current)
+        dt = _cap_dt_at_forcing_breakpoints(
+            dt, t_current, left_inflow, rainfall_function
+        )
         if dt <= 0 or not np.isfinite(dt):
             raise FloatingPointError(f"Invalid time step {dt!r} at t={t_current}")
 
@@ -539,6 +551,8 @@ class _SaintVenant2DSolver:
                 del y
                 values = np.asarray(scenario.rainfall(x, time), dtype=float)
                 return np.broadcast_to(values[:, None], shape)
+            if hasattr(scenario.rainfall, "breakpoints_min"):
+                rainfall.breakpoints_min = scenario.rainfall.breakpoints_min
         else:
             rainfall = lambda x, y, time: np.zeros(shape)
 

@@ -33,6 +33,43 @@ def _portable_path(path):
         return str(resolved)
 
 
+def _load_temporal_series(path, value_column):
+    """Load a linearly interpolated forcing series with constant end values."""
+    with Path(path).open(newline="", encoding="utf-8-sig") as handle:
+        rows = list(csv.DictReader(handle))
+    if len(rows) < 2:
+        raise ValueError(f"{path} must contain at least two forcing rows")
+    try:
+        times = np.asarray([float(row["t_min"]) for row in rows])
+        values = np.asarray([float(row[value_column]) for row in rows])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError(
+            f"{path} must contain numeric t_min and {value_column} columns"
+        ) from exc
+    if (
+        np.any(~np.isfinite(times))
+        or np.any(~np.isfinite(values))
+        or np.any(np.diff(times) <= 0)
+        or times[0] != 0.0
+        or np.any(values < 0)
+    ):
+        raise ValueError(
+            f"{path} needs t_min starting at 0 and strictly increasing, "
+            f"with finite non-negative {value_column}"
+        )
+
+    def forcing(time_min):
+        return float(np.interp(time_min, times, values))
+
+    forcing.breakpoints_min = times.copy()
+    return forcing
+
+
+def _forcing_value(forcing, time_min):
+    value = forcing(time_min) if callable(forcing) else forcing
+    return float(value)
+
+
 def parse_args(argv=None):
     p = argparse.ArgumentParser(description="Run a 1-D or 2-D river solver on a profile.")
     p.add_argument("profile", help="CSV or JSON river profile path")
@@ -53,7 +90,17 @@ def parse_args(argv=None):
             "legacy unit-width m^2/min otherwise"
         ),
     )
+    p.add_argument(
+        "--inflow-series",
+        type=Path,
+        help="CSV with t_min,left_inflow for a time-varying upstream hydrograph",
+    )
     p.add_argument("--rainfall-rate", type=float, default=0.0, help="Uniform rainfall rate, m/min")
+    p.add_argument(
+        "--rainfall-series",
+        type=Path,
+        help="CSV with t_min,rainfall_rate_m_per_min for a uniform time-varying storm",
+    )
     p.add_argument("--cfl", type=float, default=0.5)
     p.add_argument(
         "--width",
@@ -103,6 +150,27 @@ def main(argv=None):
     for map_path in (args.map_markers, args.map_geometry):
         if map_path is not None and not map_path.is_file():
             raise SystemExit(f"error: map input does not exist: {map_path}")
+    if args.inflow_series is not None and args.left_inflow != 0.0:
+        raise SystemExit("error: use either --left-inflow or --inflow-series, not both")
+    for forcing_path in (args.inflow_series, args.rainfall_series):
+        if forcing_path is not None and not forcing_path.is_file():
+            raise SystemExit(f"error: forcing input does not exist: {forcing_path}")
+
+    try:
+        inflow = (
+            args.left_inflow
+            if args.inflow_series is None
+            else _load_temporal_series(args.inflow_series, "left_inflow")
+        )
+        temporal_rainfall = (
+            None
+            if args.rainfall_series is None
+            else _load_temporal_series(
+                args.rainfall_series, "rainfall_rate_m_per_min"
+            )
+        )
+    except ValueError as exc:
+        raise SystemExit(f"error: {exc}") from exc
 
     profile = load_profile(args.profile)
     if args.solver == "saint_venant_2d":
@@ -152,10 +220,24 @@ def main(argv=None):
         profile,
         t_final_min=args.t_final,
         record_interval_min=args.record_interval,
-        left_inflow=args.left_inflow,
+        left_inflow=inflow,
         rainfall_rate_m_per_min=args.rainfall_rate,
         cfl=args.cfl,
     )
+    if temporal_rainfall is not None:
+        base_rainfall = scenario.rainfall
+
+        def combined_rainfall(x, time):
+            base = (
+                np.zeros_like(x, dtype=float)
+                if base_rainfall is None
+                else base_rainfall(x, time)
+            )
+            return base + temporal_rainfall(time)
+
+        combined_rainfall.breakpoints_min = temporal_rainfall.breakpoints_min
+        scenario.rainfall = combined_rainfall
+
     if isinstance(domain, Domain2D):
         channel_depth = (
             np.zeros(len(profile.station_m))
@@ -167,6 +249,37 @@ def main(argv=None):
         scenario.initial_depth_m = np.maximum(
             water_surface[:, None] - domain.bed_elevation_m,
             0.0,
+        )
+        wet = scenario.initial_depth_m > 0.0
+        wet_width = np.sum(wet * domain.dy_m[None, :], axis=1)
+        inflow_at_zero = _forcing_value(inflow, 0.0)
+        initial_unit_flow = np.zeros_like(scenario.initial_depth_m)
+        active_rows = wet_width > 0.0
+        initial_unit_flow[active_rows] = (
+            wet[active_rows]
+            * (inflow_at_zero / wet_width[active_rows])[:, None]
+        )
+        scenario.initial_discharge = initial_unit_flow
+
+        upstream_wet = wet[0]
+        upstream_width = float(np.sum(domain.dy_m[upstream_wet]))
+        if upstream_width <= 0.0 and inflow_at_zero > 0.0:
+            raise SystemExit(
+                "error: positive 2-D inflow needs at least one initially wet upstream cell"
+            )
+
+        def distributed_inflow(time):
+            values = np.zeros(len(domain.y_m))
+            if upstream_width > 0.0:
+                values[upstream_wet] = _forcing_value(inflow, time) / upstream_width
+            return values
+
+        if hasattr(inflow, "breakpoints_min"):
+            distributed_inflow.breakpoints_min = inflow.breakpoints_min
+        scenario.left_inflow = distributed_inflow
+    elif args.solver == "saint_venant":
+        scenario.initial_discharge = np.full(
+            len(domain.x_m), _forcing_value(inflow, 0.0)
         )
 
     result = dispatch(args.solver, domain, scenario)
@@ -240,6 +353,18 @@ def main(argv=None):
         "mass_correction": result.mass_correction,
         "mass_balance_error": mass_balance_error,
         "mass_unit": "m3" if physical_volume else "m2",
+        "forcing_inputs": {
+            "inflow_series": (
+                None
+                if args.inflow_series is None
+                else _portable_path(args.inflow_series)
+            ),
+            "rainfall_series": (
+                None
+                if args.rainfall_series is None
+                else _portable_path(args.rainfall_series)
+            ),
+        },
     }
     if is_2d:
         summary["grid"] = {

@@ -292,6 +292,132 @@ def test_runner_applies_reviewed_geometry_to_1d_solvers(tmp_path, solver):
     ]
 
 
+def test_temporal_forcing_csv_is_validated_and_interpolated(tmp_path):
+    forcing_path = tmp_path / "inflow.csv"
+    forcing_path.write_text(
+        "t_min,left_inflow\n0,10\n5,20\n10,0\n",
+        encoding="utf-8",
+    )
+    forcing = run_simulation._load_temporal_series(
+        forcing_path, "left_inflow"
+    )
+
+    assert forcing(2.5) == pytest.approx(15.0)
+    assert forcing(12.0) == pytest.approx(0.0)
+    assert np.array_equal(forcing.breakpoints_min, [0.0, 5.0, 10.0])
+
+
+def test_runner_uses_boundary_flow_as_initial_1d_discharge(
+    tmp_path, monkeypatch
+):
+    captured = {}
+    actual_dispatch = run_simulation.dispatch
+
+    def capture(solver_name, domain, scenario):
+        captured["initial_discharge"] = scenario.initial_discharge
+        return actual_dispatch(solver_name, domain, scenario)
+
+    monkeypatch.setattr(run_simulation, "dispatch", capture)
+    run_simulation.main(
+        [
+            PROFILE_PATH,
+            "--solver",
+            "saint_venant",
+            "--hydraulic-geometry",
+            GEOMETRY_PATH,
+            "--left-inflow",
+            "100",
+            "--t-final",
+            "0",
+            "--output-dir",
+            str(tmp_path),
+        ]
+    )
+
+    assert np.all(captured["initial_discharge"] == 100.0)
+
+
+def test_runner_distributes_total_2d_flow_across_wet_channel(
+    tmp_path, monkeypatch
+):
+    captured = {}
+    actual_dispatch = run_simulation.dispatch
+
+    def capture(solver_name, domain, scenario):
+        captured["domain"] = domain
+        captured["depth"] = scenario.initial_depth_m.copy()
+        captured["discharge"] = scenario.initial_discharge.copy()
+        captured["boundary"] = scenario.left_inflow(0.0)
+        return actual_dispatch(solver_name, domain, scenario)
+
+    monkeypatch.setattr(run_simulation, "dispatch", capture)
+    run_simulation.main(
+        [
+            PROFILE_PATH,
+            "--solver",
+            "saint_venant_2d",
+            "--width",
+            "100",
+            "--cross-cells",
+            "20",
+            "--hydraulic-geometry",
+            GEOMETRY_PATH,
+            "--left-inflow",
+            "100",
+            "--t-final",
+            "0",
+            "--output-dir",
+            str(tmp_path),
+        ]
+    )
+
+    domain = captured["domain"]
+    wet = captured["depth"] > 0.0
+    total_initial_flow = np.sum(
+        captured["discharge"] * domain.dy_m[None, :], axis=1
+    )
+    assert np.allclose(total_initial_flow[np.any(wet, axis=1)], 100.0)
+    assert np.sum(captured["boundary"] * domain.dy_m) == pytest.approx(100.0)
+
+
+def test_runner_records_time_varying_forcing_inputs(tmp_path):
+    inflow_path = tmp_path / "inflow.csv"
+    rainfall_path = tmp_path / "rainfall.csv"
+    inflow_path.write_text(
+        "t_min,left_inflow\n0,0.001\n1,0.002\n",
+        encoding="utf-8",
+    )
+    rainfall_path.write_text(
+        "t_min,rainfall_rate_m_per_min\n0,0\n1,0.00001\n",
+        encoding="utf-8",
+    )
+    run_simulation.main(
+        [
+            PROFILE_PATH,
+            "--solver",
+            "kinematic_wave",
+            "--inflow-series",
+            str(inflow_path),
+            "--rainfall-series",
+            str(rainfall_path),
+            "--t-final",
+            "0.01",
+            "--output-dir",
+            str(tmp_path),
+            "--run-name",
+            "forcing",
+        ]
+    )
+
+    summary = json.loads(
+        (tmp_path / "forcing_summary.json").read_text(encoding="utf-8")
+    )
+    assert summary["forcing_inputs"] == {
+        "inflow_series": str(inflow_path),
+        "rainfall_series": str(rainfall_path),
+    }
+
+
 def test_runner_records_portable_map_inputs(tmp_path):
     output_dir = tmp_path / "runs"
     markers = "real_world_rivers/tools/example_markers.csv"

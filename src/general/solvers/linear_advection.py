@@ -116,6 +116,23 @@ def _evaluate_rainfall(rainfall, stations_m, t_current):
     return values
 
 
+def _evaluate_inflow(left_inflow, t_current):
+    value = left_inflow(t_current) if callable(left_inflow) else left_inflow
+    value = float(value)
+    if not np.isfinite(value) or value < 0:
+        raise ValueError("left_inflow_flux must be finite and non-negative")
+    return value
+
+
+def _cap_dt_at_forcing_breakpoints(dt, time, *forcings):
+    for forcing in forcings:
+        for breakpoint in getattr(forcing, "breakpoints_min", ()):
+            if time + 1e-12 < breakpoint < time + dt - 1e-12:
+                dt = float(breakpoint - time)
+                break
+    return dt
+
+
 def _rainfall_source(
     profile,
     rainfall_rate_m_per_min,
@@ -167,8 +184,7 @@ def run_model(
         raise ValueError("t_final_min must be non-negative")
     if record_interval_min <= 0:
         raise ValueError("record_interval_min must be positive")
-    if left_inflow_flux < 0:
-        raise ValueError("left_inflow_flux must be non-negative")
+    _evaluate_inflow(left_inflow_flux, 0.0)
     if rainfall_rate_m_per_min < 0:
         raise ValueError("rainfall_rate_m_per_min must be non-negative")
     if rainfall_start_min < 0:
@@ -233,6 +249,9 @@ def run_model(
             dt = rainfall_end_min - t_current
         if t_current < rainfall_start_min < t_current + dt:
             dt = rainfall_start_min - t_current
+        dt = _cap_dt_at_forcing_breakpoints(
+            dt, t_current, left_inflow_flux, rainfall
+        )
         if dt <= 1e-12:
             dt = min(t_final_min - t_current, 1e-12)
 
@@ -246,7 +265,8 @@ def run_model(
             else q(depth, profile.slope, profile.manning_n)
         )
         interface_flux = np.empty(len(depth) + 1, dtype=float)
-        interface_flux[0] = left_inflow_flux
+        inflow = _evaluate_inflow(left_inflow_flux, t_current)
+        interface_flux[0] = inflow
         interface_flux[1:] = cell_flux
 
         source = _rainfall_source(
@@ -265,7 +285,7 @@ def run_model(
         )
         depth = np.maximum(area / channel_width, MIN_DEPTH)
 
-        mass_inflow += left_inflow_flux * dt
+        mass_inflow += inflow * dt
         mass_source += float(
             np.sum(source * channel_width * profile.dx_m) * dt
         )
@@ -326,7 +346,11 @@ def save_summary_json(result, path):
             "left_inflow_m3_per_min"
             if result["uses_cross_section"]
             else "left_inflow_flux_m2_per_min"
-        ): float(result["left_inflow_flux"]),
+        ): (
+            None
+            if callable(result["left_inflow_flux"])
+            else float(result["left_inflow_flux"])
+        ),
         "rainfall_rate_m_per_min": float(result["rainfall_rate_m_per_min"]),
         "rainfall_start_min": float(result["rainfall_start_min"]),
         "rainfall_end_min": None if result["rainfall_end_min"] is None else float(result["rainfall_end_min"]),
@@ -359,16 +383,12 @@ class _KinematicWaveSolver:
             initial_depth_m=init_depth if isinstance(init_depth, np.ndarray) else None,
         )
 
-        left_inflow = scenario.left_inflow
-        if callable(left_inflow):
-            left_inflow = float(left_inflow(0.0))
-
         base_depth_m = float(init_depth) if not isinstance(init_depth, np.ndarray) else 0.01
 
         result = run_model(
             profile,
             t_final_min=scenario.t_final_min,
-            left_inflow_flux=float(left_inflow),
+            left_inflow_flux=scenario.left_inflow,
             record_interval_min=scenario.record_interval_min,
             rainfall=scenario.rainfall,
             cfl=scenario.cfl,

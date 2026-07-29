@@ -180,6 +180,31 @@ def test_callable_rainfall_is_evaluated_during_time_stepping():
     assert max(evaluation_times) > 0.0
 
 
+def test_callable_inflow_is_not_collapsed_to_initial_value():
+    profile = _uniform_profile(
+        n_cells=101,
+        length_m=10.0,
+        slope=0.05,
+        manning_n=0.05,
+    )
+    evaluation_times = []
+
+    def inflow(time):
+        evaluation_times.append(time)
+        return 0.001 + 0.01 * time
+
+    result = la.run_model(
+        profile,
+        t_final_min=0.05,
+        left_inflow_flux=inflow,
+        base_depth_m=0.5,
+    )
+
+    assert min(evaluation_times) == 0.0
+    assert max(evaluation_times) > 0.0
+    assert result["mass_inflow"] > 0.001 * 0.05
+
+
 # ── analytical equilibrium ─────────────────────────────────────────────────
 def test_reaches_analytical_equilibrium():
     # Small uniform reach, zero upstream inflow, constant rainfall. The discrete

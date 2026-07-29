@@ -117,6 +117,7 @@ The rationale for each transition is given alongside the change.
 | **4h — Geographic flood screening** | Current branch | Added an interactive topographic map that animates canonical saved depth time series along a reviewed river centerline. The runner can record portable marker and geometry paths in its summary so the map command auto-discovers them. | Existing reports quantify outcomes but do not place a 1-D result in geographic context. The map makes scenario review easier while explicitly retaining the distinction between estimated cross-section width and a terrain-resolving 2-D inundation boundary. |
 | **4i — Observed baseline and well-balanced 1-D dynamics** | Current branch | Added an approved-USGS two-gauge validation case and rebuilt 1-D Saint-Venant bed coupling with hydrostatic reconstruction and a conservative draining limiter. | Exact flat-bed and synthetic tests hid spurious currents over real topography. The observed case now quantifies field error, while the 1-D solver preserves a non-flat lake at rest without mass-adding depth floors. |
 | **4j — Hydraulic cross-sections** | Current branch | Added reviewed per-cell channel width and bankfull depth to the 1-D domain. Both 1-D solvers now conserve whole-channel volume and discharge when geometry is supplied; Saint-Venant includes rectangular hydraulic radius and a well-balanced non-prismatic width source. | Unit-width flow cannot reproduce real storage, wetted perimeter, friction, rainfall volume, or gauge discharge without ad hoc conversions. |
+| **4k — Event forcing and consistent startup** | Current branch | Added linearly interpolated inflow/rainfall CSV forcing, preserved callable hydrographs in every solver, aligned time steps with forcing knots, and initialized dynamic-wave discharge from the boundary flow. Whole-channel 2-D flow is distributed only across initially wet upstream cells. | Collapsing a hydrograph to its first value and starting a flowing boundary from zero momentum create physically false transients and erase the event being simulated. |
 
 ---
 
@@ -164,7 +165,9 @@ python src/rivers/simulations/run_simulation.py PROFILE --solver SOLVER --t-fina
 | `--t-final` | *(required)* | Simulation duration, minutes |
 | `--record-interval` | `1.0` | Snapshot interval, minutes |
 | `--left-inflow` | `0.0` | Constant upstream flow: m³/min with hydraulic geometry, legacy m²/min otherwise |
+| `--inflow-series` | — | CSV with `t_min,left_inflow`; mutually exclusive with nonzero `--left-inflow` |
 | `--rainfall-rate` | `0.0` | Uniform rainfall rate, m/min |
+| `--rainfall-series` | — | CSV with `t_min,rainfall_rate_m_per_min`; added to profile and constant rainfall |
 | `--cfl` | `0.5` | CFL target (0 < CFL ≤ 1) |
 | `--width` | — | Total channel-plus-floodplain domain width in metres; required for `saint_venant_2d` |
 | `--cross-cells` | `10` | Number of cells across a 2-D domain |
@@ -234,6 +237,12 @@ interpolated width in storage and friction, and reports mass in m³. Omitting
 geometry retains the historical unit-width mode for verification and backward
 compatibility. `bankfull_depth_m` is retained as a reviewed reference; the 1-D
 section itself is currently rectangular.
+
+Time-varying forcing CSVs must start at `t_min=0`, contain at least two strictly
+increasing times, and have finite non-negative values. Values are linearly
+interpolated between rows and held constant outside the supplied range. Solver
+time steps land exactly on every forcing row, preventing a sharp forcing change
+from being skipped. The summary records portable paths to both forcing files.
 
 ### Reporting saved flood outcomes
 

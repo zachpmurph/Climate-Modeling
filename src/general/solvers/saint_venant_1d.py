@@ -202,6 +202,15 @@ def _evaluate_rainfall(rainfall, x_m, t):
     return values
 
 
+def _cap_dt_at_forcing_breakpoints(dt, time, *forcings):
+    for forcing in forcings:
+        for breakpoint in getattr(forcing, "breakpoints_min", ()):
+            if time + 1e-12 < breakpoint < time + dt - 1e-12:
+                dt = float(breakpoint - time)
+                break
+    return dt
+
+
 def _record_times(final_time, record_interval):
     count = int(np.floor(final_time / record_interval + 1e-9))
     values = [index * record_interval for index in range(count + 1)]
@@ -303,6 +312,9 @@ def run_model(
         dt = min(dt, T_final - t_current)
         if rainfall is None and t_current < 50 < t_current + dt:
             dt = 50 - t_current
+        dt = _cap_dt_at_forcing_breakpoints(
+            dt, t_current, left_inflow, rainfall_function
+        )
 
         h_previous = h.copy()
         q_previous = q.copy()
