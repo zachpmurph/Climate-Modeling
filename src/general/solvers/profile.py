@@ -167,13 +167,44 @@ def load_profile(path):
     raise ValueError(f"Unsupported river profile format: {suffix}")
 
 
-def domain_from_profile(profile: RiverProfile) -> Domain:
+def domain_from_profile(
+    profile: RiverProfile,
+    *,
+    channel_width_m=None,
+    bankfull_depth_m=None,
+) -> Domain:
     """Build a Domain from a RiverProfile (uses per-cell slope and Manning n)."""
+    if (channel_width_m is None) != (bankfull_depth_m is None):
+        raise ValueError(
+            "channel_width_m and bankfull_depth_m must be supplied together"
+        )
+    width = (
+        None
+        if channel_width_m is None
+        else np.asarray(channel_width_m, dtype=float)
+    )
+    bankfull = (
+        None
+        if bankfull_depth_m is None
+        else np.asarray(bankfull_depth_m, dtype=float)
+    )
+    for values, name in (
+        (width, "channel_width_m"),
+        (bankfull, "bankfull_depth_m"),
+    ):
+        if values is not None and (
+            values.shape != profile.station_m.shape
+            or np.any(~np.isfinite(values))
+            or np.any(values <= 0)
+        ):
+            raise ValueError(f"{name} must contain one finite positive value per station")
     return Domain(
         x_m=profile.station_m,
         dx_m=profile.dx_m,
         slope=profile.slope,
         manning_n=profile.manning_n,
+        channel_width_m=width,
+        bankfull_depth_m=bankfull,
     )
 
 

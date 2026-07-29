@@ -19,6 +19,8 @@ class Domain:
     slope: np.ndarray      # bed slope S0, dimensionless
     manning_n: np.ndarray  # Manning roughness n
     bed_elevation_m: np.ndarray | None = None  # explicit z_b, shape (nx,)
+    channel_width_m: np.ndarray | None = None  # rectangular top/bottom width, shape (nx,)
+    bankfull_depth_m: np.ndarray | None = None  # reviewed reference depth, shape (nx,)
 
 
 @dataclass(frozen=True)

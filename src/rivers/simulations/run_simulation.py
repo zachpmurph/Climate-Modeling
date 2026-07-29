@@ -44,7 +44,15 @@ def parse_args(argv=None):
     )
     p.add_argument("--t-final", type=float, required=True, help="Simulation duration in minutes")
     p.add_argument("--record-interval", type=float, default=1.0)
-    p.add_argument("--left-inflow", type=float, default=0.0, help="Constant upstream inflow flux, m^2/min")
+    p.add_argument(
+        "--left-inflow",
+        type=float,
+        default=0.0,
+        help=(
+            "Constant upstream flow: m^3/min with --hydraulic-geometry, "
+            "legacy unit-width m^2/min otherwise"
+        ),
+    )
     p.add_argument("--rainfall-rate", type=float, default=0.0, help="Uniform rainfall rate, m/min")
     p.add_argument("--cfl", type=float, default=0.5)
     p.add_argument(
@@ -61,7 +69,10 @@ def parse_args(argv=None):
     p.add_argument(
         "--hydraulic-geometry",
         type=Path,
-        help="Reviewed station/width/bankfull CSV required for a terrain-backed 2-D run",
+        help=(
+            "Reviewed station/width/bankfull CSV; enables physical 1-D "
+            "cross-sections and is required for a terrain-backed 2-D run"
+        ),
     )
     p.add_argument(
         "--floodplain-slope",
@@ -117,11 +128,25 @@ def main(argv=None):
             floodplain_slope=args.floodplain_slope,
         )
     else:
-        if args.width is not None or args.hydraulic_geometry is not None:
+        if args.width is not None:
             raise SystemExit(
-                "error: --width and --hydraulic-geometry are only valid with saint_venant_2d"
+                "error: --width is only valid with saint_venant_2d"
             )
-        domain = domain_from_profile(profile)
+        if args.hydraulic_geometry is None:
+            domain = domain_from_profile(profile)
+        else:
+            if not args.hydraulic_geometry.is_file():
+                raise SystemExit(
+                    f"error: hydraulic geometry does not exist: {args.hydraulic_geometry}"
+                )
+            channel_width, bankfull_depth = load_channel_geometry(
+                args.hydraulic_geometry, profile.station_m
+            )
+            domain = domain_from_profile(
+                profile,
+                channel_width_m=channel_width,
+                bankfull_depth_m=bankfull_depth,
+            )
 
     scenario = scenario_from_profile(
         profile,
@@ -188,7 +213,14 @@ def main(argv=None):
     cell_measure = (
         result.domain.dx_m[:, None] * result.domain.dy_m[None, :]
         if is_2d
-        else result.domain.dx_m
+        else (
+            result.domain.dx_m
+            if result.domain.channel_width_m is None
+            else result.domain.dx_m * result.domain.channel_width_m
+        )
+    )
+    physical_volume = is_2d or (
+        not is_2d and result.domain.channel_width_m is not None
     )
     mass_balance_error = (
         result.mass_inflow + result.mass_source + result.mass_correction - result.mass_outflow
@@ -207,6 +239,7 @@ def main(argv=None):
         "mass_outflow": result.mass_outflow,
         "mass_correction": result.mass_correction,
         "mass_balance_error": mass_balance_error,
+        "mass_unit": "m3" if physical_volume else "m2",
     }
     if is_2d:
         summary["grid"] = {
@@ -216,6 +249,13 @@ def main(argv=None):
             "hydraulic_geometry": _portable_path(args.hydraulic_geometry),
             "floodplain_slope": args.floodplain_slope,
             "bankfull_depth_m": bankfull_depth.tolist(),
+        }
+    elif result.domain.channel_width_m is not None:
+        summary["cross_section"] = {
+            "hydraulic_geometry": _portable_path(args.hydraulic_geometry),
+            "channel_width_m": result.domain.channel_width_m.tolist(),
+            "bankfull_depth_m": result.domain.bankfull_depth_m.tolist(),
+            "shape": "rectangular",
         }
     if args.map_markers is not None:
         summary["map_inputs"] = {
@@ -227,7 +267,10 @@ def main(argv=None):
 
     artifact_text = f"  Fields: {fields_path}" if fields_path else ""
     print(f"Done. CSV: {csv_path}{artifact_text}  Summary: {json_path}")
-    print(f"Mass balance error: {mass_balance_error:.4e} {'m^3' if is_2d else 'm^2'}")
+    print(
+        f"Mass balance error: {mass_balance_error:.4e} "
+        f"{'m^3' if physical_volume else 'm^2'}"
+    )
 
 
 if __name__ == "__main__":

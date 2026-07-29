@@ -69,17 +69,43 @@ def load_two_gauge_observations(path):
     return result
 
 
-def discharge_boundary(times_min, discharge_m3_per_min, width_m):
-    """Create a unit-width upstream hydrograph callable in m²/min."""
-    if not math.isfinite(width_m) or width_m <= 0:
-        raise ValueError("Boundary width must be finite and positive")
+def discharge_boundary(times_min, discharge_m3_per_min):
+    """Create a whole-channel upstream hydrograph callable in m³/min."""
     times = np.asarray(times_min, dtype=float)
-    unit_discharge = np.asarray(discharge_m3_per_min, dtype=float) / width_m
+    discharge = np.asarray(discharge_m3_per_min, dtype=float)
 
     def boundary(time_min):
-        return float(np.interp(time_min, times, unit_discharge))
+        return float(np.interp(time_min, times, discharge))
 
     return boundary
+
+
+def rectangular_normal_depth(discharge, width, manning_n, slope):
+    """Solve Manning's relation for depth in a rectangular cross-section."""
+    if min(discharge, width, manning_n, slope) <= 0:
+        raise ValueError("Normal-depth inputs must be positive")
+
+    def residual(depth):
+        area = width * depth
+        hydraulic_radius = area / (width + 2.0 * depth)
+        predicted = (
+            area
+            * hydraulic_radius ** (2.0 / 3.0)
+            * math.sqrt(slope)
+            / manning_n
+        )
+        return predicted - discharge
+
+    lower, upper = 0.0, 1.0
+    while residual(upper) < 0.0:
+        upper *= 2.0
+    for _ in range(80):
+        midpoint = 0.5 * (lower + upper)
+        if residual(midpoint) < 0.0:
+            lower = midpoint
+        else:
+            upper = midpoint
+    return 0.5 * (lower + upper)
 
 
 def run_validation_case(config_path, *, output_path=None):
@@ -110,9 +136,12 @@ def run_validation_case(config_path, *, output_path=None):
     dx_m = np.full(cells, length_m / cells)
     bed_slope = np.full(cells, slope)
     roughness = np.full(cells, manning_n)
-    boundary = discharge_boundary(upstream_times, upstream_flow, upstream_width)
+    channel_width = np.linspace(upstream_width, downstream_width, cells)
+    boundary = discharge_boundary(upstream_times, upstream_flow)
     initial_q = boundary(0.0)
-    normal_depth = (initial_q * manning_n / math.sqrt(slope)) ** (3.0 / 5.0)
+    normal_depth = rectangular_normal_depth(
+        initial_q, upstream_width, manning_n, slope
+    )
     warmup_min = float(config.get("warmup_min", 0.0))
     initial_depth = np.full(cells, normal_depth)
     initial_discharge = np.full(cells, initial_q)
@@ -129,6 +158,7 @@ def run_validation_case(config_path, *, output_path=None):
             dx_m=dx_m,
             slope=bed_slope,
             manning_n=roughness,
+            channel_width_m=channel_width,
             cfl=float(config.get("cfl", 0.4)),
         )
         initial_depth = warmup["h_final"]
@@ -146,13 +176,14 @@ def run_validation_case(config_path, *, output_path=None):
         dx_m=dx_m,
         slope=bed_slope,
         manning_n=roughness,
+        channel_width_m=channel_width,
         cfl=float(config.get("cfl", 0.4)),
     )
 
     target = (downstream_times >= 0.0) & (downstream_times <= duration)
     target_times = downstream_times[target]
     target_flow = downstream_flow[target]
-    predicted_flow = result["q_history"][:, -1] * downstream_width
+    predicted_flow = result["q_history"][:, -1]
     scores = evaluate_series(
         target_times,
         target_flow,
@@ -175,7 +206,7 @@ def run_validation_case(config_path, *, output_path=None):
             "initial_condition": (
                 "constant-boundary hydraulic warm-up from uniform Manning normal flow"
                 if warmup_min > 0
-                else "uniform Manning normal depth and upstream unit discharge"
+                else "uniform rectangular-section Manning normal depth and discharge"
             ),
             "warmup_min": warmup_min,
             "lateral_inflow": "zero",
@@ -191,10 +222,10 @@ def run_validation_case(config_path, *, output_path=None):
             if key != "predicted_on_obs"
         },
         "mass": {
-            "inflow_m2": float(result["mass_inflow"]),
-            "source_m2": float(result["mass_source"]),
-            "outflow_m2": float(result["mass_outflow"]),
-            "floor_correction_m2": float(result["mass_floor_correction"]),
+            "inflow_m3": float(result["mass_inflow"]),
+            "source_m3": float(result["mass_source"]),
+            "outflow_m3": float(result["mass_outflow"]),
+            "floor_correction_m3": float(result["mass_floor_correction"]),
         },
         "series": {
             "observed_times_min": target_times.tolist(),

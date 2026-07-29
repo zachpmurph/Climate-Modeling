@@ -259,6 +259,39 @@ def test_runner_initializes_2d_depth_from_level_water_surface(tmp_path):
     assert summary["grid"]["bankfull_depth_m"] == [2.5, 2.8, 2.8, 2.8, 2.8]
 
 
+@pytest.mark.parametrize("solver", ["kinematic_wave", "saint_venant"])
+def test_runner_applies_reviewed_geometry_to_1d_solvers(tmp_path, solver):
+    output_dir = tmp_path / "runs"
+    run_simulation.main(
+        [
+            PROFILE_PATH,
+            "--solver",
+            solver,
+            "--hydraulic-geometry",
+            GEOMETRY_PATH,
+            "--t-final",
+            "0",
+            "--output-dir",
+            str(output_dir),
+            "--run-name",
+            solver,
+        ]
+    )
+
+    summary = json.loads(
+        (output_dir / f"{solver}_summary.json").read_text(encoding="utf-8")
+    )
+    assert summary["mass_unit"] == "m3"
+    assert summary["cross_section"]["shape"] == "rectangular"
+    assert summary["cross_section"]["channel_width_m"] == [
+        20.0,
+        24.0,
+        24.0,
+        24.0,
+        24.0,
+    ]
+
+
 def test_runner_records_portable_map_inputs(tmp_path):
     output_dir = tmp_path / "runs"
     markers = "real_world_rivers/tools/example_markers.csv"

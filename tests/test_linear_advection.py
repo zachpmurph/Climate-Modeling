@@ -112,6 +112,34 @@ def test_rainfall_source_mass_balance():
     assert delta_storage == pytest.approx(expected_delta, rel=1e-3, abs=1e-8)
 
 
+def test_rectangular_width_uses_hydraulic_radius_and_conserves_volume():
+    profile = _uniform_profile(n_cells=21, length_m=100.0)
+    width = np.linspace(10.0, 20.0, len(profile.station_m))
+    rainfall = 0.00001
+    result = la.run_model(
+        profile,
+        t_final_min=1.0,
+        left_inflow_flux=0.0,
+        base_depth_m=0.2,
+        rainfall_rate_m_per_min=rainfall,
+        channel_width_m=width,
+    )
+
+    storage_delta = np.sum(
+        (result["depth_final"] - result["depth_initial"])
+        * width
+        * profile.dx_m
+    )
+    expected_delta = (
+        result["mass_inflow"] + result["mass_source"] - result["mass_outflow"]
+    )
+    assert storage_delta == pytest.approx(expected_delta, rel=1e-9, abs=1e-10)
+    assert result["mass_source"] == pytest.approx(
+        rainfall * np.sum(width * profile.dx_m)
+    )
+    assert result["uses_cross_section"] is True
+
+
 def test_profile_rainfall_adds_to_uniform_rainfall():
     profile = la.make_profile(
         station_m=[0, 100, 200],
