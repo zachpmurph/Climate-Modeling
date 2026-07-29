@@ -121,8 +121,9 @@ The rationale for each transition is given alongside the change.
 | **4l — Provenance-safe solver grids** | Current branch | Added optional longitudinal resampling that linearly interpolates reviewed fields onto a derived numerical grid while preserving reach length and labeling the source/solver cell counts in every summary. | A five-station measurement profile is too coarse for routing, but silently treating interpolated cells as observations overstates the evidence. |
 | **4m — Conservative dry kinematic states** | Current branch | Removed the artificial minimum depth from profile loading and kinematic updates, added a conservative draining limiter, retained time-varying hydrographs, and exposed any roundoff floor correction in mass accounting. | A hidden depth floor creates water in every dry cell and can make a mass balance appear better than it is. |
 | **4n — Downstream hydraulic boundaries** | Current branch | Added free-outflow, reflecting-wall, and prescribed-stage downstream boundaries to 1-D Saint-Venant, including stage-driven backflow and signed boundary mass accounting. | A zero-gradient outlet cannot represent a dam, closed gate, lake level, tide, or downstream backwater control. |
-| **4o — Limited second-order reconstruction** | Current branch | Added optional minmod-limited second-order reconstruction of water surface, bed, and velocity/momentum to both Saint-Venant solvers (plus width and unit discharge in 1-D). It retains hydrostatic well-balancing and conservative draining limiters while reducing smooth-wave diffusion. | First-order piecewise-constant Rusanov fluxes smear hydrographs and wetting fronts, especially on long reaches. |
+| **4o — Limited second-order reconstruction** | Current branch | Added optional minmod-limited second-order reconstruction of water surface, bed, and velocity/momentum to both Saint-Venant solvers (plus width and unit discharge in 1-D). It retains hydrostatic well-balancing and conservative draining limiters while reducing smooth-wave diffusion; the 1-D path uses a two-stage SSP update. | First-order piecewise-constant Rusanov fluxes smear hydrographs and wetting fronts, especially on long reaches. Pairing higher-order spatial reconstruction with forward Euler also caused unacceptable long-run behavior. |
 | **4p — Manning fixture units** | Current branch | Converted the shipped example profile, reviewed-roughness example, standalone kinematic demo, and ingestion fixtures from conventional SI seconds-based Manning values to the repository's minutes-based values (`n_model = n_SI / 60`). | Supplying `0.035` directly to a minutes-based solver makes roughness 60× too large and mislabels a seconds-scale Manning flux as per-minute flow. |
+| **4q — Structural sensitivity evidence** | Current branch | Added a reproducible one-at-a-time matrix for the held-out Colorado River case, covering roughness, width, grid resolution, and reconstruction order. Results and score ranges are tracked without selecting or fitting a best parameter. | One field score hides parameter dependence and can encourage accidental calibration. The matrix exposes model risk while preserving the downstream gauge as validation data. |
 
 ---
 
@@ -379,6 +380,24 @@ python src/general/verification/verify_saint_venant_2d.py \
     --output docs/validation/saint_venant_2d_results.json
 ```
 
+Reproduce the held-out two-gauge field baseline and its structural sensitivity
+screening:
+
+```bash
+python src/rivers/validation/run_case.py \
+    real_world_rivers/validation/glen_canyon_lees_ferry.json
+python src/rivers/validation/run_sensitivity.py \
+    real_world_rivers/validation/glen_canyon_lees_ferry.json
+```
+
+The field case is deliberately uncalibrated. Its downstream observations are
+used only for scoring; the sensitivity matrix varies roughness, width,
+longitudinal resolution, and spatial reconstruction one at a time. The tracked
+screening shows NSE from `-1.35` to `0.63`: roughness dominates the tested input
+range, grid refinement is nearly neutral, and second-order reconstruction exposes
+strong sensitivity to the simplified steady-flow initialization. Do not choose a
+variant from this matrix as a calibration.
+
 Dependencies are pinned in `requirements.txt`. The GitHub Actions verification
 workflow runs the complete suite and matrix from a clean checkout.
 
@@ -397,6 +416,8 @@ src/general/viz/animate_depth.py               # animates a saved depth-vs-time 
 src/rivers/simulations/registry.py             # name → Solver mapping
 src/rivers/simulations/run_simulation.py       # unified CLI dispatcher
 src/rivers/simulations/ingest_to_simulate.py   # profile_path → (Domain, Scenario) helper
+src/rivers/validation/run_case.py              # held-out two-gauge field validation
+src/rivers/validation/run_sensitivity.py       # one-at-a-time structural sensitivity
 src/rivers/reporting/generate_flood_report.py  # saved artifacts → HTML + outcomes JSON
 src/rivers/visualization/animate_flood_map.py  # saved time series → geographic HTML animation
 src/rivers/ingest/run_ingestion.py             # config-driven ingestion CLI (one reach or --all)

@@ -384,8 +384,9 @@ def run_model(
     returning that discharge. With ``channel_width_m`` it is total flow in
     m^3/min; the legacy unit-width mode uses m^2/min. None is a no-inflow upstream
     boundary. rainfall is a callable ``rainfall(x_m, t_min)`` returning one
-    non-negative rate in m/min per cell. The downstream boundary is
-    zero-gradient free outflow.
+    non-negative rate in m/min per cell. ``spatial_order=2`` uses limited
+    reconstruction with a two-stage SSP update. The downstream boundary may be
+    transmissive outflow, a reflecting wall, or a prescribed stage.
     """
     x, dx, bed_slope, roughness = _prepare_grid(
         L,
@@ -451,6 +452,70 @@ def run_model(
     mass_floor_correction = 0.0
     t_current = 0.0
 
+    def euler_stage(h_stage, q_stage, stage_time, dt, flux_data=None):
+        if flux_data is None:
+            flux_data = _rusanov_fluxes(
+                h_stage,
+                q_stage,
+                bed,
+                width,
+                left_inflow,
+                stage_time,
+                downstream_boundary,
+                downstream_stage_m,
+                spatial_order,
+            )
+        (
+            flux_h,
+            flux_q,
+            _,
+            correction_left,
+            correction_right,
+            geometry_balance,
+        ) = flux_data
+        source = _evaluate_rainfall(rainfall_function, x, stage_time)
+        area = width * h_stage
+        area_source = width * source
+        flux_h, flux_q = _limit_draining_fluxes(
+            area, area_source, dt, dx, flux_h, flux_q
+        )
+        area_new = (
+            area
+            - (dt / dx) * (flux_h[1:] - flux_h[:-1])
+            + dt * area_source
+        )
+        q_new = q_stage - (dt / dx) * (
+            (flux_q + correction_left)[1:]
+            - (flux_q + correction_right)[:-1]
+            - geometry_balance
+        )
+
+        floor_addition = np.maximum(-area_new, 0.0)
+        area_new = np.maximum(area_new, 0.0)
+        h_new = area_new / width
+        velocity_new = _velocity(h_new, q_new, width)
+        friction_coeff = np.zeros_like(h_new)
+        wet = h_new > H_FLOOR
+        hydraulic_radius = h_new.copy()
+        if uses_cross_section:
+            hydraulic_radius[wet] = (
+                width[wet] * h_new[wet] / (width[wet] + 2.0 * h_new[wet])
+            )
+        friction_coeff[wet] = (
+            roughness[wet] ** 2
+            * np.abs(velocity_new[wet])
+            / hydraulic_radius[wet] ** (4.0 / 3.0)
+        )
+        q_new = q_new / (1.0 + dt * g * friction_coeff)
+        q_new[h_new <= H_FLOOR] = 0.0
+        diagnostics = {
+            "inflow_rate": float(flux_h[0]),
+            "downstream_rate": float(flux_h[-1]),
+            "source_rate": float(np.sum(area_source * dx)),
+            "floor_volume": float(np.sum(floor_addition * dx)),
+        }
+        return h_new, q_new, diagnostics
+
     while t_current < T_final - 1e-12:
         (
             flux_h,
@@ -489,52 +554,40 @@ def run_model(
 
         h_previous = h.copy()
         q_previous = q.copy()
-        source = _evaluate_rainfall(rainfall_function, x, t_current)
-        area = width * h
-        area_source = width * source
-        flux_h, flux_q = _limit_draining_fluxes(
-            area, area_source, dt, dx, flux_h, flux_q
+        first_flux_data = (
+            flux_h,
+            flux_q,
+            interface_speed,
+            correction_left,
+            correction_right,
+            geometry_balance,
         )
-
-        area_new = (
-            area
-            - (dt / dx) * (flux_h[1:] - flux_h[:-1])
-            + dt * area_source
+        h_stage, q_stage, first_diagnostics = euler_stage(
+            h, q, t_current, dt, first_flux_data
         )
-        q_new = q - (dt / dx) * (
-            (flux_q + correction_left)[1:]
-            - (flux_q + correction_right)[:-1]
-            - geometry_balance
-        )
-
-        floor_addition = np.maximum(-area_new, 0.0)
-        mass_floor_correction += float(np.sum(floor_addition * dx))
-        area_new = np.maximum(area_new, 0.0)
-        h_new = area_new / width
-
-        velocity_new = _velocity(h_new, q_new, width)
-        friction_coeff = np.zeros_like(h_new)
-        wet = h_new > H_FLOOR
-        hydraulic_radius = h_new.copy()
-        if uses_cross_section:
-            hydraulic_radius[wet] = (
-                width[wet] * h_new[wet] / (width[wet] + 2.0 * h_new[wet])
+        if spatial_order == 2:
+            second_time = np.nextafter(t_current + dt, t_current)
+            h_euler, q_euler, second_diagnostics = euler_stage(
+                h_stage, q_stage, second_time, dt
             )
-        friction_coeff[wet] = (
-            roughness[wet] ** 2
-            * np.abs(velocity_new[wet])
-            / hydraulic_radius[wet] ** (4.0 / 3.0)
-        )
-        q_new = q_new / (1.0 + dt * g * friction_coeff)
-        q_new[h_new <= H_FLOOR] = 0.0
+            h_new = 0.5 * (h + h_euler)
+            q_new = 0.5 * (q + q_euler)
+            diagnostics = {
+                key: 0.5 * (first_diagnostics[key] + second_diagnostics[key])
+                for key in first_diagnostics
+            }
+        else:
+            h_new, q_new = h_stage, q_stage
+            diagnostics = first_diagnostics
 
-        mass_inflow += float(flux_h[0] * dt)
-        downstream_mass = float(flux_h[-1] * dt)
+        mass_floor_correction += diagnostics["floor_volume"]
+        mass_inflow += diagnostics["inflow_rate"] * dt
+        downstream_mass = diagnostics["downstream_rate"] * dt
         if downstream_mass >= 0.0:
             mass_outflow += downstream_mass
         else:
             mass_inflow -= downstream_mass
-        mass_source += float(np.sum(area_source * dx) * dt)
+        mass_source += diagnostics["source_rate"] * dt
 
         h, q = h_new, q_new
         t_next = t_current + dt

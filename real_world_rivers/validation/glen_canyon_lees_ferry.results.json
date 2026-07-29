@@ -31,6 +31,7 @@
     "length_source": "USGS NLDI NHDPlusV2 routed centerline",
     "initial_condition": "constant-boundary hydraulic warm-up from uniform Manning normal flow",
     "warmup_min": 720.0,
+    "spatial_order": 1,
     "lateral_inflow": "zero",
     "rainfall": "zero"
   },

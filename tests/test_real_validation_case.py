@@ -7,12 +7,14 @@ from rivers.validation.run_case import (
     load_two_gauge_observations,
     run_validation_case,
 )
+from rivers.validation.run_sensitivity import build_variants
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CASE = REPO_ROOT / "real_world_rivers" / "validation" / "glen_canyon_lees_ferry.json"
 OBSERVATIONS = CASE.with_name("glen_canyon_lees_ferry_2004-07-01.csv")
 EVIDENCE = CASE.with_suffix(".results.json")
+SENSITIVITY = CASE.with_suffix(".sensitivity.json")
 
 
 def test_committed_two_gauge_observations_are_complete_and_ordered():
@@ -39,3 +41,36 @@ def test_real_case_reproduces_tracked_uncalibrated_baseline(tmp_path):
         assert actual["scores"][metric] == pytest.approx(
             tracked["scores"][metric], rel=1e-10, abs=1e-10
         )
+
+
+def test_sensitivity_variants_are_one_at_a_time_and_symmetric():
+    config = json.loads(CASE.read_text(encoding="utf-8"))
+    variants = {
+        name: (overrides, changes)
+        for name, overrides, changes in build_variants(config)
+    }
+
+    assert len(variants) == 8
+    base_n = config["reach"]["manning_n"]
+    assert variants["roughness_minus_20_percent"][0]["reach"][
+        "manning_n"
+    ] == pytest.approx(0.8 * base_n)
+    assert variants["roughness_plus_20_percent"][0]["reach"][
+        "manning_n"
+    ] == pytest.approx(1.2 * base_n)
+    assert variants["second_order_reconstruction"][0] == {"spatial_order": 2}
+
+
+def test_tracked_sensitivity_evidence_covers_every_variant():
+    evidence = json.loads(SENSITIVITY.read_text(encoding="utf-8"))
+    configured = {
+        name
+        for name, _, _ in build_variants(
+            json.loads(CASE.read_text(encoding="utf-8"))
+        )
+    }
+
+    assert evidence["method"]["type"] == "one_at_a_time"
+    assert {run["name"] for run in evidence["runs"]} == configured
+    assert evidence["score_ranges"]["nse"]["minimum"] < 0.0
+    assert evidence["score_ranges"]["nse"]["maximum"] > 0.5

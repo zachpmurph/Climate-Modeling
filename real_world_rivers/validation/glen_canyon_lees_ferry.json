@@ -41,5 +41,6 @@
   },
   "warmup_min": 720.0,
   "record_interval_min": 5.0,
+  "spatial_order": 1,
   "cfl": 0.4
 }

@@ -178,21 +178,23 @@ scope.
 The gaps below are next-stage improvements, not missing Tier 3 gates for the
 current documented method.
 
-1. **Verify a more physical open boundary.**
-   - A characteristic or radiation boundary would reduce reflections compared
-     with the present zero-gradient outflow.
-   - Estimated effort: 3–6 focused engineering days including analytic tests.
+1. **Extend hydraulic boundaries and field validation.**
+   - The 1-D solver now supports transmissive outflow, wall, and prescribed-stage
+     downstream boundaries with regression tests. The 2-D solver still uses its
+     simpler boundary set and needs case-specific open-boundary justification.
+   - The committed two-gauge case and one-at-a-time sensitivity matrix establish
+     an uncalibrated baseline, not transferable predictive skill.
 
 2. **Add partially dry non-flat shoreline equilibria.**
    - This would strengthen the coupling between well-balanced topography and
      wet/dry reconstruction beyond the existing separate tests.
    - Estimated effort: 2–4 focused engineering days.
 
-3. **Begin real-basin validation.**
-   - Numerical verification does not establish correct terrain, roughness,
-     forcing, boundary data, or observed flood outcomes.
-   - Estimated effort: project-dependent; expect several weeks for one
-     well-instrumented basin after inputs and observations are assembled.
+3. **Add independent events and uncertainty distributions.**
+   - Numerical verification and one observed event do not establish correct
+     terrain, roughness, forcing, boundary data, or flood outcomes elsewhere.
+   - Calibrate only on separate events, then report out-of-sample performance
+     and probabilistic input uncertainty.
 
 ## Recommendation
 
@@ -200,4 +202,5 @@ The solver can move from numerical-method verification to carefully scoped
 real-basin application. Preserve the current benchmark matrix as a regression
 gate. Before interpreting flood outcomes, add case-specific input provenance,
 mesh/terrain review, boundary-condition justification, calibration data,
-out-of-sample validation, sensitivity analysis, and uncertainty reporting.
+out-of-sample validation and uncertainty reporting. Keep the committed
+one-at-a-time sensitivity matrix as a regression and model-risk artifact.

@@ -332,6 +332,44 @@ def test_second_order_reconstruction_reduces_smooth_wave_error():
     assert second_error < 0.75 * first_error
 
 
+def test_second_order_ssp_update_preserves_volume_with_rainfall():
+    cells = 41
+    x_m = np.linspace(0.0, 100.0, cells)
+    dx_m = np.full(cells, 100.0 / cells)
+    width = np.linspace(10.0, 14.0, cells)
+    rainfall = 2e-5
+    duration = 0.02
+    result = sv.run_model(
+        100.0,
+        duration,
+        h_init=np.full(cells, 0.3),
+        q_init=np.zeros(cells),
+        left_inflow=0.0,
+        rainfall=lambda x, t: np.full_like(x, rainfall),
+        x_m=x_m,
+        dx_m=dx_m,
+        slope=np.zeros(cells),
+        manning_n=np.full(cells, 0.001),
+        bed_elevation_m=np.zeros(cells),
+        channel_width_m=width,
+        downstream_boundary="wall",
+        spatial_order=2,
+        cfl=0.3,
+    )
+
+    storage_delta = float(
+        np.sum(width * (result["h_final"] - result["h_initial"]) * dx_m)
+    )
+    assert storage_delta == pytest.approx(
+        result["mass_inflow"]
+        + result["mass_source"]
+        - result["mass_outflow"]
+        + result["mass_floor_correction"],
+        rel=1e-10,
+        abs=1e-11,
+    )
+
+
 def test_rectangular_width_gives_volumetric_rainfall_mass_balance():
     x_m = np.array([0.0, 100.0, 250.0])
     dx_m = np.array([50.0, 125.0, 100.0])

@@ -9,6 +9,7 @@ case runs offline and retains its provenance.
 from __future__ import annotations
 
 import argparse
+import copy
 import csv
 import json
 import math
@@ -108,10 +109,16 @@ def rectangular_normal_depth(discharge, width, manning_n, slope):
     return 0.5 * (lower + upper)
 
 
-def run_validation_case(config_path, *, output_path=None):
+def run_validation_case(config_path, *, output_path=None, overrides=None):
     """Run one configured Saint-Venant case and return its validation evidence."""
     config_path = Path(config_path)
     config = json.loads(config_path.read_text(encoding="utf-8"))
+    if overrides:
+        config = copy.deepcopy(config)
+        config["reach"].update(overrides.get("reach", {}))
+        for key, value in overrides.items():
+            if key != "reach":
+                config[key] = value
     observation_path = Path(config["observations"])
     if not observation_path.is_absolute():
         observation_path = config_path.parent / observation_path
@@ -143,6 +150,7 @@ def run_validation_case(config_path, *, output_path=None):
         initial_q, upstream_width, manning_n, slope
     )
     warmup_min = float(config.get("warmup_min", 0.0))
+    spatial_order = int(config.get("spatial_order", 1))
     initial_depth = np.full(cells, normal_depth)
     initial_discharge = np.full(cells, initial_q)
     if warmup_min > 0:
@@ -160,6 +168,7 @@ def run_validation_case(config_path, *, output_path=None):
             manning_n=roughness,
             channel_width_m=channel_width,
             cfl=float(config.get("cfl", 0.4)),
+            spatial_order=spatial_order,
         )
         initial_depth = warmup["h_final"]
         initial_discharge = warmup["q_final"]
@@ -178,6 +187,7 @@ def run_validation_case(config_path, *, output_path=None):
         manning_n=roughness,
         channel_width_m=channel_width,
         cfl=float(config.get("cfl", 0.4)),
+        spatial_order=spatial_order,
     )
 
     target = (downstream_times >= 0.0) & (downstream_times <= duration)
@@ -209,6 +219,7 @@ def run_validation_case(config_path, *, output_path=None):
                 else "uniform rectangular-section Manning normal depth and discharge"
             ),
             "warmup_min": warmup_min,
+            "spatial_order": spatial_order,
             "lateral_inflow": "zero",
             "rainfall": "zero",
         },
