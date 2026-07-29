@@ -32,11 +32,41 @@ def composite_objective(
     nse_weight=0.7,
     correlation_weight=0.3,
     robustness_penalty=0.1,
+    correlation_robustness_penalty=0.0,
+    worst_event_weight=0.0,
 ):
-    """Reward event-average NSE/correlation and penalize inconsistent NSE."""
+    """Reward event skill while penalizing inconsistent or weak events."""
+    return objective_components(
+        event_scores,
+        nse_weight=nse_weight,
+        correlation_weight=correlation_weight,
+        robustness_penalty=robustness_penalty,
+        correlation_robustness_penalty=(
+            correlation_robustness_penalty
+        ),
+        worst_event_weight=worst_event_weight,
+    )["objective"]
+
+
+def objective_components(
+    event_scores,
+    *,
+    nse_weight=0.7,
+    correlation_weight=0.3,
+    robustness_penalty=0.1,
+    correlation_robustness_penalty=0.0,
+    worst_event_weight=0.0,
+):
+    """Return an auditable decomposition of the multi-event objective."""
     if not event_scores:
         raise ValueError("At least one training event is required")
-    if min(nse_weight, correlation_weight, robustness_penalty) < 0:
+    if min(
+        nse_weight,
+        correlation_weight,
+        robustness_penalty,
+        correlation_robustness_penalty,
+        worst_event_weight,
+    ) < 0:
         raise ValueError("Objective weights must be non-negative")
     if not math.isclose(nse_weight + correlation_weight, 1.0):
         raise ValueError("NSE and correlation weights must sum to 1")
@@ -45,12 +75,46 @@ def composite_objective(
         [score["pearson_r"] for score in event_scores], dtype=float
     )
     if not np.all(np.isfinite(nse)) or not np.all(np.isfinite(correlation)):
-        return -math.inf
-    return float(
-        nse_weight * np.mean(nse)
-        + correlation_weight * np.mean(correlation)
-        - robustness_penalty * np.std(nse)
+        return {
+            "objective": -math.inf,
+            "finite": False,
+        }
+    mean_nse = float(np.mean(nse))
+    mean_correlation = float(np.mean(correlation))
+    nse_spread = float(np.std(nse))
+    correlation_spread = float(np.std(correlation))
+    minimum_nse = float(np.min(nse))
+    worst_event_gap = mean_nse - minimum_nse
+    mean_skill = (
+        nse_weight * mean_nse
+        + correlation_weight * mean_correlation
     )
+    nse_spread_penalty = robustness_penalty * nse_spread
+    correlation_spread_penalty = (
+        correlation_robustness_penalty * correlation_spread
+    )
+    worst_event_penalty = worst_event_weight * worst_event_gap
+    return {
+        "objective": float(
+            mean_skill
+            - nse_spread_penalty
+            - correlation_spread_penalty
+            - worst_event_penalty
+        ),
+        "finite": True,
+        "mean_nse": mean_nse,
+        "minimum_nse": minimum_nse,
+        "mean_correlation": mean_correlation,
+        "nse_standard_deviation": nse_spread,
+        "correlation_standard_deviation": correlation_spread,
+        "worst_event_nse_gap": worst_event_gap,
+        "weighted_mean_skill": float(mean_skill),
+        "nse_spread_penalty": float(nse_spread_penalty),
+        "correlation_spread_penalty": float(
+            correlation_spread_penalty
+        ),
+        "worst_event_penalty": float(worst_event_penalty),
+    }
 
 
 def parameter_overrides(config, parameters):
@@ -217,6 +281,131 @@ def _improvement(baseline, calibrated):
     return comparison
 
 
+def _leave_one_training_event_out(
+    *,
+    manifest,
+    manifest_path,
+    training_paths,
+    configs,
+    objective_config,
+    temp_root,
+):
+    """Refit on all-but-one training event and score the omitted event."""
+    settings = manifest.get("cross_event_validation", {})
+    enabled = bool(settings.get("enabled", False))
+    if not enabled:
+        return {
+            "enabled": False,
+            "interpretation": (
+                "Leave-one-training-event-out refits were not requested."
+            ),
+            "folds": [],
+        }
+    if len(training_paths) < 2:
+        raise ValueError(
+            "Leave-one-event-out validation needs at least two training events"
+        )
+    passes = int(settings.get("passes", 1))
+    if passes < 1:
+        raise ValueError(
+            "cross_event_validation passes must be at least 1"
+        )
+
+    folds = []
+    for fold_index, held_out_path in enumerate(training_paths):
+        fold_training = [
+            path for path in training_paths if path != held_out_path
+        ]
+        cache = {}
+
+        def evaluate_fold(parameters):
+            key = tuple(sorted(parameters.items()))
+            if key in cache:
+                return cache[key]
+            events = []
+            for event_index, relative_path in enumerate(fold_training):
+                result = run_validation_case(
+                    manifest_path.parent / relative_path,
+                    output_path=(
+                        temp_root
+                        / f"loeo-{fold_index}-train-{len(cache)}-"
+                        f"{event_index}.json"
+                    ),
+                    overrides=parameter_overrides(
+                        configs[relative_path], parameters
+                    ),
+                )
+                events.append(
+                    {
+                        "config": relative_path,
+                        "scores": result["scores"],
+                    }
+                )
+            components = objective_components(
+                [event["scores"] for event in events],
+                **objective_config,
+            )
+            evaluation = {
+                "parameters": dict(parameters),
+                "objective": components["objective"],
+                "objective_components": components,
+                "training_events": events,
+            }
+            cache[key] = evaluation
+            return evaluation
+
+        selected, trace = coordinate_search(
+            evaluate_fold,
+            manifest["parameter_grid"],
+            passes=passes,
+        )
+        held_out_result = run_validation_case(
+            manifest_path.parent / held_out_path,
+            output_path=temp_root / f"loeo-{fold_index}-held-out.json",
+            overrides=parameter_overrides(
+                configs[held_out_path], selected["parameters"]
+            ),
+        )
+        folds.append(
+            {
+                "held_out_event": held_out_path,
+                "fit_events": fold_training,
+                "selected_parameters": selected["parameters"],
+                "fit_objective": selected["objective"],
+                "fit_objective_components": selected[
+                    "objective_components"
+                ],
+                "held_out_scores": held_out_result["scores"],
+                "parameter_diagnostics": parameter_diagnostics(
+                    manifest["parameter_grid"],
+                    selected["parameters"],
+                ),
+                "unique_parameter_sets_evaluated": len(cache),
+                "trace": trace,
+            }
+        )
+    held_out_cases = [
+        {
+            "config": fold["held_out_event"],
+            "scores": fold["held_out_scores"],
+        }
+        for fold in folds
+    ]
+    return {
+        "enabled": True,
+        "passes": passes,
+        "fold_count": len(folds),
+        "held_out_summary": _score_summary(held_out_cases),
+        "interpretation": (
+            "Each fold selected global parameters without the reported event, "
+            "then scored that event once. These events are historical and have "
+            "been inspected, so this diagnoses transfer but is not prospective "
+            "validation."
+        ),
+        "folds": folds,
+    }
+
+
 def calibrate_suite(manifest_path, *, output_path=None, passes=2):
     """Optimize global parameters on training events and evaluate untouched splits."""
     manifest_path = Path(manifest_path)
@@ -261,12 +450,14 @@ def calibrate_suite(manifest_path, *, output_path=None, passes=2):
                         "scores": result["scores"],
                     }
                 )
+            components = objective_components(
+                [event["scores"] for event in events],
+                **objective_config,
+            )
             evaluation = {
                 "parameters": dict(parameters),
-                "objective": composite_objective(
-                    [event["scores"] for event in events],
-                    **objective_config,
-                ),
+                "objective": components["objective"],
+                "objective_components": components,
                 "training_events": events,
             }
             cache[key] = evaluation
@@ -300,10 +491,18 @@ def calibrate_suite(manifest_path, *, output_path=None, passes=2):
                 "events": events,
                 "summary": _score_summary(events) if events else None,
             }
+        leave_one_out = _leave_one_training_event_out(
+            manifest=manifest,
+            manifest_path=manifest_path,
+            training_paths=training_paths,
+            configs=configs,
+            objective_config=objective_config,
+            temp_root=temp_root,
+        )
 
     baseline_splits = _baseline_splits(manifest_path, split)
     evidence = {
-        "schema_version": 1,
+        "schema_version": 2,
         "suite": manifest["suite"],
         "method": {
             "optimizer": "deterministic coordinate search",
@@ -322,6 +521,10 @@ def calibrate_suite(manifest_path, *, output_path=None, passes=2):
             manifest["parameter_grid"], selected["parameters"]
         ),
         "training_objective": selected["objective"],
+        "training_objective_components": selected[
+            "objective_components"
+        ],
+        "leave_one_training_event_out": leave_one_out,
         "baseline_splits": baseline_splits,
         "splits": evaluated_splits,
         "improvement": _improvement(baseline_splits, evaluated_splits),

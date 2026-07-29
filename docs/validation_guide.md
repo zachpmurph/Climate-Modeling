@@ -97,8 +97,10 @@ python src/rivers/validation/calibrate_suite.py \
 
 Only the two 2002 events select parameters. January 2004 is validation and July
 2004 is a historical test. One global parameter set applies to every event; the
-objective is `0.7 × mean NSE + 0.3 × mean correlation - 0.1 × NSE standard
-deviation`. Event-specific parameter fitting is prohibited.
+objective is `0.7 × mean NSE + 0.3 × mean correlation`, less penalties of
+`0.1 × NSE standard deviation`, `0.05 × correlation standard deviation`, and
+`0.15 × (mean NSE - worst-event NSE)`. Event-specific parameter fitting is
+prohibited.
 
 The selected effective parameters are Manning roughness `0.8×`, rectangular
 width `1.2×`, slope `1.2×`, and uniformly distributed reach gain equal to `7.5%`
@@ -107,6 +109,13 @@ of observed upstream flow. Scores are:
 - training NSE `0.725–0.762`, correlation `0.865–0.888`;
 - validation NSE `0.760`, correlation `0.918`;
 - historical-test NSE `0.722`, correlation `0.871`.
+
+The tracked evidence also performs two leave-one-training-event-out refits.
+Each fold omits one 2002 event from parameter selection, fits only the other,
+then scores the omitted event once. Both folds independently select the same
+global parameter set as the joint fit. Omitted-event NSE is `0.725` and `0.762`;
+correlation is `0.865` and `0.888`. This shows stability across these two
+historical training events, but it does not make either event prospective.
 
 Roughness, width, and slope hit the tested parameter bounds. This is an explicit
 identifiability warning: the variables can compensate for one another, and the

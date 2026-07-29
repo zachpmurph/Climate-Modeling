@@ -143,6 +143,7 @@ The rationale for each transition is given alongside the change.
 | **4ab — Reviewed 2-D terrain grids** | Current branch | Added a reviewable Cartesian terrain CSV path for 2-D Saint-Venant. The runner validates a complete grid, cell dimensions, elevation, optional per-cell roughness, reach alignment, initial water surface, and provenance; saved fields now retain terrain slopes and roughness. | Parameterized parabolic channels cannot reproduce real banks, floodplain relief, or spatial land-cover resistance. A reviewed grid lets those controls enter explicitly rather than being absorbed by synthetic terrain parameters. |
 | **4ac — Terrain-aware 2-D ensembles** | Current branch | Extended probabilistic 2-D runs to reviewed terrain. Ensembles can scale the reviewed roughness grid, perturb cross-channel relief, apply a vertical-datum offset, and vary forcing/stage while rejecting synthetic width, bankfull, floodplain-slope, and longitudinal-slope parameters. Bed and roughness quantiles are retained. | Applying synthetic-domain parameters to a reviewed DEM would change the meaning of the observations. Terrain-specific perturbations keep uncertainty explicit without silently rebuilding the supplied surface. |
 | **4ad — Raw asymmetric 1-D surveys** | Current branch | Added `station_m,offset_m,elevation_m` cross-section polylines. They are reduced to conservative stage–width curves while retaining the exact asymmetric polyline wetted perimeter for Manning friction. The second-order SSP step now averages conserved area rather than depth, eliminating nonlinear-geometry volume drift. | Symmetric banks can bias hydraulic radius even when stage–area storage is correct. Raw survey geometry removes that assumption, and conservative SSP averaging is required once area is nonlinear in depth. |
+| **4ae — Cross-event calibration robustness** | Current branch | Decomposed the NSE/correlation objective into mean skill, NSE spread, correlation spread, and worst-event penalties. Added leave-one-training-event-out refits that select global parameters without the omitted event and score it once. | A good mean score can hide one weak event, and score spread at one fitted parameter set does not prove transfer. Omitted-event refits make event dependence and parameter stability explicit while preserving validation/test isolation. |
 
 ---
 
@@ -560,6 +561,9 @@ The constrained global calibration selects roughness `0.8×`, width `1.2×`, slo
 `0.725–0.762`, validation NSE `0.760`, and historical-test NSE `0.722`, with
 correlation `0.865–0.918`. Roughness, width, and slope hit search bounds, so these
 are effective parameters—not independently identified physical measurements.
+Each leave-one-2002-event-out refit independently selected the same parameter
+set; omitted-event NSE was `0.725` and `0.762`, with correlation `0.865` and
+`0.888`. This is useful historical transfer evidence, not a prospective test.
 
 Dependencies are pinned in `requirements.txt`. The GitHub Actions verification
 workflow runs the complete suite and matrix from a clean checkout.

@@ -20,7 +20,13 @@
   "objective": {
     "nse_weight": 0.7,
     "correlation_weight": 0.3,
-    "robustness_penalty": 0.1
+    "robustness_penalty": 0.1,
+    "correlation_robustness_penalty": 0.05,
+    "worst_event_weight": 0.15
+  },
+  "cross_event_validation": {
+    "enabled": true,
+    "passes": 1
   },
   "parameter_interpretation": {
     "manning_scale": "Global multiplier on the estimated minutes-based Manning roughness.",
