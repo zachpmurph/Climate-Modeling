@@ -514,6 +514,48 @@ def test_runner_records_measured_point_and_stage_inputs(tmp_path):
     )
 
 
+def test_runner_applies_time_varying_stage_to_2d_solver(tmp_path):
+    stage_path = tmp_path / "stage.csv"
+    stage_path.write_text(
+        "t_min,downstream_stage_m\n0,0.04\n1,0.05\n",
+        encoding="utf-8",
+    )
+    output_dir = tmp_path / "runs"
+    run_simulation.main(
+        [
+            PROFILE_PATH,
+            "--solver",
+            "saint_venant_2d",
+            "--width",
+            "100",
+            "--cross-cells",
+            "8",
+            "--hydraulic-geometry",
+            GEOMETRY_PATH,
+            "--downstream-boundary",
+            "stage",
+            "--downstream-stage-series",
+            str(stage_path),
+            "--t-final",
+            "0",
+            "--output-dir",
+            str(output_dir),
+            "--run-name",
+            "stage2d",
+        ]
+    )
+
+    summary = json.loads(
+        (output_dir / "stage2d_summary.json").read_text(encoding="utf-8")
+    )
+    assert summary["dimension"] == 2
+    assert summary["downstream_boundary"]["type"] == "stage"
+    assert summary["downstream_boundary"]["stage_series"] == str(
+        stage_path.resolve()
+    )
+    assert summary["mass_balance_error"] == pytest.approx(0.0)
+
+
 def test_runner_uses_boundary_flow_as_initial_1d_discharge(
     tmp_path, monkeypatch
 ):

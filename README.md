@@ -82,7 +82,8 @@ The implementation uses first-order Rusanov face fluxes, hydrostatic
 reconstruction for well-balanced non-flat topography, a conservative draining
 limiter for wet/dry positivity, adaptive two-dimensional CFL stepping, and
 semi-implicit Manning friction. It supports reflecting walls,
-inflow/open-outflow x boundaries, and periodic verification domains.
+inflow/open-outflow or inflow/measured-stage x boundaries, wall y boundaries,
+and periodic verification domains.
 
 The Tier 3 verification matrix includes exact axial and diagonal wave
 convergence studies, a variable-depth manufactured pressure wave, non-flat lake
@@ -134,7 +135,8 @@ The rationale for each transition is given alongside the change.
 | **4t — Stage-dependent 1-D geometry** | Current branch | Added per-cell trapezoidal cross-sections to 1-D Saint-Venant, including depth-dependent area, top width, pressure, hydraulic radius, wave speed, rainfall capture, and conservative geometry transitions. The CLI derives side slopes from reviewed bankfull width/depth and an explicit bottom-width fraction. | A fixed rectangular width cannot represent storage, wetted perimeter, pressure, or rainfall collection changing as river stage rises. Trapezoids are a controlled first step toward measured compound cross-sections while retaining exact rectangular backward compatibility. |
 | **4u — Measured hydraulic controls** | Current branch | Added time-varying downstream-stage boundaries and spatially located point-inflow series for tributaries or return flows. Point discharges are mapped conservatively to the nearest reach cell, and summaries retain their source paths. | A free outlet and a calibrated uniform reach-gain fraction can hide backwater and missing-flow errors. Direct observations make those controls explicit and prevent roughness or geometry from absorbing their effects. |
 | **4v — Independent-river transfer tests** | Current branch | Added two approved-USGS Truckee River events between Reno and Sparks, with a routed 5.49 km reach and assumptions held fixed between events. The six-event evidence suite now spans two rivers; the Colorado calibration remains separate. | Repeated events on one regulated reach cannot establish spatial transfer. A second river tests whether the solver structure works outside the reach used to develop and calibrate the workflow. |
-| **4w — Probabilistic 2-D outcomes** | Current branch | Added seeded Latin-hypercube ensembles over roughness, longitudinal slope, channel width, bankfull depth, floodplain slope, inflow, and rainfall. Saved evidence includes depth, terrain, and water-surface quantiles, wet probability, wet-area bands, every sampled parameter set, and member mass residuals, plus a self-contained uncertainty report. | A single inundation map hides uncertainty in estimated terrain, geometry, forcing, and roughness. Conditional outcome bands expose where those inputs materially change the modeled flood footprint without presenting them as calibrated forecast probabilities. |
+| **4w — Probabilistic 2-D outcomes** | Current branch | Added seeded Latin-hypercube ensembles over roughness, longitudinal slope, channel width, bankfull depth, floodplain slope, inflow, rainfall, and downstream-stage offset. Saved evidence includes depth, terrain, and water-surface quantiles, wet probability, wet-area bands, every sampled parameter set, and member mass residuals, plus a self-contained uncertainty report. | A single inundation map hides uncertainty in estimated terrain, geometry, forcing, and roughness. Conditional outcome bands expose where those inputs materially change the modeled flood footprint without presenting them as calibrated forecast probabilities. |
+| **4x — Stage-controlled 2-D outlet** | Current branch | Added scalar, cross-channel, constant, or time-varying downstream water-surface elevation to 2-D Saint-Venant. The boundary permits backflow, lands on forcing breakpoints, preserves non-flat still water, and classifies signed boundary volume consistently. | A transmissive outlet cannot represent tailwater, tides, reservoirs, or downstream backwater. Feeding measured stage prevents the model from forcing those effects into terrain, inflow, or roughness. |
 
 ---
 
@@ -188,9 +190,9 @@ python src/rivers/simulations/run_simulation.py PROFILE --solver SOLVER --t-fina
 | `--lateral-inflow-rate` | `0.0` | 1-D Saint-Venant distributed inflow, m³/min per metre of reach |
 | `--lateral-inflow-series` | — | CSV with `t_min,lateral_inflow_m3_per_min_per_m`; mutually exclusive with nonzero constant lateral inflow |
 | `--lateral-inflow-points` | — | CSV with `station_m,t_min,discharge_m3_per_min`; conservatively inserts measured point flows at the nearest 1-D cell |
-| `--downstream-boundary` | `outflow` | 1-D Saint-Venant: `outflow`, `wall`, or `stage` |
-| `--downstream-stage` | — | Fixed water-surface elevation for a `stage` boundary |
-| `--downstream-stage-series` | — | CSV with `t_min,downstream_stage_m`; time-varying measured stage for a `stage` boundary |
+| `--downstream-boundary` | `outflow` | Saint-Venant: `outflow` or `stage`; 1-D also supports `wall` |
+| `--downstream-stage` | — | Fixed water-surface elevation for a 1-D or 2-D `stage` boundary |
+| `--downstream-stage-series` | — | CSV with `t_min,downstream_stage_m`; time-varying measured 1-D or 2-D stage |
 | `--spatial-order` | `1` | Saint-Venant reconstruction order: robust first-order or less-diffusive second-order |
 | `--cfl` | `0.5` | CFL target (0 < CFL ≤ 1) |
 | `--longitudinal-cells` | — | Derived solver-cell count; linearly interpolates reviewed fields without creating observations |
@@ -263,8 +265,9 @@ python src/rivers/reporting/generate_uncertainty_report.py \
 ```
 
 The configuration controls sample count, random seed, quantiles, wet-depth
-threshold, and multiplicative ranges for Manning roughness, longitudinal slope,
-channel width, bankfull depth, floodplain slope, inflow, and rainfall. Sampling is stratified
+threshold, multiplicative ranges for Manning roughness, longitudinal slope,
+channel width, bankfull depth, floodplain slope, inflow, and rainfall, and an
+additive downstream-stage offset in metres. Sampling is stratified
 Latin hypercube and exactly reproducible for a fixed seed. The NPZ retains
 member parameters and mass diagnostics together with time-dependent depth and
 water-surface quantiles, peak bands, wet probability, and maximum-wet-area
@@ -311,6 +314,10 @@ Downstream stage may be negative when the chosen vertical datum permits it.
 Point-inflow files group rows by `station_m`; every point needs its own series
 starting at zero. The runner converts each whole-channel point discharge into a
 cell source whose integrated volume is exactly the supplied flow.
+For 2-D stage boundaries, `downstream_stage_m` is a water-surface elevation,
+not raw gage height, and must use the same vertical datum as
+`bed_elevation_m`. A cross-channel stage array is available through the
+programmatic `Scenario` interface; the CLI series applies one level across y.
 
 Use `--longitudinal-cells` when a reviewed profile is too sparse for numerical
 routing. The source CSV/JSON remains unchanged. Slope, roughness, optional
@@ -547,7 +554,6 @@ channel/floodplain terrain.
 
 - Replace parameterized trapezoids and synthetic 2-D terrain with surveyed
   compound cross-sections or reviewed elevation models.
-- Add observed-stage/open downstream controls to the 2-D solver.
 - Estimate basin-specific joint uncertainty distributions and test ensemble
   coverage on a future event or untouched third river.
 - Save Saint-Venant discharge histories through the unified CLI alongside depth.

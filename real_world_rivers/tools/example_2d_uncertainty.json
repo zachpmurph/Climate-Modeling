@@ -12,6 +12,7 @@
     "bankfull_depth_scale": [0.85, 1.15],
     "floodplain_slope_scale": [0.75, 1.25],
     "inflow_scale": [0.9, 1.1],
-    "rainfall_scale": [0.8, 1.2]
+    "rainfall_scale": [0.8, 1.2],
+    "downstream_stage_offset_m": [0.0, 0.0]
   }
 }

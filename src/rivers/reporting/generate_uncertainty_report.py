@@ -166,7 +166,7 @@ th{{color:var(--muted);font-weight:500}}.warning{{border-left:5px solid #d99b20}
 </select>
 <canvas id="map" width="960" height="470" role="img" aria-label="Plan-view uncertainty map"></canvas>
 </section>
-<section class="panel"><h2>Sampled parameter scales</h2><table><tbody>{parameter_rows}</tbody></table></section>
+<section class="panel"><h2>Sampled parameter values</h2><table><tbody>{parameter_rows}</tbody></table></section>
 <section class="panel warning"><h2>Interpretation</h2><p>{html.escape(str(interpretation))}</p>
 <p class="muted">Changing the parameter ranges changes these probabilities. Structural model error is not represented unless explicitly sampled.</p></section>
 </main><script>

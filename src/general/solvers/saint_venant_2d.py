@@ -10,6 +10,8 @@ Boundary modes:
 
 * x ``inflow_outflow``: prescribed unit discharge at the left, zero-gradient
   open boundary at the right.
+* x ``inflow_stage``: prescribed unit discharge at the left and a measured
+  water-surface elevation at the right.
 * y ``wall``: reflecting, free-slip walls.
 * x or y ``periodic``: periodic verification and benchmark domains.
 
@@ -137,6 +139,23 @@ def _inflow_values(left_inflow, time, ny):
     return values
 
 
+def _stage_values(downstream_stage_m, time, ny):
+    values = (
+        downstream_stage_m(time)
+        if callable(downstream_stage_m)
+        else downstream_stage_m
+    )
+    values = np.asarray(values, dtype=float)
+    if values.ndim == 0:
+        values = np.full(ny, float(values))
+    if values.shape != (ny,) or not np.all(np.isfinite(values)):
+        raise ValueError(
+            "downstream_stage_m must return a finite scalar or "
+            f"shape ({ny},)"
+        )
+    return values
+
+
 def _cap_dt_at_forcing_breakpoints(dt, time, *forcings):
     for forcing in forcings:
         for breakpoint in getattr(forcing, "breakpoints_min", ()):
@@ -146,18 +165,34 @@ def _cap_dt_at_forcing_breakpoints(dt, time, *forcings):
     return dt
 
 
-def _extend_x(h, hu, hv, bed, boundary, inflow):
+def _extend_x(h, hu, hv, bed, boundary, inflow, downstream_stage=None):
     if boundary == "periodic":
         return tuple(
             np.concatenate([array[-1:, :], array, array[:1, :]], axis=0)
             for array in (h, hu, hv, bed)
         )
-    if boundary != "inflow_outflow":
-        raise ValueError("boundary_x must be 'inflow_outflow' or 'periodic'")
+    if boundary not in {"inflow_outflow", "inflow_stage"}:
+        raise ValueError(
+            "boundary_x must be 'inflow_outflow', 'inflow_stage', or 'periodic'"
+        )
+    if boundary == "inflow_stage":
+        ghost_h = np.maximum(downstream_stage - bed[-1, :], 0.0)
+        u = _velocity(h[-1, :], hu[-1, :])
+        v = _velocity(h[-1, :], hv[-1, :])
+        right_h = ghost_h[None, :]
+        right_hu = (u * ghost_h)[None, :]
+        right_hv = (v * ghost_h)[None, :]
+    else:
+        right_h = h[-1:, :]
+        right_hu = hu[-1:, :]
+        right_hv = hv[-1:, :]
     return (
-        np.concatenate([h[:1, :], h, h[-1:, :]], axis=0),
-        np.concatenate([2.0 * inflow[None, :] - hu[:1, :], hu, hu[-1:, :]], axis=0),
-        np.concatenate([hv[:1, :], hv, hv[-1:, :]], axis=0),
+        np.concatenate([h[:1, :], h, right_h], axis=0),
+        np.concatenate(
+            [2.0 * inflow[None, :] - hu[:1, :], hu, right_hu],
+            axis=0,
+        ),
+        np.concatenate([hv[:1, :], hv, right_hv], axis=0),
         np.concatenate([bed[:1, :], bed, bed[-1:, :]], axis=0),
     )
 
@@ -228,8 +263,19 @@ def _reconstructed_fields(h, hu, hv, bed, axis, periodic):
     )
 
 
-def _rusanov_x(h, hu, hv, bed, boundary, inflow, spatial_order=1):
-    h_ext, hu_ext, hv_ext, bed_ext = _extend_x(h, hu, hv, bed, boundary, inflow)
+def _rusanov_x(
+    h,
+    hu,
+    hv,
+    bed,
+    boundary,
+    inflow,
+    spatial_order=1,
+    downstream_stage=None,
+):
+    h_ext, hu_ext, hv_ext, bed_ext = _extend_x(
+        h, hu, hv, bed, boundary, inflow, downstream_stage
+    )
     center_h_l, center_h_r = h_ext[:-1, :], h_ext[1:, :]
     h_l, h_r = center_h_l.copy(), center_h_r.copy()
     hu_l, hu_r = hu_ext[:-1, :].copy(), hu_ext[1:, :].copy()
@@ -406,6 +452,7 @@ def run_model(
     spatial_order=1,
     boundary_x="inflow_outflow",
     boundary_y="wall",
+    downstream_stage_m=None,
 ):
     if not np.isfinite(T_final) or T_final < 0:
         raise ValueError("T_final must be finite and non-negative")
@@ -415,14 +462,20 @@ def run_model(
         raise ValueError("2-D cfl must be finite and in (0, 0.5]")
     if spatial_order not in (1, 2):
         raise ValueError("spatial_order must be 1 or 2")
-    if boundary_x not in {"inflow_outflow", "periodic"}:
-        raise ValueError("boundary_x must be 'inflow_outflow' or 'periodic'")
+    if boundary_x not in {"inflow_outflow", "inflow_stage", "periodic"}:
+        raise ValueError(
+            "boundary_x must be 'inflow_outflow', 'inflow_stage', or 'periodic'"
+        )
     if boundary_y not in {"wall", "periodic"}:
         raise ValueError("boundary_y must be 'wall' or 'periodic'")
     if boundary_x == "periodic" and (
         callable(left_inflow) or float(left_inflow) != 0.0
     ):
         raise ValueError("left_inflow must be zero when boundary_x is periodic")
+    if (boundary_x == "inflow_stage") != (downstream_stage_m is not None):
+        raise ValueError(
+            "downstream_stage_m is required only when boundary_x='inflow_stage'"
+        )
 
     if x_m is None and y_m is None:
         if not (np.isfinite(L) and np.isfinite(W) and L > 0 and W > 0):
@@ -504,14 +557,30 @@ def run_model(
         if next_record < len(record_marks):
             dt = min(dt, record_marks[next_record] - t_current)
         dt = _cap_dt_at_forcing_breakpoints(
-            dt, t_current, left_inflow, rainfall_function
+            dt,
+            t_current,
+            left_inflow,
+            rainfall_function,
+            downstream_stage_m,
         )
         if dt <= 0 or not np.isfinite(dt):
             raise FloatingPointError(f"Invalid time step {dt!r} at t={t_current}")
 
         inflow = _inflow_values(left_inflow, t_current, ny)
+        downstream_stage = (
+            None
+            if downstream_stage_m is None
+            else _stage_values(downstream_stage_m, t_current, ny)
+        )
         x_raw = _rusanov_x(
-            h, hu, hv, bed, boundary_x, inflow, spatial_order
+            h,
+            hu,
+            hv,
+            bed,
+            boundary_x,
+            inflow,
+            spatial_order,
+            downstream_stage,
         )
         y_raw = _rusanov_y(h, hu, hv, bed, boundary_y, spatial_order)
         source_value = r(t_current) if rainfall_function is None else rainfall_function(x, y, t_current)
@@ -575,9 +644,17 @@ def run_model(
         hv_new[~wet] = 0.0
         _check_finite(t_current + dt, h=h_new, hu=hu_new, hv=hv_new)
 
-        if boundary_x == "inflow_outflow":
-            mass_inflow += float(np.sum(fh[0, :] * dy) * dt)
-            mass_outflow += float(np.sum(fh[-1, :] * dy) * dt)
+        if boundary_x != "periodic":
+            left_volume = float(np.sum(fh[0, :] * dy) * dt)
+            right_volume = float(np.sum(fh[-1, :] * dy) * dt)
+            if left_volume >= 0.0:
+                mass_inflow += left_volume
+            else:
+                mass_outflow -= left_volume
+            if right_volume >= 0.0:
+                mass_outflow += right_volume
+            else:
+                mass_inflow -= right_volume
         mass_source += float(np.sum(source * area) * dt)
 
         h, hu, hv = h_new, hu_new, hv_new
@@ -625,6 +702,7 @@ class _SaintVenant2DSolver:
         "cfl",
         "boundary_x",
         "boundary_y",
+        "downstream_stage",
         "spatial_order",
     })
 
@@ -675,6 +753,7 @@ class _SaintVenant2DSolver:
             spatial_order=scenario.spatial_order,
             boundary_x=scenario.boundary_x,
             boundary_y=scenario.boundary_y,
+            downstream_stage_m=scenario.downstream_stage_m,
         )
         return SimulationResult(
             domain=domain,

@@ -308,3 +308,92 @@ def test_wet_dry_front_over_nonflat_bed_is_positive_and_conservative():
     assert np.min(result["h_history"]) >= 0.0
     assert abs(final_volume - initial_volume) / initial_volume < 1e-12
     assert result["mass_floor_correction"] < 1e-14
+
+
+def test_stage_outlet_preserves_nonflat_lake_at_rest():
+    nx, ny = 21, 7
+    x = np.linspace(0.0, 10.0, nx)
+    y = np.linspace(0.0, 3.0, ny)
+    dx = np.full(nx, 10.0 / nx)
+    dy = np.full(ny, 3.0 / ny)
+    bed = -0.01 * x[:, None] + np.zeros((nx, ny))
+    surface = 1.0
+    depth = surface - bed
+    zero = np.zeros_like(depth)
+
+    result = sv2.run_model(
+        T_final=0.05,
+        record_interval=0.05,
+        h_init=depth,
+        hu_init=zero,
+        hv_init=zero,
+        x_m=x,
+        y_m=y,
+        dx_m=dx,
+        dy_m=dy,
+        slope_x=np.full_like(depth, 0.01),
+        slope_y=zero,
+        manning_n=zero,
+        bed_elevation_m=bed,
+        rainfall=lambda x, y, time: zero,
+        left_inflow=0.0,
+        boundary_x="inflow_stage",
+        downstream_stage_m=surface,
+    )
+
+    assert np.max(np.abs(result["h_final"] - depth)) < 1e-12
+    assert np.max(np.abs(result["hu_final"])) < 1e-10
+    assert np.max(np.abs(result["hv_final"])) < 1e-10
+
+
+def test_high_downstream_stage_drives_conservative_2d_backflow():
+    nx, ny = 12, 6
+    shape = (nx, ny)
+    depth = np.full(shape, 0.1)
+    zero = np.zeros(shape)
+    result = sv2.run_model(
+        L=1.2,
+        W=0.6,
+        T_final=0.001,
+        record_interval=0.001,
+        h_init=depth,
+        hu_init=zero,
+        hv_init=zero,
+        slope_x=zero,
+        slope_y=zero,
+        manning_n=zero,
+        bed_elevation_m=zero,
+        rainfall=lambda x, y, time: zero,
+        left_inflow=0.0,
+        boundary_x="inflow_stage",
+        downstream_stage_m=0.5,
+    )
+    area = result["dx_m"][:, None] * result["dy_m"][None, :]
+    storage_change = float(
+        np.sum((result["h_final"] - result["h_initial"]) * area)
+    )
+
+    assert result["mass_inflow"] > 0.0
+    assert result["mass_outflow"] == pytest.approx(0.0)
+    assert result["h_final"][-1].mean() > depth[-1].mean()
+    assert storage_change == pytest.approx(
+        result["mass_inflow"]
+        - result["mass_outflow"]
+        + result["mass_floor_correction"],
+        abs=1e-12,
+    )
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"boundary_x": "inflow_stage"},
+        {
+            "boundary_x": "inflow_outflow",
+            "downstream_stage_m": 1.0,
+        },
+    ],
+)
+def test_invalid_2d_stage_boundary_configuration_raises(kwargs):
+    with pytest.raises(ValueError, match="downstream_stage"):
+        sv2.run_model(T_final=0.0, **kwargs)

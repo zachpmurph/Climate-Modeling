@@ -179,9 +179,9 @@ The gaps below are next-stage improvements, not missing Tier 3 gates for the
 current documented method.
 
 1. **Extend hydraulic boundaries and field validation.**
-   - The 1-D solver now supports transmissive outflow, wall, and prescribed-stage
-     downstream boundaries with regression tests. The 2-D solver still uses its
-     simpler boundary set and needs case-specific open-boundary justification.
+   - Both Saint-Venant solvers now support transmissive outflow and prescribed
+     downstream stage with regression tests; 1-D also supports a wall. Real
+     applications still need case-specific boundary-data and datum justification.
    - The committed six-event suite now includes a second river, but all events
      are historical and have been inspected during development. A future event
      or untouched third river is still required for prospective evidence.

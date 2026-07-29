@@ -305,13 +305,20 @@ def main(argv=None):
         raise SystemExit(
             "error: lateral inflow currently requires --solver saint_venant"
         )
-    if args.solver != "saint_venant" and (
+    if args.solver not in {"saint_venant", "saint_venant_2d"} and (
         args.downstream_boundary != "outflow"
         or args.downstream_stage is not None
         or args.downstream_stage_series is not None
     ):
         raise SystemExit(
-            "error: downstream boundary options currently require --solver saint_venant"
+            "error: downstream boundary options require a Saint-Venant solver"
+        )
+    if (
+        args.solver == "saint_venant_2d"
+        and args.downstream_boundary == "wall"
+    ):
+        raise SystemExit(
+            "error: the 2-D runner supports outflow or stage downstream boundaries"
         )
     if args.cross_section_shape == "trapezoidal" and (
         args.solver != "saint_venant" or args.hydraulic_geometry is None
@@ -541,6 +548,16 @@ def main(argv=None):
         if hasattr(inflow, "breakpoints_min"):
             distributed_inflow.breakpoints_min = inflow.breakpoints_min
         scenario.left_inflow = distributed_inflow
+        scenario.boundary_x = (
+            "inflow_stage"
+            if args.downstream_boundary == "stage"
+            else "inflow_outflow"
+        )
+        scenario.downstream_stage_m = (
+            args.downstream_stage
+            if temporal_downstream_stage is None
+            else temporal_downstream_stage
+        )
         scenario.spatial_order = args.spatial_order
     elif args.solver == "saint_venant":
         scenario.initial_discharge = np.full(

@@ -121,12 +121,18 @@ first affected cell instead of returning a corrupted simulation.
 
 - `boundary_x="inflow_outflow"`: the left ghost mirrors x momentum around the
   prescribed unit discharge; the right ghost is zero-gradient.
+- `boundary_x="inflow_stage"`: the left boundary remains prescribed inflow.
+  The right ghost depth is reconstructed from a downstream water-surface
+  elevation in the terrain's vertical datum. Interior velocity is retained in
+  the ghost state, allowing the Riemann flux to produce either outflow or
+  stage-driven backflow. Stage may be constant, time varying, or vary across y.
 - `boundary_y="wall"`: normal momentum is reflected and tangential momentum is
   copied, giving a free-slip reflecting wall.
 - `"periodic"` is available independently in x and y for verification problems.
 
 Mass accounting integrates the actual limited numerical flux at physical x
-boundaries. Periodic faces are internal and are not counted as inflow or outflow.
+boundaries and classifies signed backflow as inflow. Periodic faces are internal
+and are not counted as inflow or outflow.
 
 ## Quantitative verification matrix
 

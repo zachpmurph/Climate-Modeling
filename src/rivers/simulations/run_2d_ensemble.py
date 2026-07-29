@@ -43,8 +43,16 @@ PARAMETER_NAMES = (
     "floodplain_slope_scale",
     "inflow_scale",
     "rainfall_scale",
+    "downstream_stage_offset_m",
 )
-DEFAULT_BOUNDS = {name: (1.0, 1.0) for name in PARAMETER_NAMES}
+DEFAULT_BOUNDS = {
+    name: (
+        (0.0, 0.0)
+        if name == "downstream_stage_offset_m"
+        else (1.0, 1.0)
+    )
+    for name in PARAMETER_NAMES
+}
 SCHEMA_VERSION = 1
 
 
@@ -75,14 +83,16 @@ def load_ensemble_config(path):
             lower, upper = (float(value) for value in values)
         except (TypeError, ValueError) as exc:
             raise ValueError(f"{name} bounds must be numeric") from exc
+        requires_positive = name != "downstream_stage_offset_m"
         if (
             not np.isfinite(lower)
             or not np.isfinite(upper)
-            or lower <= 0.0
+            or (requires_positive and lower <= 0.0)
             or upper < lower
         ):
             raise ValueError(
-                f"{name} bounds must be finite, positive, and ordered"
+                f"{name} bounds must be finite and ordered"
+                + (", with a positive minimum" if requires_positive else "")
             )
         bounds[name] = (lower, upper)
 
@@ -103,15 +113,28 @@ def load_ensemble_config(path):
                 )
             row = []
             for name in PARAMETER_NAMES:
+                default = (
+                    0.0
+                    if name == "downstream_stage_offset_m"
+                    else 1.0
+                )
                 try:
-                    value = float(sample.get(name, 1.0))
+                    value = float(sample.get(name, default))
                 except (TypeError, ValueError) as exc:
                     raise ValueError(
                         f"{name} in sample {index} must be numeric"
                     ) from exc
-                if not np.isfinite(value) or value <= 0.0:
+                if not np.isfinite(value) or (
+                    name != "downstream_stage_offset_m"
+                    and value <= 0.0
+                ):
                     raise ValueError(
-                        f"{name} in sample {index} must be finite and positive"
+                        f"{name} in sample {index} must be finite"
+                        + (
+                            " and positive"
+                            if name != "downstream_stage_offset_m"
+                            else ""
+                        )
                     )
                 row.append(value)
             rows.append(row)
@@ -213,6 +236,23 @@ def _scaled_rainfall(rainfall, scale):
     return scaled
 
 
+def _offset_stage(stage, offset_m):
+    if stage is None:
+        if offset_m != 0.0:
+            raise ValueError(
+                "downstream_stage_offset_m uncertainty requires a "
+                "downstream stage boundary"
+            )
+        return None
+    if callable(stage):
+        def shifted(time_min):
+            return np.asarray(stage(time_min), dtype=float) + offset_m
+
+        shifted.breakpoints_min = getattr(stage, "breakpoints_min", ())
+        return shifted
+    return np.asarray(stage, dtype=float) + offset_m
+
+
 def _initialize_2d_scenario(scenario, domain, inflow):
     """Apply the runner's level-water and wet-width flow initialization."""
     longitudinal_depth = np.asarray(scenario.initial_depth_m, dtype=float)
@@ -297,6 +337,7 @@ def run_ensemble(
     left_inflow=0.0,
     rainfall_rate_m_per_min=0.0,
     temporal_rainfall=None,
+    downstream_stage_m=None,
     floodplain_slope=0.02,
     cfl=0.45,
     spatial_order=1,
@@ -368,6 +409,15 @@ def run_ensemble(
             base_scenario,
             rainfall=_scaled_rainfall(
                 base_scenario.rainfall, parameters["rainfall_scale"]
+            ),
+            boundary_x=(
+                "inflow_stage"
+                if downstream_stage_m is not None
+                else "inflow_outflow"
+            ),
+            downstream_stage_m=_offset_stage(
+                downstream_stage_m,
+                parameters["downstream_stage_offset_m"],
             ),
             spatial_order=spatial_order,
         )
@@ -501,6 +551,8 @@ def parse_args(argv=None):
     parser.add_argument("--inflow-series", type=Path)
     parser.add_argument("--rainfall-rate", type=float, default=0.0)
     parser.add_argument("--rainfall-series", type=Path)
+    parser.add_argument("--downstream-stage", type=float)
+    parser.add_argument("--downstream-stage-series", type=Path)
     parser.add_argument("--floodplain-slope", type=float, default=0.02)
     parser.add_argument("--cfl", type=float, default=0.45)
     parser.add_argument("--spatial-order", type=int, choices=(1, 2), default=1)
@@ -515,12 +567,21 @@ def main(argv=None):
         raise SystemExit(
             "error: use either --left-inflow or --inflow-series, not both"
         )
+    if (
+        args.downstream_stage is not None
+        and args.downstream_stage_series is not None
+    ):
+        raise SystemExit(
+            "error: use either --downstream-stage or "
+            "--downstream-stage-series, not both"
+        )
     for path in (
         args.profile,
         args.hydraulic_geometry,
         args.ensemble_config,
         args.inflow_series,
         args.rainfall_series,
+        args.downstream_stage_series,
     ):
         if path is not None and not path.is_file():
             raise SystemExit(f"error: input does not exist: {path}")
@@ -544,6 +605,15 @@ def main(argv=None):
                 args.rainfall_series, "rainfall_rate_m_per_min"
             )
         )
+        downstream_stage = (
+            args.downstream_stage
+            if args.downstream_stage_series is None
+            else _load_temporal_series(
+                args.downstream_stage_series,
+                "downstream_stage_m",
+                allow_negative=True,
+            )
+        )
         result = run_ensemble(
             profile,
             channel_width,
@@ -556,6 +626,7 @@ def main(argv=None):
             left_inflow=inflow,
             rainfall_rate_m_per_min=args.rainfall_rate,
             temporal_rainfall=temporal_rainfall,
+            downstream_stage_m=downstream_stage,
             floodplain_slope=args.floodplain_slope,
             cfl=args.cfl,
             spatial_order=args.spatial_order,
@@ -583,6 +654,16 @@ def main(argv=None):
             None
             if args.rainfall_series is None
             else _portable_path(args.rainfall_series)
+        ),
+        "downstream_stage_m": (
+            args.downstream_stage
+            if args.downstream_stage_series is None
+            else None
+        ),
+        "downstream_stage_series": (
+            None
+            if args.downstream_stage_series is None
+            else _portable_path(args.downstream_stage_series)
         ),
         "floodplain_slope": args.floodplain_slope,
         "cfl": args.cfl,

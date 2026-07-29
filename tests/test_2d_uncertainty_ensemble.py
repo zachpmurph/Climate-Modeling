@@ -107,7 +107,14 @@ def test_explicit_joint_samples_preserve_parameter_dependence(tmp_path):
         for index in range(len(ensemble.PARAMETER_NAMES))
         if index not in {manning_index, width_index}
     ]
-    assert np.all(samples[:, fixed_columns] == 1.0)
+    for index in fixed_columns:
+        expected = (
+            0.0
+            if ensemble.PARAMETER_NAMES[index]
+            == "downstream_stage_offset_m"
+            else 1.0
+        )
+        assert np.all(samples[:, index] == expected)
 
 
 def test_field_summary_reports_quantiles_probability_and_wet_area():
@@ -164,6 +171,7 @@ def test_cli_writes_reproducible_2d_uncertainty_artifacts(tmp_path):
                     "floodplain_slope_scale": [0.9, 1.1],
                     "inflow_scale": [1.0, 1.0],
                     "rainfall_scale": [1.0, 1.0],
+                    "downstream_stage_offset_m": [-0.01, 0.01],
                 },
             }
         ),
@@ -184,6 +192,8 @@ def test_cli_writes_reproducible_2d_uncertainty_artifacts(tmp_path):
         "0.01",
         "--record-interval",
         "0.01",
+        "--downstream-stage",
+        "0.04",
         "--output-dir",
         str(output_dir),
         "--run-name",
@@ -199,6 +209,11 @@ def test_cli_writes_reproducible_2d_uncertainty_artifacts(tmp_path):
         3,
         len(ensemble.PARAMETER_NAMES),
     )
+    stage_index = ensemble.PARAMETER_NAMES.index(
+        "downstream_stage_offset_m"
+    )
+    assert np.min(first["parameter_scales"][:, stage_index]) < 0.0
+    assert np.max(first["parameter_scales"][:, stage_index]) > 0.0
     assert first["depth_quantiles_m"].shape == (3, 2, 5, 8)
     assert first["peak_depth_quantiles_m"].shape == (3, 5, 8)
     assert first["bed_elevation_quantiles_m"].shape == (3, 5, 8)
@@ -220,6 +235,7 @@ def test_cli_writes_reproducible_2d_uncertainty_artifacts(tmp_path):
     assert summary["sample_count"] == 3
     assert summary["method"] == "latin_hypercube"
     assert summary["context"]["hydraulic_geometry"] == GEOMETRY_PATH
+    assert summary["context"]["downstream_stage_m"] == pytest.approx(0.04)
     assert "not calibrated forecast probabilities" in summary["interpretation"]
     assert summary["maximum_absolute_mass_balance_error_m3"] == pytest.approx(
         0.0

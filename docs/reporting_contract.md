@@ -77,12 +77,16 @@ forcing, calibration, and validation.
 `run_2d_ensemble.py` writes `<run>_ensemble.npz` and
 `<run>_ensemble_summary.json`. The numeric artifact contains:
 
-- sampled parameter names and scales, plus every member mass residual;
+- sampled parameter names and values, plus every member mass residual;
 - requested quantile probabilities;
 - time-dependent depth and water-surface-elevation quantiles;
 - terrain, peak-depth, and peak-water-surface quantiles;
 - probability that each cell exceeds the configured wet-depth threshold; and
 - member and quantile maximum wet areas.
+
+Most sampled parameters are multiplicative scales. Downstream-stage uncertainty
+is an additive offset in metres and is available only when the base 2-D run uses
+a stage boundary in the same vertical datum as its terrain.
 
 `generate_uncertainty_report.py` consumes those saved artifacts without
 importing a solver and writes a self-contained spatial report. Its probabilities
