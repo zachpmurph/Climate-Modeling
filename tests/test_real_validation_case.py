@@ -275,6 +275,13 @@ def test_validation_case_uses_surveyed_stage_dependent_geometry(tmp_path):
         "100,0,3\n100,3,0\n100,9,0\n100,12,3\n",
         encoding="utf-8",
     )
+    stage_manning = tmp_path / "stage_manning.csv"
+    stage_manning.write_text(
+        "station_m,depth_m,manning_n\n"
+        "0,0,0.0005\n0,1,0.0006\n"
+        "100,0,0.0007\n100,1,0.0008\n",
+        encoding="utf-8",
+    )
     config = tmp_path / "case.json"
     config.write_text(
         json.dumps(
@@ -294,6 +301,7 @@ def test_validation_case_uses_surveyed_stage_dependent_geometry(tmp_path):
                     "manning_n": 0.035 / 60.0,
                     "cross_section_shape": "surveyed",
                     "surveyed_cross_sections": surveys.name,
+                    "stage_dependent_manning": stage_manning.name,
                 },
                 "record_interval_min": 5.0,
             }
@@ -307,6 +315,9 @@ def test_validation_case_uses_surveyed_stage_dependent_geometry(tmp_path):
 
     assert evidence["assumptions"]["cross_section_shape"] == "surveyed"
     assert evidence["assumptions"]["surveyed_cross_sections"] == surveys.name
+    assert evidence["assumptions"]["stage_dependent_manning"] == (
+        stage_manning.name
+    )
     assert (
         evidence["assumptions"]["initial_condition"]
         == "per-cell cross-section Manning normal depth and discharge"

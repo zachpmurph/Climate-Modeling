@@ -509,6 +509,53 @@ def test_runner_loads_compound_cross_sections_and_records_assumptions(
     assert abs(summary["mass_balance_error"]) < 1e-9
 
 
+def test_runner_loads_stage_dependent_manning_and_saves_history(tmp_path):
+    roughness_path = tmp_path / "stage_manning.csv"
+    roughness_path.write_text(
+        "station_m,depth_m,manning_n\n"
+        "0,0,0.0005\n0,0.5,0.001\n0,2,0.002\n"
+        "4000,0,0.0006\n4000,0.5,0.0012\n4000,2,0.0024\n",
+        encoding="utf-8",
+    )
+    output_dir = tmp_path / "runs"
+
+    run_simulation.main(
+        [
+            PROFILE_PATH,
+            "--solver",
+            "saint_venant",
+            "--stage-manning",
+            str(roughness_path),
+            "--left-inflow",
+            "0.01",
+            "--t-final",
+            "0.01",
+            "--output-dir",
+            str(output_dir),
+            "--run-name",
+            "stage_n",
+        ]
+    )
+
+    summary = json.loads(
+        (output_dir / "stage_n_summary.json").read_text(encoding="utf-8")
+    )
+    metadata = summary["stage_dependent_manning"]
+    assert metadata["source"] == str(roughness_path.resolve())
+    assert metadata["depth_levels_m"][0] == [0.0, 0.5, 2.0]
+    assert metadata["manning_n"][0] == [0.0005, 0.001, 0.002]
+    assert metadata["manning_n"][2] == pytest.approx(
+        [0.00055, 0.0011, 0.0022]
+    )
+    assert metadata["interpolation"] == "linear_with_endpoint_clamping"
+    history_path = output_dir / "stage_n_manning_n.csv"
+    assert summary["manning_n_history_path"] == str(history_path)
+    with history_path.open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.reader(handle))
+    assert len(rows) == 3
+    assert len(rows[0]) == 6
+
+
 def test_runner_loads_raw_asymmetric_cross_section_surveys(tmp_path):
     output_dir = tmp_path / "runs"
     run_simulation.main(

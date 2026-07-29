@@ -168,6 +168,27 @@ def test_calibration_does_not_scale_field_measurement_geometry(
         calibration.parameter_overrides(config, parameters)
 
 
+def test_calibration_does_not_scale_stage_dependent_reviewed_roughness():
+    config = {
+        "reach": {
+            "manning_n": 0.001,
+            "slope": 0.002,
+            "upstream_width_m": 20.0,
+            "downstream_width_m": 30.0,
+            "stage_dependent_manning": "stage_manning.csv",
+        }
+    }
+    parameters = {
+        "manning_scale": 1.2,
+        "width_scale": 1.0,
+        "slope_scale": 1.0,
+        "lateral_inflow_fraction": 0.0,
+    }
+
+    with pytest.raises(ValueError, match="stage-dependent reviewed"):
+        calibration.parameter_overrides(config, parameters)
+
+
 def test_calibration_does_not_double_count_measured_point_flows():
     config = {
         "point_flow_series": "measured.csv",

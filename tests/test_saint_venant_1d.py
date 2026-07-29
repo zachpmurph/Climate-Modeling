@@ -242,6 +242,86 @@ def test_profile_grid_uses_per_cell_slope_and_roughness(monkeypatch):
     assert not np.array_equal(slope_result["q_final"], roughness_result["q_final"])
 
 
+def test_constant_stage_manning_table_is_backward_compatible(monkeypatch):
+    disable_forcing(monkeypatch)
+    cells = int(sv.L * 10)
+    h0 = np.full(cells, 0.2)
+    q0 = np.full(cells, 0.01)
+    baseline = sv.run_model(
+        sv.L,
+        0.01,
+        h_init=h0,
+        q_init=q0,
+        left_inflow=0.01,
+        manning_n=np.full(cells, 0.001),
+    )
+    table = sv.run_model(
+        sv.L,
+        0.01,
+        h_init=h0,
+        q_init=q0,
+        left_inflow=0.01,
+        manning_n=np.full(cells, 0.001),
+        manning_depth_m=[0.0, 0.1, 0.3],
+        manning_n_table=[0.001, 0.001, 0.001],
+    )
+
+    assert np.array_equal(table["h_final"], baseline["h_final"])
+    assert np.array_equal(table["q_final"], baseline["q_final"])
+    assert table["manning_n_history"] == pytest.approx(0.001)
+
+
+def test_stage_manning_table_interpolates_and_changes_friction(monkeypatch):
+    disable_forcing(monkeypatch)
+    cells = int(sv.L * 10)
+    h0 = np.full(cells, 0.2)
+    q0 = np.full(cells, 0.01)
+    low_friction = sv.run_model(
+        sv.L,
+        0.05,
+        h_init=h0,
+        q_init=q0,
+        left_inflow=0.01,
+        manning_n=np.full(cells, 0.0005),
+    )
+    variable = sv.run_model(
+        sv.L,
+        0.05,
+        h_init=h0,
+        q_init=q0,
+        left_inflow=0.01,
+        manning_n=np.full(cells, 0.0005),
+        manning_depth_m=[0.0, 0.1, 0.3],
+        manning_n_table=[0.0005, 0.0005, 0.005],
+    )
+
+    assert variable["manning_n_history"][0] == pytest.approx(0.00275)
+    assert np.mean(variable["q_final"]) < np.mean(low_friction["q_final"])
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"manning_depth_m": [0.0, 1.0]},
+        {
+            "manning_depth_m": [0.0, 1.0],
+            "manning_n_table": [0.001],
+        },
+        {
+            "manning_depth_m": [0.0, 0.0],
+            "manning_n_table": [0.001, 0.002],
+        },
+        {
+            "manning_depth_m": [0.0, 1.0],
+            "manning_n_table": [0.001, -0.002],
+        },
+    ],
+)
+def test_invalid_stage_manning_table_raises(kwargs):
+    with pytest.raises(ValueError, match="Manning"):
+        sv.run_model(sv.L, 0.01, **kwargs)
+
+
 def test_nonflat_lake_at_rest_is_well_balanced():
     x_m = np.linspace(0.0, 1000.0, 101)
     dx_m = np.full_like(x_m, 1000.0 / len(x_m))

@@ -27,6 +27,7 @@ from general.solvers import saint_venant_1d
 from general.solvers.profile import (
     load_channel_geometry,
     load_compound_cross_sections,
+    load_stage_dependent_manning,
     load_surveyed_cross_sections,
 )
 from rivers.validation.compare import evaluate_series
@@ -288,6 +289,8 @@ def manning_normal_depth(
     table_depth=None,
     table_width=None,
     table_perimeter=None,
+    manning_depth=None,
+    manning_values=None,
 ):
     """Solve Manning's relation for an arbitrary supported cross-section."""
     inputs = (
@@ -303,6 +306,24 @@ def manning_normal_depth(
         or side_slope < 0
     ):
         raise ValueError("Normal-depth inputs must be positive")
+    if (manning_depth is None) != (manning_values is None):
+        raise ValueError(
+            "Normal-depth Manning depth and n tables must be supplied together"
+        )
+    if manning_depth is not None:
+        manning_depth = np.asarray(manning_depth, dtype=float)
+        manning_values = np.asarray(manning_values, dtype=float)
+        if (
+            manning_depth.ndim != 1
+            or manning_values.shape != manning_depth.shape
+            or len(manning_depth) < 2
+            or np.any(~np.isfinite(manning_depth))
+            or np.any(~np.isfinite(manning_values))
+            or np.any(manning_depth < 0.0)
+            or np.any(np.diff(manning_depth) <= 0.0)
+            or np.any(manning_values <= 0.0)
+        ):
+            raise ValueError("Invalid normal-depth Manning table")
 
     def residual(depth):
         area = saint_venant_1d._cross_section_area(
@@ -320,11 +341,16 @@ def manning_normal_depth(
             table_width,
             table_perimeter,
         )
+        effective_manning = (
+            manning_n
+            if manning_depth is None
+            else float(np.interp(depth, manning_depth, manning_values))
+        )
         predicted = (
             area
             * hydraulic_radius ** (2.0 / 3.0)
             * math.sqrt(slope)
-            / manning_n
+            / effective_manning
         )
         return predicted - discharge
 
@@ -572,8 +598,27 @@ def load_validation_geometry(config_path, reach, x_m, *, event_start=None):
         "cross_section_wetted_perimeter_m": None,
         "bed_elevation_m": None,
         "field_manning_n": None,
+        "manning_depth_m": None,
+        "manning_n_table": None,
     }
     provenance = {"cross_section_shape": shape}
+    stage_manning_source = reach.get("stage_dependent_manning")
+    if stage_manning_source is not None:
+        source = _geometry_source(
+            config_path, reach, "stage_dependent_manning"
+        )
+        (
+            geometry["manning_depth_m"],
+            geometry["manning_n_table"],
+        ) = load_stage_dependent_manning(source, x_m)
+        provenance.update(
+            {
+                "stage_dependent_manning": str(stage_manning_source),
+                "manning_interpolation": (
+                    "linear in depth with endpoint clamping"
+                ),
+            }
+        )
     if shape == "rectangular":
         field_source = reach.get("field_measurement_geometry")
         if field_source is None:
@@ -819,6 +864,8 @@ def run_validation_case(config_path, *, output_path=None, overrides=None):
     table_depth = geometry["cross_section_depth_m"]
     table_width = geometry["cross_section_top_width_m"]
     table_perimeter = geometry["cross_section_wetted_perimeter_m"]
+    manning_depth = geometry["manning_depth_m"]
+    manning_table = geometry["manning_n_table"]
     initial_depth = np.asarray(
         [
             manning_normal_depth(
@@ -833,6 +880,10 @@ def run_validation_case(config_path, *, output_path=None, overrides=None):
                 ),
                 table_perimeter=(
                     None if table_perimeter is None else table_perimeter[cell]
+                ),
+                manning_depth=manning_depth,
+                manning_values=(
+                    None if manning_table is None else manning_table[cell]
                 ),
             )
             for cell in range(cells)

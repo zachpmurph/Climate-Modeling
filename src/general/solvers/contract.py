@@ -26,6 +26,8 @@ class Domain:
     cross_section_depth_m: np.ndarray | None = None  # common stage-curve depths, shape (nlevel,)
     cross_section_top_width_m: np.ndarray | None = None  # compound width curves, shape (nx, nlevel)
     cross_section_wetted_perimeter_m: np.ndarray | None = None  # surveyed curves, shape (nx, nlevel)
+    manning_depth_m: np.ndarray | None = None  # roughness-curve depths, shape (nlevel,) or (nx, nlevel)
+    manning_n_table: np.ndarray | None = None  # depth-dependent Manning n, shape (nx, nlevel)
 
 
 @dataclass(frozen=True)

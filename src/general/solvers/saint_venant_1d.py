@@ -631,6 +631,54 @@ def _cell_values(values, default, n_cells, name):
     return array
 
 
+def _prepare_manning_table(depth_m, values, n_cells):
+    if (depth_m is None) != (values is None):
+        raise ValueError(
+            "Manning depth and n tables must be supplied together"
+        )
+    if depth_m is None:
+        return None, None
+    depths = np.asarray(depth_m, dtype=float)
+    roughness = np.asarray(values, dtype=float)
+    if depths.ndim == 1:
+        depths = np.broadcast_to(depths, (n_cells, len(depths))).copy()
+    if roughness.ndim == 1:
+        roughness = np.broadcast_to(
+            roughness, (n_cells, len(roughness))
+        ).copy()
+    if (
+        depths.ndim != 2
+        or roughness.shape != depths.shape
+        or depths.shape[0] != n_cells
+        or depths.shape[1] < 2
+        or np.any(~np.isfinite(depths))
+        or np.any(~np.isfinite(roughness))
+        or np.any(depths < 0.0)
+        or np.any(np.diff(depths, axis=1) <= 0.0)
+        or np.any(roughness <= 0.0)
+    ):
+        raise ValueError(
+            "Manning tables need at least two strictly increasing finite "
+            "non-negative depths and one finite positive n value per depth "
+            "and cell"
+        )
+    return depths, roughness
+
+
+def _manning_at_depth(depth_m, base_values, table_depth, table_values):
+    if table_depth is None:
+        return base_values
+    return np.asarray(
+        [
+            np.interp(depth, levels, values)
+            for depth, levels, values in zip(
+                depth_m, table_depth, table_values
+            )
+        ],
+        dtype=float,
+    )
+
+
 def _prepare_grid(domain_length, x_m, dx_m, slope, manning_n):
     if x_m is None:
         if not np.isfinite(domain_length) or domain_length < 0.2:
@@ -744,6 +792,8 @@ def run_model(
     cross_section_depth_m=None,
     cross_section_top_width_m=None,
     cross_section_wetted_perimeter_m=None,
+    manning_depth_m=None,
+    manning_n_table=None,
     downstream_boundary="outflow",
     downstream_stage_m=None,
     spatial_order=1,
@@ -772,6 +822,9 @@ def run_model(
         manning_n,
     )
     n_cells = len(x)
+    manning_table_depth, manning_table_values = _prepare_manning_table(
+        manning_depth_m, manning_n_table, n_cells
+    )
     bed = (
         _bed_from_slope(x, bed_slope)
         if bed_elevation_m is None
@@ -1039,6 +1092,12 @@ def run_model(
         )
         friction_coeff = np.zeros_like(h_new)
         wet = h_new > H_FLOOR
+        effective_roughness = _manning_at_depth(
+            h_new,
+            roughness,
+            manning_table_depth,
+            manning_table_values,
+        )
         hydraulic_radius = (
             _hydraulic_radius(
                 h_new,
@@ -1052,7 +1111,7 @@ def run_model(
             else h_new
         )
         friction_coeff[wet] = (
-            roughness[wet] ** 2
+            effective_roughness[wet] ** 2
             * np.abs(velocity_new[wet])
             / hydraulic_radius[wet] ** (4.0 / 3.0)
         )
@@ -1195,6 +1254,19 @@ def run_model(
         "dx_m": dx,
         "slope": bed_slope,
         "manning_n": roughness,
+        "manning_depth_m": manning_table_depth,
+        "manning_n_table": manning_table_values,
+        "manning_n_history": np.asarray(
+            [
+                _manning_at_depth(
+                    depth,
+                    roughness,
+                    manning_table_depth,
+                    manning_table_values,
+                )
+                for depth in h_history
+            ]
+        ),
         "bed_elevation_m": bed,
         "channel_width_m": reference_width,
         "channel_bottom_width_m": bottom_width,
@@ -1308,6 +1380,8 @@ class _SaintVenantSolver:
             cross_section_wetted_perimeter_m=getattr(
                 domain, "cross_section_wetted_perimeter_m", None
             ),
+            manning_depth_m=getattr(domain, "manning_depth_m", None),
+            manning_n_table=getattr(domain, "manning_n_table", None),
             downstream_boundary=scenario.downstream_boundary,
             downstream_stage_m=scenario.downstream_stage_m,
             spatial_order=scenario.spatial_order,
@@ -1336,6 +1410,9 @@ class _SaintVenantSolver:
                     "cross_section_wetted_perimeter_m"
                 ],
                 "cross_section_shape": raw["cross_section_shape"],
+                "manning_depth_m": raw["manning_depth_m"],
+                "manning_n_table": raw["manning_n_table"],
+                "manning_n_history": raw["manning_n_history"],
                 "top_width_history": raw["top_width_history"],
                 "cross_section_area_history": raw[
                     "cross_section_area_history"

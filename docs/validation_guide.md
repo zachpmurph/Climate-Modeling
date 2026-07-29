@@ -62,6 +62,16 @@ The committed events remain rectangular: no reviewed cross-sections are
 currently available for those reaches. Enabling the code path is not permission
 to invent geometry or choose a shape from downstream scores.
 
+Where repeated measurements span multiple flow depths, a case may also set
+`reach.stage_dependent_manning` to a reviewed
+`station_m,depth_m,manning_n` CSV. Roughness is interpolated at the evolving
+depth and used consistently in normal-depth startup and time stepping.
+Calibration then requires `manning_scale=[1.0]`; a reviewed curve cannot be
+scaled to improve its downstream score. At least two common depth levels and
+two stations covering the reach are required. The current Rio Grande evidence
+has only one usable field visit per gauge, so it does not identify a
+roughness-versus-depth curve and this option is deliberately not applied there.
+
 Measured event controls use optional top-level `downstream_stage_series` and
 `point_flow_series` paths in the case JSON. Paths are relative to that JSON.
 Stage rows contain `downstream_stage_m`; point-flow rows contain
@@ -79,7 +89,8 @@ twice. Downstream stage must already be converted to the model's vertical datum,
 not supplied as raw gage height. The cross-event optimizer enforces the same
 separation: `lateral_inflow_fraction` must be fixed at zero when measured point
 flows are present, and `width_scale` must be fixed at one for reviewed
-stage-dependent sections.
+stage-dependent sections. `manning_scale` must likewise remain one for
+field-inferred or stage-dependent reviewed roughness.
 
 The current hydraulically scaled, hydrostatically well-balanced, uncalibrated
 July 2004 baseline is NSE `0.1188`, RMSE `4376.9 m³/min`, percent bias

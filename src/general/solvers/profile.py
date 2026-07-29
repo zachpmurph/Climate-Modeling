@@ -225,6 +225,8 @@ def domain_from_profile(
     cross_section_depth_m=None,
     cross_section_top_width_m=None,
     cross_section_wetted_perimeter_m=None,
+    manning_depth_m=None,
+    manning_n_table=None,
 ) -> Domain:
     """Build a Domain from a RiverProfile (uses per-cell slope and Manning n)."""
     if (channel_width_m is None) != (bankfull_depth_m is None):
@@ -312,6 +314,40 @@ def domain_from_profile(
         )
     if bottom_width is not None and np.any(bottom_width > width):
         raise ValueError("channel_bottom_width_m cannot exceed channel_width_m")
+    if (manning_depth_m is None) != (manning_n_table is None):
+        raise ValueError(
+            "manning_depth_m and manning_n_table must be supplied together"
+        )
+    roughness_depth = None
+    roughness_table = None
+    if manning_depth_m is not None:
+        roughness_depth = np.asarray(manning_depth_m, dtype=float)
+        roughness_table = np.asarray(manning_n_table, dtype=float)
+        if roughness_depth.ndim == 1:
+            roughness_depth = np.broadcast_to(
+                roughness_depth,
+                (len(profile.station_m), len(roughness_depth)),
+            ).copy()
+        if roughness_table.ndim == 1:
+            roughness_table = np.broadcast_to(
+                roughness_table,
+                (len(profile.station_m), len(roughness_table)),
+            ).copy()
+        if (
+            roughness_depth.ndim != 2
+            or roughness_table.shape != roughness_depth.shape
+            or roughness_depth.shape[0] != len(profile.station_m)
+            or roughness_depth.shape[1] < 2
+            or np.any(~np.isfinite(roughness_depth))
+            or np.any(~np.isfinite(roughness_table))
+            or np.any(roughness_depth < 0.0)
+            or np.any(np.diff(roughness_depth, axis=1) <= 0.0)
+            or np.any(roughness_table <= 0.0)
+        ):
+            raise ValueError(
+                "Stage-dependent Manning tables need at least two increasing "
+                "non-negative depths and positive n values per station"
+            )
     return Domain(
         x_m=profile.station_m,
         dx_m=profile.dx_m,
@@ -324,6 +360,8 @@ def domain_from_profile(
         cross_section_depth_m=section_depth,
         cross_section_top_width_m=section_width,
         cross_section_wetted_perimeter_m=section_perimeter,
+        manning_depth_m=roughness_depth,
+        manning_n_table=roughness_table,
     )
 
 
@@ -417,6 +455,92 @@ def load_compound_cross_sections(path, station_m):
         ]
     )
     return common_depth, interpolated_widths
+
+
+def load_stage_dependent_manning(path, station_m):
+    """Interpolate reviewed depth-Manning curves onto model stations.
+
+    The CSV contains ``station_m,depth_m,manning_n``. Every surveyed station
+    uses the same strictly increasing non-negative depth levels.
+    """
+    with Path(path).open(newline="", encoding="utf-8-sig") as handle:
+        rows = list(csv.DictReader(handle))
+    if not rows:
+        raise ValueError("Stage-dependent Manning CSV is empty")
+    grouped = {}
+    try:
+        for row in rows:
+            station = float(row["station_m"])
+            depth = float(row["depth_m"])
+            roughness = float(row["manning_n"])
+            grouped.setdefault(station, []).append((depth, roughness))
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError(
+            "Stage-dependent Manning CSV must contain numeric station_m, "
+            "depth_m, and manning_n columns"
+        ) from exc
+    survey_stations = np.asarray(sorted(grouped), dtype=float)
+    if (
+        len(survey_stations) < 2
+        or np.any(~np.isfinite(survey_stations))
+        or np.any(np.diff(survey_stations) <= 0.0)
+    ):
+        raise ValueError(
+            "Stage-dependent Manning curves require at least two finite, "
+            "distinct survey stations"
+        )
+
+    common_depth = None
+    survey_roughness = []
+    for station in survey_stations:
+        samples = sorted(grouped[float(station)])
+        depths = np.asarray([sample[0] for sample in samples], dtype=float)
+        roughness = np.asarray([sample[1] for sample in samples], dtype=float)
+        if len(np.unique(depths)) != len(depths):
+            raise ValueError(
+                f"Manning curve at station {station:g} has duplicate depths"
+            )
+        if common_depth is None:
+            common_depth = depths
+        elif not np.array_equal(depths, common_depth):
+            raise ValueError(
+                "Every stage-dependent Manning curve must use identical "
+                "depth levels"
+            )
+        if (
+            len(depths) < 2
+            or np.any(~np.isfinite(depths))
+            or np.any(depths < 0.0)
+            or np.any(np.diff(depths) <= 0.0)
+            or np.any(~np.isfinite(roughness))
+            or np.any(roughness <= 0.0)
+        ):
+            raise ValueError(
+                "Stage-dependent Manning curves need at least two increasing "
+                "non-negative depths and positive n values"
+            )
+        survey_roughness.append(roughness)
+
+    survey_roughness = np.asarray(survey_roughness, dtype=float)
+    target_stations = np.asarray(station_m, dtype=float)
+    if (
+        target_stations[0] < survey_stations[0]
+        or target_stations[-1] > survey_stations[-1]
+    ):
+        raise ValueError(
+            "Stage-dependent Manning surveys must cover the modeled reach"
+        )
+    interpolated = np.column_stack(
+        [
+            np.interp(
+                target_stations,
+                survey_stations,
+                survey_roughness[:, level],
+            )
+            for level in range(len(common_depth))
+        ]
+    )
+    return common_depth, interpolated
 
 
 def load_surveyed_cross_sections(path, station_m):

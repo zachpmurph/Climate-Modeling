@@ -18,6 +18,7 @@ from general.solvers.profile import (
     load_compound_cross_sections,
     load_profile,
     load_reviewed_terrain,
+    load_stage_dependent_manning,
     load_surveyed_cross_sections,
     resample_profile,
 )
@@ -260,6 +261,14 @@ def parse_args(argv=None):
         ),
     )
     p.add_argument(
+        "--stage-manning",
+        type=Path,
+        help=(
+            "Reviewed station/depth/Manning-n CSV for depth-dependent "
+            "1-D conveyance"
+        ),
+    )
+    p.add_argument(
         "--bottom-width-fraction",
         type=float,
         default=0.5,
@@ -405,6 +414,10 @@ def main(argv=None):
         raise SystemExit(
             "error: --terrain-grid requires --solver saint_venant_2d"
         )
+    if args.stage_manning is not None and args.solver != "saint_venant":
+        raise SystemExit(
+            "error: --stage-manning requires --solver saint_venant"
+        )
     if args.terrain_grid is not None and (
         args.width is not None or args.hydraulic_geometry is not None
     ):
@@ -450,6 +463,7 @@ def main(argv=None):
         args.downstream_stage_series,
         args.compound_cross_sections,
         args.surveyed_cross_sections,
+        args.stage_manning,
         args.terrain_grid,
     ):
         if forcing_path is not None and not forcing_path.is_file():
@@ -498,6 +512,18 @@ def main(argv=None):
         )
     except ValueError as exc:
         raise SystemExit(f"error: {exc}") from exc
+    stage_manning_arguments = {}
+    if args.stage_manning is not None:
+        try:
+            manning_depth, manning_table = load_stage_dependent_manning(
+                args.stage_manning, profile.station_m
+            )
+        except ValueError as exc:
+            raise SystemExit(f"error: {exc}") from exc
+        stage_manning_arguments = {
+            "manning_depth_m": manning_depth,
+            "manning_n_table": manning_table,
+        }
     if args.solver == "saint_venant_2d":
         if args.terrain_grid is not None:
             try:
@@ -555,6 +581,7 @@ def main(argv=None):
                 cross_section_depth_m=section_depth,
                 cross_section_top_width_m=section_width,
                 cross_section_wetted_perimeter_m=section_perimeter,
+                **stage_manning_arguments,
             )
         elif args.compound_cross_sections is not None:
             try:
@@ -569,9 +596,12 @@ def main(argv=None):
                 profile,
                 cross_section_depth_m=section_depth,
                 cross_section_top_width_m=section_width,
+                **stage_manning_arguments,
             )
         elif args.hydraulic_geometry is None:
-            domain = domain_from_profile(profile)
+            domain = domain_from_profile(
+                profile, **stage_manning_arguments
+            )
         else:
             if not args.hydraulic_geometry.is_file():
                 raise SystemExit(
@@ -593,6 +623,7 @@ def main(argv=None):
                 bankfull_depth_m=bankfull_depth,
                 channel_bottom_width_m=bottom_width,
                 side_slope_h_to_v=side_slope,
+                **stage_manning_arguments,
             )
 
     scenario = scenario_from_profile(
@@ -743,6 +774,24 @@ def main(argv=None):
                     [f"{t:.6f}"] + [f"{q:.10g}" for q in row]
                 )
 
+    manning_history_path = None
+    if (
+        not is_2d
+        and result.extra.get("manning_n_table") is not None
+    ):
+        manning_history_path = out / f"{args.run_name}_manning_n.csv"
+        with manning_history_path.open("w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(
+                ["t_min"] + [f"{x:.6f}" for x in result.domain.x_m]
+            )
+            for t, row in zip(
+                result.times, result.extra["manning_n_history"]
+            ):
+                writer.writerow(
+                    [f"{t:.6f}"] + [f"{value:.10g}" for value in row]
+                )
+
     fields_path = None
     if is_2d:
         fields_path = out / f"{args.run_name}_fields.npz"
@@ -820,6 +869,11 @@ def main(argv=None):
                 else "m2_per_min"
             )
         ),
+        "manning_n_history_path": (
+            None
+            if manning_history_path is None
+            else str(manning_history_path)
+        ),
         "fields_path": None if fields_path is None else str(fields_path),
         "mass_inflow": result.mass_inflow,
         "mass_source": result.mass_source,
@@ -867,6 +921,13 @@ def main(argv=None):
         },
         "spatial_order": args.spatial_order,
     }
+    if args.stage_manning is not None:
+        summary["stage_dependent_manning"] = {
+            "source": _portable_path(args.stage_manning),
+            "depth_levels_m": result.domain.manning_depth_m.tolist(),
+            "manning_n": result.domain.manning_n_table.tolist(),
+            "interpolation": "linear_with_endpoint_clamping",
+        }
     if args.lateral_inflow_points is not None:
         summary["forcing_inputs"]["lateral_inflow_points"] = _portable_path(
             args.lateral_inflow_points

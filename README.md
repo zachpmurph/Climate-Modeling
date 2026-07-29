@@ -152,6 +152,7 @@ The rationale for each transition is given alongside the change.
 | **4ak — Observed-stage boundary experiment** | Current branch | Added a reproducible approved-USGS gage-height fetch with explicit NAVD88-to-model datum conversion, then ran a separate Rio Grande stage-conditioned discharge experiment without replacing the predeclared baseline. Validation now scores the finite-volume boundary flux rather than the last cell's internal discharge. | Gauge discharge is a boundary flux. The earlier last-cell score made the measured-stage experiment look artificially successful; the corrected result is slightly worse than the free-outlet baseline and rules out tailwater alone as the explanation. |
 | **4al — Field-derived reach geometry experiment** | Current branch | Added reproducible USGS channel- and field-measurement ingestion for active width, area, mean gage height, effective bed elevation, and Manning roughness inferred at both Rio Grande gauges. Width, bed, and roughness are interpolated per cell and protected from calibration scaling. | A gage datum is a vertical reference, not the streambed. Using measured water surface minus hydraulic mean depth prevents datum drop from masquerading as bed slope and tests whether independently derived geometry transfers without fitting downstream discharge. |
 | **4am — Event-dated channel state** | Current branch | Field-geometry files can now retain multiple named measurement snapshots. Validation selects the newest complete snapshot available before an event starts, enforces a maximum observation age, and records the selected snapshot plus every visit timestamp and age. | A river profile is not timeless, especially in a mobile-bed channel. Coherent pre-event selection lets width, effective bed, and inferred roughness change between events without mixing survey periods or using the downstream hydrograph or future surveys to choose them. |
+| **4an — Stage-dependent conveyance** | Current branch | Added reviewed `station_m,depth_m,manning_n` curves to 1-D Saint-Venant. Roughness is interpolated in depth and along the reach, used consistently in startup and every friction update, recorded through time, and excluded from roughness scaling during calibration. | One roughness inferred at one measured depth cannot represent changing relative roughness, vegetation engagement, or overbank conveyance. A reviewed curve exposes that dependence without fitting an event-specific scalar to downstream discharge. |
 
 ---
 
@@ -217,6 +218,7 @@ python src/rivers/simulations/run_simulation.py PROFILE --solver SOLVER --t-fina
 | `--cross-section-shape` | `rectangular` | 1-D Saint-Venant section shape: `rectangular`, `trapezoidal`, `compound`, or `surveyed` |
 | `--compound-cross-sections` | — | Reviewed `station_m,depth_m,top_width_m` CSV; required for `--cross-section-shape compound` |
 | `--surveyed-cross-sections` | — | Reviewed `station_m,offset_m,elevation_m` CSV; required for `--cross-section-shape surveyed` |
+| `--stage-manning` | — | Reviewed `station_m,depth_m,manning_n` CSV for depth-dependent 1-D friction |
 | `--bottom-width-fraction` | `0.5` | Trapezoid bottom width divided by reviewed bankfull width, in `(0, 1]` |
 | `--floodplain-slope` | `0.02` | Lateral rise/run outside the reviewed bankfull channel |
 | `--terrain-grid` | — | Reviewed Cartesian `x_m,y_m,dx_m,dy_m,bed_elevation_m[,manning_n]` CSV for 2-D; replaces synthetic width/geometry inputs |
@@ -391,6 +393,14 @@ compatibility. The default section is rectangular. With
 top width and `--bottom-width-fraction` sets the bottom width; the bank side
 slope is then derived from the reviewed bankfull depth. This is a simplified
 parameterized shape, not a substitute for surveyed cross-section coordinates.
+
+When repeated measurements support a roughness-versus-depth relation, pass
+`--stage-manning real_world_rivers/tools/example_stage_manning.csv`. Every
+survey station must use common increasing depth levels. The solver interpolates
+Manning's *n* linearly in depth and longitudinally between stations, clamps
+outside the reviewed depth range, and writes `<run>_manning_n.csv`. The example
+file demonstrates the schema only; its values are not field observations and
+must not be used as a calibrated river profile.
 
 Time-varying forcing CSVs must start at `t_min=0`, contain at least two strictly
 increasing times, and have finite non-negative values. Values are linearly
