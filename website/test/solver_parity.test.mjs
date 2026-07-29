@@ -11,6 +11,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { kinematicWave, saintVenant1D } from "../js/solvers.js";
+import { saintVenant2D } from "../js/solvers2d.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REFERENCE_DIR = join(HERE, "reference");
@@ -43,7 +44,13 @@ function loadReferences() {
 }
 
 const references = loadReferences();
-assert.ok(references.length >= 4, "expected at least 4 reference cases; run build_scenarios.py --references");
+assert.ok(references.length >= 7, "expected at least 7 reference cases; run build_scenarios.py --references");
+for (const solver of ["kinematic_wave", "saint_venant", "saint_venant_2d"]) {
+  assert.ok(
+    references.some((r) => r.data.solver === solver),
+    `no reference case covers ${solver}`,
+  );
+}
 
 for (const { name, data } of references) {
   test(`parity: ${name}`, () => {
@@ -64,6 +71,25 @@ for (const { name, data } of references) {
         leftInflow: options.leftInflow,
         rainfall: (x, t) => (t < rain.endMin ? rain.rate : 0.0),
       });
+    } else if (data.solver === "saint_venant_2d") {
+      const { grid, options } = data;
+      const rain = options.rain;
+      result = saintVenant2D({
+        x_m: grid.x_m,
+        y_m: grid.y_m,
+        dx_m: grid.dx_m,
+        dy_m: grid.dy_m,
+        bedElevationM: grid.bed_elevation_m,
+        manningN: grid.manning_n,
+        hInit: options.hInit,
+        huInit: options.huInit === null ? 0.0 : options.huInit,
+        tFinalMin: options.tFinalMin,
+        recordIntervalMin: options.recordIntervalMin,
+        leftInflow: Array.isArray(options.leftInflow)
+          ? Float64Array.from(options.leftInflow)
+          : options.leftInflow,
+        rainfall: (t) => (rain.rate > 0 && t < rain.endMin ? rain.rate : 0.0),
+      });
     } else {
       throw new Error(`unknown solver in reference: ${data.solver}`);
     }
@@ -73,9 +99,17 @@ for (const { name, data } of references) {
     for (let i = 0; i < expected.times.length; i += 1) {
       assertClose(result.times[i], expected.times[i], `times[${i}]`);
     }
+    if (expected.nx !== undefined) {
+      assert.equal(result.nx, expected.nx, "nx");
+      assert.equal(result.ny, expected.ny, "ny");
+    }
     assertMatrixClose(result.depth_history, expected.depth_history, "depth");
     if (expected.discharge_history) {
       assertMatrixClose(result.discharge_history, expected.discharge_history, "discharge");
+    }
+    if (expected.discharge_x_history) {
+      assertMatrixClose(result.discharge_x_history, expected.discharge_x_history, "discharge_x");
+      assertMatrixClose(result.discharge_y_history, expected.discharge_y_history, "discharge_y");
     }
     assertClose(result.mass_inflow, expected.mass_inflow, "mass_inflow");
     assertClose(result.mass_source, expected.mass_source, "mass_source");

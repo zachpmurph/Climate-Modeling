@@ -28,6 +28,7 @@ if str(SRC_ROOT) not in sys.path:
 
 from general.solvers import linear_advection as la  # noqa: E402
 from general.solvers import saint_venant_1d as sv1  # noqa: E402
+from general.solvers import saint_venant_2d as sv2  # noqa: E402
 from general.solvers.profile import load_profile, make_profile  # noqa: E402
 
 WEBSITE_DIR = Path(__file__).resolve().parent
@@ -135,6 +136,82 @@ def _lowland_region():
     }
 
 
+def _floodplain_2d_region():
+    """A straight compound-channel reach solved with the verified 2-D solver.
+
+    The cross-section is a main channel flanked by benches that start dry, so
+    an event's lateral spread onto the floodplain is the visible result -- the
+    thing a 1-D cross-section average cannot show. A rectangular flat-bed
+    channel with wall boundaries would produce a y-invariant solution (vertical
+    stripes), which is why the bed is explicitly compound.
+    """
+    nx, ny = 48, 24
+    length_m, width_m = 1200.0, 300.0
+    slope_x = 0.002
+    manning_si = 0.035
+    manning_n = manning_si / 60.0
+    bank_height_m = 1.5
+    half_width_m = 60.0
+    transition_m = 60.0
+    channel_depth_m = 1.0
+
+    x, dx = sv2._grid(length_m, nx)
+    y, dy = sv2._grid(width_m, ny)
+    centre = 0.5 * (y[0] + y[-1])
+    lateral = bank_height_m * np.clip((np.abs(y - centre) - half_width_m) / transition_m, 0.0, 1.0)
+    bed = (-slope_x * x)[:, None] + lateral[None, :]
+
+    # Normal-flow initial state: uniform depth in the channel, dry benches, and
+    # a matching unit discharge so the baseline event starts near steady state
+    # instead of surging while the reach accelerates from rest.
+    surface = (-slope_x * x + channel_depth_m)[:, None]
+    h_init = np.maximum(surface - bed, 0.0)
+    hu_init = (1.0 / manning_n) * np.power(h_init, 5.0 / 3.0) * np.sqrt(slope_x)
+
+    return {
+        "id": "floodplain_2d",
+        "name": "Compound Floodplain Reach (synthetic 2-D)",
+        "kind": "synthetic",
+        "solver": "saint_venant_2d",
+        "dimensions": 2,
+        "description": (
+            "A synthetic 1.2 km reach with a compound cross-section: a main "
+            "channel with sloping banks, flanked by floodplain benches standing "
+            "1.5 m higher, on a 0.2% slope in a 300 m valley with confining "
+            "walls. Solved with the repository's verified 2-D shallow-water "
+            "solver, so you can watch water leave the channel and spread "
+            "laterally instead of only rising in a cross-section average. Once "
+            "the valley fills wall to wall, extra flow shows up as depth rather "
+            "than width — which is why the severe storm and the surge flood a "
+            "similar area at very different depths."
+        ),
+        "source": "synthetic compound-channel reach defined in website/build_scenarios.py",
+        "grid": {
+            "x": x, "y": y, "dx": dx, "dy": dy, "bed": bed,
+            "h_init": h_init, "hu_init": hu_init,
+            "manning_n": np.full((nx, ny), manning_n),
+            "channel_depth_m": channel_depth_m,
+            "bank_height_m": bank_height_m,
+        },
+        "sim_minutes": 180.0,
+        # The column-wise normal-flow guess is not an equilibrium of the 2-D
+        # equations: lateral momentum exchange and the open outlet settle it
+        # into a slightly different steady profile over the first ~60 min. Every
+        # event therefore starts from a spun-up steady state, so "baseline"
+        # really is flat and each event's change is the event's, not the
+        # reach still settling. Convergence was checked by running to 480 min:
+        # the profile is unchanged to 3 decimals from t=120 onward.
+        "spin_up_min": 180.0,
+        "rain_scale": 1.0,
+        "frames": 31,
+    }
+
+
+def _baseline_inflow_2d(region):
+    """Per-column normal-flow unit discharge at the inlet (m^2/min)."""
+    return region["grid"]["hu_init"][0, :].copy()
+
+
 def _baseline_inflow(profile):
     """Manning-equilibrium inflow at the mid-reach initial depth: keeps the reach
     near steady state under the baseline event."""
@@ -188,6 +265,68 @@ def _events(q0, sim_minutes, rain_scale):
             "name": "Prolonged rain",
             "narrative": "A long soaking rain: 8 mm/h for two thirds of the simulation at normal inflow.",
             "left_inflow": q0,
+            "rain_rate": rain(8.0),
+            "rain_start": 0.0,
+            "rain_end": 2.0 * third,
+        },
+    ]
+
+
+def _events_2d(q0, sim_minutes, rain_scale):
+    """Event set for the 2-D reach.
+
+    Unlike the 1-D regions, direct rain on this reach is not a meaningful
+    stressor: 30 mm/h falling on 0.36 km2 is a few m3/min against an inflow of
+    ~11,000 m3/min, so a rain-only event would be indistinguishable from
+    baseline. A storm reaches a reach like this as *discharge from upstream*,
+    so the storm events raise the inlet hydrograph and carry the direct rain as
+    well. The multiples are chosen to walk the reach through the states a
+    floodplain map exists to show: in-bank, at-bank, spilling, inundated.
+    """
+    rain = lambda mm_per_hour: mm_per_hour * MM_PER_HOUR_TO_M_PER_MIN * rain_scale
+    third = sim_minutes / 3.0
+    return [
+        {
+            "id": "baseline",
+            "name": "Baseline flow",
+            "narrative": "Normal conditions: steady upstream inflow, no storm. Water stays in the main channel and the floodplain benches are dry.",
+            "left_inflow": q0,
+            "rain_rate": 0.0,
+            "rain_start": 0.0,
+            "rain_end": None,
+        },
+        {
+            "id": "moderate_storm",
+            "name": "Moderate storm",
+            "narrative": "A storm over the upstream catchment lifts inflow 60% above normal, plus 10 mm/h falling directly on the reach. The river runs higher but stays between its banks.",
+            "left_inflow": 1.6 * q0,
+            "rain_rate": rain(10.0),
+            "rain_start": 0.0,
+            "rain_end": third,
+        },
+        {
+            "id": "severe_storm",
+            "name": "Severe storm",
+            "narrative": "A severe catchment storm pushes inflow to 2.6 times normal with 30 mm/h on the reach. The river tops its banks and water spreads onto the floodplain.",
+            "left_inflow": 2.6 * q0,
+            "rain_rate": rain(30.0),
+            "rain_start": 0.0,
+            "rain_end": sim_minutes / 2.0,
+        },
+        {
+            "id": "flash_flood",
+            "name": "Upstream flood surge",
+            "narrative": "No rain here, but inflow jumps to four times normal — an upstream flood wave or dam release arriving. The floodplain goes under across the full reach.",
+            "left_inflow": 4.0 * q0,
+            "rain_rate": 0.0,
+            "rain_start": 0.0,
+            "rain_end": None,
+        },
+        {
+            "id": "prolonged_rain",
+            "name": "Prolonged rain",
+            "narrative": "A long soaking rain: 8 mm/h on the reach for two thirds of the run, with inflow 30% above normal as the catchment slowly responds.",
+            "left_inflow": 1.3 * q0,
             "rain_rate": rain(8.0),
             "rain_start": 0.0,
             "rain_end": 2.0 * third,
@@ -282,6 +421,119 @@ def _metrics(result, discharge_history, profile, solver):
     }
 
 
+def _spin_up_2d(region, q0):
+    """Settle the reach into steady state under the baseline inflow.
+
+    Returns the converged state, which every event then starts from.
+    """
+    grid = region["grid"]
+    raw = sv2.run_model(
+        T_final=region["spin_up_min"],
+        record_interval=region["spin_up_min"],
+        h_init=grid["h_init"],
+        hu_init=grid["hu_init"],
+        left_inflow=q0,
+        rainfall=lambda x, y, t: 0.0,
+        x_m=grid["x"], y_m=grid["y"], dx_m=grid["dx"], dy_m=grid["dy"],
+        manning_n=grid["manning_n"],
+        bed_elevation_m=grid["bed"],
+    )
+    return {
+        "h": raw["h_final"].copy(),
+        "hu": raw["hu_final"].copy(),
+        "hv": raw["hv_final"].copy(),
+        # Land that is dry at steady state: the only ground an event can flood.
+        "dry_mask": raw["h_final"] <= 0.0,
+    }
+
+
+def _run_scenario_2d(region, event, start):
+    grid = region["grid"]
+    interval = region["sim_minutes"] / (region["frames"] - 1)
+    rate = event["rain_rate"]
+    rain_start = event["rain_start"]
+    rain_end = event["rain_end"]
+
+    def rainfall(x, y, t):
+        active = rate > 0 and t >= rain_start and (rain_end is None or t < rain_end)
+        return rate if active else 0.0
+
+    return sv2.run_model(
+        T_final=region["sim_minutes"],
+        record_interval=interval,
+        h_init=start["h"],
+        hu_init=start["hu"],
+        hv_init=start["hv"],
+        left_inflow=np.asarray(event["left_inflow"], dtype=float),
+        rainfall=rainfall,
+        x_m=grid["x"], y_m=grid["y"], dx_m=grid["dx"], dy_m=grid["dy"],
+        manning_n=grid["manning_n"],
+        bed_elevation_m=grid["bed"],
+    )
+
+
+# A cell counts as flooded once it carries this much water; below it the depth
+# is a numerical film rather than something a person would call flooding.
+FLOOD_DEPTH_M = 0.05
+
+
+def _metrics_2d(raw, region, start):
+    """Metrics for a 2-D scenario, computed from the full-precision arrays.
+
+    The depth field written to disk is rounded for file size; these numbers are
+    not, so the mass-balance figure the site reports as "numerical quality" is
+    the solver's, not the rounding's.
+    """
+    depth = raw["h_history"]
+    times = raw["times"]
+    area = raw["dx_m"][:, None] * raw["dy_m"][None, :]
+    bench = start["dry_mask"]
+    bench_area = float(np.sum(area[bench]))
+
+    flat_peak = int(np.argmax(depth))
+    ti, xi, yi = np.unravel_index(flat_peak, depth.shape)
+
+    # Downstream discharge through the outlet face: sum of unit discharge times
+    # cell width -> m^3/min (a volume rate), not the 1-D m^2/min per unit width.
+    downstream_q = np.sum(raw["hu_history"][:, -1, :] * raw["dy_m"][None, :], axis=1)
+    flooded = np.array([
+        float(np.sum(area[bench & (frame > FLOOD_DEPTH_M)])) for frame in depth
+    ])
+
+    storage_initial = float(np.sum(raw["h_initial"] * area))
+    storage_final = float(np.sum(raw["h_final"] * area))
+    balance_error = (storage_final - storage_initial) - (
+        raw["mass_inflow"] + raw["mass_source"] - raw["mass_outflow"]
+        + raw["mass_floor_correction"]
+    )
+    peak_index = int(np.argmax(flooded))
+    return {
+        "peak_depth_m": float(depth[ti, xi, yi]),
+        "peak_time_min": float(times[ti]),
+        "peak_station_m": float(raw["x"][xi]),
+        "peak_across_m": float(raw["y"][yi]),
+        "initial_max_depth_m": float(np.max(raw["h_initial"])),
+        "final_max_depth_m": float(np.max(raw["h_final"])),
+        "downstream_hydrograph_m3_per_min": [float(v) for v in downstream_q],
+        "flooded_area_history_m2": [float(v) for v in flooded],
+        "peak_flooded_area_m2": float(flooded.max()),
+        "peak_flooded_time_min": float(times[peak_index]),
+        "floodplain_area_m2": bench_area,
+        "peak_flooded_fraction": float(flooded.max() / bench_area) if bench_area > 0 else 0.0,
+        "flood_depth_threshold_m": FLOOD_DEPTH_M,
+        "mass_inflow": float(raw["mass_inflow"]),
+        "mass_source": float(raw["mass_source"]),
+        "mass_outflow": float(raw["mass_outflow"]),
+        "mass_floor_correction": float(raw["mass_floor_correction"]),
+        "mass_balance_error": float(balance_error),
+        "solver": "saint_venant_2d",
+    }
+
+
+def _round_field(values, digits=4):
+    return [round(float(v), digits) for v in np.asarray(values).ravel()]
+
+
 def _validate(depth_history):
     depth = np.asarray(depth_history)
     if not np.all(np.isfinite(depth)):
@@ -292,62 +544,150 @@ def _validate(depth_history):
         raise ValueError(f"scenario produced {depth.shape[0]} frames (budget {MAX_FRAMES})")
 
 
+CALIBRATION_LIMITATION = (
+    "Roughness and geometry are literature/ingested estimates; the model is "
+    "verified numerically but not calibrated to observed floods."
+)
+LIMITATIONS_1D = [
+    "Screening output from a 1-D model: depths are cross-section averages, not a 2-D inundation boundary.",
+    CALIBRATION_LIMITATION,
+]
+LIMITATIONS_2D = [
+    "The inundation map is a 2-D solution on an idealised straight compound channel, not a survey of a real floodplain: it shows how water spreads over this geometry, not where a particular town would flood.",
+    "The bed is a smooth prismatic cross-section — no levees, bridges, buildings, culverts, or infiltration.",
+    CALIBRATION_LIMITATION,
+]
+
+
+def _entry_common(region, extra):
+    entry = {
+        "id": region["id"],
+        "name": region["name"],
+        "kind": region["kind"],
+        "solver": region["solver"],
+        "dimensions": region.get("dimensions", 1),
+        "description": region["description"],
+        "source": region["source"],
+        "events": [],
+    }
+    entry.update(extra)
+    return entry
+
+
+def _event_payload(event, region):
+    return {
+        "id": event["id"],
+        "name": event["name"],
+        "narrative": event["narrative"],
+        "rain_rate_m_per_min": event["rain_rate"],
+        "rain_start_min": event["rain_start"],
+        "rain_end_min": event["rain_end"],
+        "sim_minutes": region["sim_minutes"],
+    }
+
+
+def _build_region_1d(region, index):
+    profile = region["profile"]
+    q0 = _baseline_inflow(profile)
+    entry = _entry_common(region, {
+        "length_m": float(np.sum(profile.dx_m)),
+        "cells": int(len(profile.station_m)),
+        "baseline_inflow_m2_per_min": q0,
+    })
+    for event in _events(q0, region["sim_minutes"], region["rain_scale"]):
+        result, discharge_history = _run_scenario(region, event)
+        _validate(result["depth_history"])
+        metrics = _metrics(result, discharge_history, profile, region["solver"])
+        payload = {
+            "region": {k: entry[k] for k in
+                       ("id", "name", "kind", "solver", "dimensions", "description", "source")},
+            "event": {**_event_payload(event, region),
+                      "left_inflow_m2_per_min": event["left_inflow"]},
+            "station_m": [float(v) for v in result["station_m"]],
+            "times_min": [float(v) for v in result["times"]],
+            "depth_history": [[float(v) for v in row] for row in result["depth_history"]],
+            "metrics": metrics,
+            "limitations": LIMITATIONS_1D,
+        }
+        _emit(region, event, entry, payload)
+    index["regions"].append(entry)
+
+
+def _build_region_2d(region, index):
+    grid = region["grid"]
+    q0 = _baseline_inflow_2d(region)
+    total_q0 = float(np.sum(q0 * grid["dy"]))
+    start = _spin_up_2d(region, q0)
+    print(f"  {region['id']}: spun up {region['spin_up_min']:.0f} min -> "
+          f"max depth {start['h'].max():.3f} m, "
+          f"{int(start['dry_mask'].sum())} of {start['h'].size} cells dry")
+    entry = _entry_common(region, {
+        "length_m": float(np.sum(grid["dx"])),
+        "width_m": float(np.sum(grid["dy"])),
+        "cells": int(grid["h_init"].size),
+        "nx": int(len(grid["x"])),
+        "ny": int(len(grid["y"])),
+        "baseline_inflow_m3_per_min": total_q0,
+    })
+    for event in _events_2d(q0, region["sim_minutes"], region["rain_scale"]):
+        raw = _run_scenario_2d(region, event, start)
+        _validate(raw["h_history"])
+        metrics = _metrics_2d(raw, region, start)
+        payload = {
+            "region": {k: entry[k] for k in
+                       ("id", "name", "kind", "solver", "dimensions", "description", "source")},
+            "event": {**_event_payload(event, region),
+                      "left_inflow_m3_per_min": float(np.sum(np.asarray(event["left_inflow"]) * grid["dy"])),
+                      "inflow_multiple_of_baseline": float(
+                          np.sum(np.asarray(event["left_inflow"]) * grid["dy"]) / total_q0)},
+            "nx": entry["nx"],
+            "ny": entry["ny"],
+            "x_m": [float(v) for v in raw["x"]],
+            "y_m": [float(v) for v in raw["y"]],
+            "dx_m": [float(v) for v in raw["dx_m"]],
+            "dy_m": [float(v) for v in raw["dy_m"]],
+            "bed_elevation_m": _round_field(raw["bed_elevation_m"]),
+            "bank_height_m": grid["bank_height_m"],
+            "times_min": [float(v) for v in raw["times"]],
+            # Rounded for file size only; every number in `metrics` above comes
+            # from the full-precision arrays.
+            "depth_history": [_round_field(frame) for frame in raw["h_history"]],
+            "metrics": metrics,
+            "limitations": LIMITATIONS_2D,
+        }
+        _emit(region, event, entry, payload,
+              extra=f"flooded {metrics['peak_flooded_area_m2'] / 10000:.1f} ha "
+                    f"({metrics['peak_flooded_fraction'] * 100:.0f}% of floodplain)")
+    index["regions"].append(entry)
+
+
+def _emit(region, event, entry, payload, extra=""):
+    filename = f"{region['id']}__{event['id']}.json"
+    path = SCENARIO_DIR / filename
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    entry["events"].append({
+        "id": event["id"],
+        "name": event["name"],
+        "file": f"data/scenarios/{filename}",
+        "peak_depth_m": payload["metrics"]["peak_depth_m"],
+    })
+    size_kb = path.stat().st_size / 1024
+    print(f"  {region['id']} / {event['id']}: peak {payload['metrics']['peak_depth_m']:.3f} m "
+          f"at t={payload['metrics']['peak_time_min']:.0f} min "
+          f"({len(payload['times_min'])} frames, {size_kb:.0f} KB) {extra}")
+
+
 def build_atlas():
     SCENARIO_DIR.mkdir(parents=True, exist_ok=True)
-    regions = [_columbia_region(), _steep_creek_region(), _lowland_region()]
+    regions = [_columbia_region(), _steep_creek_region(), _lowland_region(),
+               _floodplain_2d_region()]
     index = {"generated_by": "website/build_scenarios.py", "regions": []}
 
     for region in regions:
-        profile = region["profile"]
-        q0 = _baseline_inflow(profile)
-        entry = {
-            "id": region["id"],
-            "name": region["name"],
-            "kind": region["kind"],
-            "solver": region["solver"],
-            "description": region["description"],
-            "source": region["source"],
-            "length_m": float(np.sum(profile.dx_m)),
-            "cells": int(len(profile.station_m)),
-            "baseline_inflow_m2_per_min": q0,
-            "events": [],
-        }
-        for event in _events(q0, region["sim_minutes"], region["rain_scale"]):
-            result, discharge_history = _run_scenario(region, event)
-            _validate(result["depth_history"])
-            payload = {
-                "region": {k: entry[k] for k in ("id", "name", "kind", "solver", "description", "source")},
-                "event": {
-                    "id": event["id"],
-                    "name": event["name"],
-                    "narrative": event["narrative"],
-                    "left_inflow_m2_per_min": event["left_inflow"],
-                    "rain_rate_m_per_min": event["rain_rate"],
-                    "rain_start_min": event["rain_start"],
-                    "rain_end_min": event["rain_end"],
-                    "sim_minutes": region["sim_minutes"],
-                },
-                "station_m": [float(v) for v in result["station_m"]],
-                "times_min": [float(v) for v in result["times"]],
-                "depth_history": [[float(v) for v in row] for row in result["depth_history"]],
-                "metrics": _metrics(result, discharge_history, profile, region["solver"]),
-                "limitations": [
-                    "Screening output from a 1-D model: depths are cross-section averages, not a 2-D inundation boundary.",
-                    "Roughness and geometry are literature/ingested estimates; the model is verified numerically but not calibrated to observed floods.",
-                ],
-            }
-            filename = f"{region['id']}__{event['id']}.json"
-            (SCENARIO_DIR / filename).write_text(json.dumps(payload), encoding="utf-8")
-            entry["events"].append({
-                "id": event["id"],
-                "name": event["name"],
-                "file": f"data/scenarios/{filename}",
-                "peak_depth_m": payload["metrics"]["peak_depth_m"],
-            })
-            print(f"  {region['id']} / {event['id']}: peak {payload['metrics']['peak_depth_m']:.3f} m "
-                  f"at t={payload['metrics']['peak_time_min']:.0f} min "
-                  f"({len(payload['times_min'])} frames)")
-        index["regions"].append(entry)
+        if region.get("dimensions", 1) == 2:
+            _build_region_2d(region, index)
+        else:
+            _build_region_1d(region, index)
 
     (DATA_DIR / "index.json").write_text(json.dumps(index, indent=2), encoding="utf-8")
     print(f"Wrote {DATA_DIR / 'index.json'}")
@@ -437,6 +777,112 @@ def build_references():
         "options": {"tFinalMin": 20.0, "recordIntervalMin": 2.0, "leftInflow": 0.5,
                     "hInit": h0.tolist(), "rain": {"rate": 1e-5, "endMin": 8.0}},
         "expected": _sv_expected(raw),
+    })
+
+    _build_2d_references()
+
+
+def _build_2d_references():
+    """Reference cases for the 2-D port.
+
+    Deliberately tiny so a parity failure is debuggable by hand, and chosen to
+    exercise the places a port actually diverges: hydrostatic reconstruction
+    over a non-flat bed, advancing wet/dry fronts, and the wall/inflow
+    ghost-cell construction.
+
+    Not covered, by construction: the draining limiter's theta < 1 branch. At
+    the enforced cfl <= 0.5 the ratio of one step's outgoing volume to a cell's
+    available volume is bounded by the CFL number, so theta stays at 1.0 in
+    every case here (measured, not assumed). The donor-cell scaling therefore
+    multiplies by exactly 1.0 in both implementations and cannot make them
+    disagree; the branch is a positivity guard, not a live code path.
+    """
+    # 1. Flat bed, uniform inflow, windowed rain. Exercises the plain Rusanov
+    #    path and the mass ledger.
+    x, dx = sv2._grid(40.0, 8)
+    y, dy = sv2._grid(24.0, 6)
+    bed = np.zeros((8, 6))
+    h0 = np.full((8, 6), 0.30)
+    _write_2d_reference("saint_venant_2d_flat.json", x, y, dx, dy, bed,
+                        h_init=h0, manning_n=np.full((8, 6), 0.035 / 60.0),
+                        t_final=1.5, record_interval=0.5, left_inflow=4.0,
+                        rain_rate=2e-4, rain_end=1.0)
+
+    # 2. Compound cross-section with dry benches: the well-balanced hydrostatic
+    #    reconstruction and the wetting front over non-flat bed.
+    x, dx = sv2._grid(300.0, 10)
+    y, dy = sv2._grid(160.0, 8)
+    centre = 0.5 * (y[0] + y[-1])
+    lateral = 1.2 * np.clip((np.abs(y - centre) - 30.0) / 40.0, 0.0, 1.0)
+    bed = (-0.003 * x)[:, None] + lateral[None, :]
+    surface = (-0.003 * x + 0.8)[:, None]
+    h0 = np.maximum(surface - bed, 0.0)
+    manning = np.full((10, 8), 0.04 / 60.0)
+    hu0 = (1.0 / manning) * np.power(h0, 5.0 / 3.0) * np.sqrt(0.003)
+    _write_2d_reference("saint_venant_2d_compound.json", x, y, dx, dy, bed,
+                        h_init=h0, hu_init=hu0, manning_n=manning,
+                        t_final=2.0, record_interval=0.5,
+                        left_inflow=(3.0 * hu0[0, :]).tolist(),
+                        rain_rate=0.0, rain_end=0.0)
+
+    # 3. Collapsing pond on a sloping bed with no inflow: a wet/dry front
+    #    spreading into initially dry cells in both directions at once.
+    x, dx = sv2._grid(60.0, 6)
+    y, dy = sv2._grid(40.0, 5)
+    bed = (-0.02 * x)[:, None] + np.zeros((1, 5))
+    h0 = np.zeros((6, 5))
+    h0[1:3, 1:4] = 0.25
+    _write_2d_reference("saint_venant_2d_draining.json", x, y, dx, dy, bed,
+                        h_init=h0, manning_n=np.full((6, 5), 0.03 / 60.0),
+                        t_final=1.0, record_interval=0.25, left_inflow=0.0,
+                        rain_rate=0.0, rain_end=0.0)
+
+
+def _write_2d_reference(name, x, y, dx, dy, bed, *, h_init, manning_n,
+                        t_final, record_interval, left_inflow, rain_rate,
+                        rain_end, hu_init=None):
+    def rainfall(x_arr, y_arr, t):
+        return rain_rate if (rain_rate > 0 and t < rain_end) else 0.0
+
+    raw = sv2.run_model(
+        T_final=t_final,
+        record_interval=record_interval,
+        h_init=h_init,
+        hu_init=0.0 if hu_init is None else hu_init,
+        left_inflow=np.asarray(left_inflow, dtype=float) if isinstance(left_inflow, list) else left_inflow,
+        rainfall=rainfall,
+        x_m=x, y_m=y, dx_m=dx, dy_m=dy,
+        manning_n=manning_n,
+        bed_elevation_m=bed,
+    )
+    _write_reference(name, {
+        "solver": "saint_venant_2d",
+        "grid": {
+            "x_m": x.tolist(), "y_m": y.tolist(),
+            "dx_m": dx.tolist(), "dy_m": dy.tolist(),
+            "bed_elevation_m": bed.ravel().tolist(),
+            "manning_n": np.asarray(manning_n).ravel().tolist(),
+        },
+        "options": {
+            "tFinalMin": t_final,
+            "recordIntervalMin": record_interval,
+            "leftInflow": left_inflow,
+            "hInit": np.asarray(h_init).ravel().tolist(),
+            "huInit": None if hu_init is None else np.asarray(hu_init).ravel().tolist(),
+            "rain": {"rate": rain_rate, "endMin": rain_end},
+        },
+        "expected": {
+            "nx": int(len(x)),
+            "ny": int(len(y)),
+            "times": [float(v) for v in raw["times"]],
+            "depth_history": [[float(v) for v in frame.ravel()] for frame in raw["h_history"]],
+            "discharge_x_history": [[float(v) for v in frame.ravel()] for frame in raw["hu_history"]],
+            "discharge_y_history": [[float(v) for v in frame.ravel()] for frame in raw["hv_history"]],
+            "mass_inflow": float(raw["mass_inflow"]),
+            "mass_source": float(raw["mass_source"]),
+            "mass_outflow": float(raw["mass_outflow"]),
+            "mass_floor_correction": float(raw["mass_floor_correction"]),
+        },
     })
 
 

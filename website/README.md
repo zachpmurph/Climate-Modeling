@@ -4,9 +4,11 @@ A static, dependency-free site presenting the repository's flood models:
 
 - **Regions** — a browsable atlas of precomputed scenarios: region × event stress
   (baseline, storms, upstream flood surge, prolonged rain), produced by the *real*
-  Python solvers.
-- **Playground** — pick a model (kinematic wave or 1-D Saint-Venant), set channel
-  and storm conditions, and run the simulation live in the browser.
+  Python solvers. Three 1-D reaches plus one 2-D compound-floodplain reach with an
+  animated inundation map.
+- **Playground** — pick a model (kinematic wave, 1-D Saint-Venant, or 2-D
+  Saint-Venant), set channel and storm conditions, and run the simulation live in
+  the browser.
 - **About** — provenance, verification status, and limitations.
 
 No frameworks, no build step, no CDN: plain HTML/CSS/JS with inline SVG charts.
@@ -37,19 +39,42 @@ cell carries the ingestion slope floor (a flat dam pool), which a kinematic cell
 cannot convey; the builder substitutes the adjacent cell's slope and says so in the
 region description.
 
+The 2-D region is warm-started: the builder first runs the reach to steady state under
+baseline inflow, then every event starts from that spun-up state, so "baseline" is flat
+and each event's change is the event's rather than the reach still settling. Its depth
+fields are rounded to 4 decimals on disk (~285 KB per scenario); the reported metrics,
+including mass balance, come from the full-precision arrays.
+
 ## Solver parity (the guardrail for the playground)
 
-`website/js/solvers.js` contains JavaScript ports of
-`src/general/solvers/linear_advection.py` and `src/general/solvers/saint_venant_1d.py`.
-They are held to the Python implementations by reference tests:
+`website/js/solvers.js` ports `src/general/solvers/linear_advection.py` and
+`src/general/solvers/saint_venant_1d.py`; `website/js/solvers2d.js` ports
+`src/general/solvers/saint_venant_2d.py`. All three are held to the Python
+implementations by reference tests:
 
 ```bash
 python website/build_scenarios.py --references   # regenerate Python reference outputs
 node --test website/test/solver_parity.test.mjs  # compare the JS ports (tol <= 1e-8)
 ```
 
-If you change the numerics in either Python solver, update the JS port and re-run
-both commands.
+If you change the numerics in any of the three Python solvers, update the JS port and
+re-run both commands. The port must follow the Python source, never the reverse:
+`src/general/solvers/**` is gated by `tests/test_saint_venant_2d_verification.py` and
+`docs/validation/saint_venant_2d_results.json`.
+
+The 2-D references cover a flat bed, a compound bed with dry benches, and a collapsing
+pond on a slope. They do **not** cover the draining limiter's `theta < 1` branch: at the
+enforced `cfl <= 0.5` the outgoing-to-available volume ratio is bounded by the CFL
+number, so `theta` measures exactly 1.0 in every case. Both implementations then scale
+by 1.0, so the branch cannot make them diverge — it is a positivity guard, not a live
+path.
+
+## Cost of a 2-D run in the browser
+
+A 2-D run costs `time steps x cells` cell updates and the browser manages roughly 4.5
+million per second. The playground estimates the step count up front and refuses runs
+above 20 million cell updates rather than freezing the tab; selecting the 2-D model also
+moves the shared reach/cell/duration fields to a 2-D preset (about 2 s).
 
 ## Units
 

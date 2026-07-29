@@ -100,8 +100,81 @@ displays depths in m, times in min/h. The conversion is stated in the UI.
   bounded cell count ≤ 400, duration ≤ 24 h) with messages next to the Run button;
   runs execute in a rAF-yielding loop so the tab stays responsive.
 
-## Non-goals (this iteration)
+## Non-goals (initial iteration)
 
-2-D scenarios in the browser, geographic basemaps in the atlas (the existing
-`animate_flood_map.py` covers geo maps offline), mobile-perfect styling, deployment
-automation (GitHub Actions Pages workflow can come later).
+Geographic basemaps in the atlas (the existing `animate_flood_map.py` covers geo maps
+offline), mobile-perfect styling, deployment automation (GitHub Actions Pages workflow
+can come later). 2-D scenarios were a non-goal in the initial build and were added in
+the follow-up below.
+
+---
+
+# Addendum — 2-D Saint-Venant (2026-07-28)
+
+**Goal:** watch the flooding *spread*, not just rise — in both the atlas and the sandbox.
+
+## What was added
+
+- `website/js/solvers2d.js` — a faithful JS port of `saint_venant_2d.run_model`
+  (Rusanov + hydrostatic reconstruction + conservative draining limiter). Flat
+  `Float64Array` fields, index `i * ny + j`.
+- `website/js/charts2d.js` — `inundationMap()` (canvas plan view) and
+  `crossSectionChart()` (SVG section through the deepest point).
+- A 2-D atlas region, **Compound Floodplain Reach**, and a `saint_venant_2d` option in
+  the playground with its own valley-geometry controls.
+
+## Decisions worth recording
+
+**The bed must be a compound cross-section.** A rectangular flat bed with `wall`
+lateral boundaries yields a y-invariant solution — the map would be vertical stripes
+carrying no more information than the 1-D chart. The bed is therefore an explicit
+`bed_elevation_m`: main channel, sloping banks, floodplain benches 1.5 m up, in a 300 m
+valley with confining walls.
+
+**Explicit `bed_elevation_m` everywhere.** Never the `slope_x`/`slope_y` reconstruction
+path — that integration is path-dependent for non-integrable slope fields, and avoiding
+it also keeps `_bed_from_slopes`/`cumsum` out of the JS port.
+
+**Rainfall is always passed explicitly.** `saint_venant_2d.run_model` falls back to
+`r(t) = 0.1 m/min` (6 m/h) when `rainfall is None`. The JS port deliberately does *not*
+reproduce that default and throws instead.
+
+**Events are discharge-driven, not rain-driven.** 30 mm/h on this 0.36 km² reach is a
+few m³/min against ~11,000 m³/min of inflow, so rain-only events are indistinguishable
+from baseline. A catchment storm reaches a reach like this *as discharge*, so the 2-D
+events raise the inlet hydrograph (1.0× / 1.6× / 2.6× / 4.0×) and carry the direct rain
+as well. This walks the reach through in-bank → at-bank → spilling → inundated.
+
+**Every event starts from a spun-up steady state.** The column-wise normal-flow guess is
+not an equilibrium of the 2-D equations; the reach settles over ~60 min. Without a warm
+start, "baseline" drifts and the settling shows up as event impact. Convergence was
+checked to 480 min (unchanged to 3 decimals from t=120).
+
+**"Flooded" means ground that is dry at baseline and wet during the event** (> 0.05 m),
+not "any bench cell" — the sloping banks are wet by construction, so the naive mask
+reported 47% flooded at baseline.
+
+**Display precision is separated from metric precision.** Depth fields are rounded to
+4 dp on disk (~285 KB/scenario); every reported metric, including mass balance, is
+computed from the full-precision arrays.
+
+## Browser cost
+
+A 2-D run costs `time steps × cells` cell updates; the browser does ~4.5M/s (measured).
+The playground estimates the step count from the initial CFL condition (corrected by
+`inflow^0.3` for the deepening flow) and refuses runs above 20M cell updates with
+actionable guidance, with `maxSteps` as a hard backstop. Defaults move to a 2-D preset
+(1200 m, 48×20 cells, 90 min ≈ 2 s) when the model is selected.
+
+## Parity coverage and its limit
+
+Three tiny 2-D reference cases (flat bed; compound bed with dry benches; collapsing pond
+on a slope) pass at ≤1e-8 alongside the four 1-D cases. State evolution is elementwise,
+so it is bitwise identical; only the `np.sum` mass diagnostics differ, at ~1e-16.
+
+Known gap, verified rather than assumed: the draining limiter's `theta < 1` branch is
+never reached. At the enforced `cfl ≤ 0.5` the ratio of a step's outgoing volume to a
+cell's available volume is bounded by the CFL number, so `theta` stayed exactly 1.0 in
+every case measured. The donor-cell scaling therefore multiplies by 1.0 in both
+implementations and cannot make them disagree — it is a positivity guard, not a live
+path.

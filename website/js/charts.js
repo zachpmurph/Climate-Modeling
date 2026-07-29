@@ -104,7 +104,7 @@ export function depthProfileChart(container, { stations, depthHistory }) {
 }
 
 /** Static line chart with a movable time cursor. Returns { setCursor(t) }. */
-export function hydrographChart(container, { times, values, unit }) {
+export function hydrographChart(container, { times, values, unit, minAxisMax = 1e-9 }) {
   container.innerHTML = "";
   const W = 960;
   const H = 220;
@@ -112,7 +112,9 @@ export function hydrographChart(container, { times, values, unit }) {
   const plotW = W - M.left - M.right;
   const plotH = H - M.top - M.bottom;
 
-  const maxValue = Math.max(...values, 1e-9) * 1.08;
+  // minAxisMax keeps an all-zero series (e.g. "nothing flooded") on a readable
+  // axis instead of one labelled in billionths.
+  const maxValue = Math.max(...values, minAxisMax) * 1.08;
   const tSpan = Math.max(times[times.length - 1] - times[0], 1e-9);
   const useHours = tSpan > 180;
 

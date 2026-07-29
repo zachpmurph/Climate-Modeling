@@ -39,18 +39,35 @@
         <div id="event-chips" class="chips" role="tablist" aria-label="Events"></div>
       </div>
       <div id="scenario-metrics" class="metric-row"></div>
-      <div class="chart-block">
+      <div class="chart-block" id="block-1d-depth">
         <h3>Water depth along the reach</h3>
         <div id="depth-chart"></div>
-        <div class="anim-controls">
-          <button id="play-toggle" class="play" aria-label="Play or pause">▶</button>
-          <input id="frame-slider" type="range" min="0" value="0" step="1" aria-label="Time">
-          <span id="frame-label" class="mono"></span>
-        </div>
+      </div>
+      <div class="chart-block" id="block-2d-map" hidden>
+        <h3>Inundation map</h3>
+        <p class="chart-note">Plan view looking down on the reach; flow runs left to right.
+        The red outline is the channel edge before the event, so anything blue outside it is
+        new water.</p>
+        <div id="map-chart"></div>
+      </div>
+      <div class="anim-controls">
+        <button id="play-toggle" class="play" aria-label="Play or pause">▶</button>
+        <input id="frame-slider" type="range" min="0" value="0" step="1" aria-label="Time">
+        <span id="frame-label" class="mono"></span>
+      </div>
+      <div class="chart-block" id="block-2d-section" hidden>
+        <h3 id="section-title">Cross-section</h3>
+        <div id="section-chart"></div>
       </div>
       <div class="chart-block">
-        <h3>Downstream discharge</h3>
+        <h3 id="hydrograph-title">Downstream discharge</h3>
         <div id="hydrograph-chart"></div>
+      </div>
+      <div class="chart-block" id="block-2d-area" hidden>
+        <h3>Flooded area over time</h3>
+        <p class="chart-note">Ground that is dry under baseline flow and is under water during
+        the event.</p>
+        <div id="area-chart"></div>
       </div>
       <div class="chart-block">
         <h3>Peak depth by event</h3>
@@ -74,24 +91,41 @@
             Kinematic wave <span class="hint">fast; valid for gradually varying flow</span></label>
           <label class="radio"><input type="radio" name="model" value="saint_venant">
             Saint-Venant 1-D <span class="hint">full dynamic wave (Rusanov)</span></label>
+          <label class="radio"><input type="radio" name="model" value="saint_venant_2d">
+            Saint-Venant 2-D <span class="hint">plan-view inundation over a compound channel</span></label>
         </fieldset>
         <fieldset>
           <legend>Channel</legend>
           <label>Reach length <span class="unit">m</span>
             <input type="number" name="length" value="2000" min="100" max="100000" step="100"></label>
-          <label>Cells
-            <input type="number" name="cells" value="80" min="10" max="400" step="10"></label>
+          <label>Cells along the reach
+            <input type="number" name="cells" value="80" min="10" max="400" step="1"></label>
           <label>Bed slope <span class="unit">m/m</span>
             <input type="number" name="slope" value="0.005" min="0.00005" max="0.1" step="any"></label>
           <label>Manning n <span class="unit">SI, s·m<sup>-1/3</sup></span>
             <input type="number" name="manning_si" value="0.04" min="0.01" max="0.15" step="any"></label>
-          <label>Initial depth <span class="unit">m</span>
+          <label class="only-1d">Initial depth <span class="unit">m</span>
             <input type="number" name="depth0" value="0.10" min="0" max="10" step="any"></label>
+        </fieldset>
+        <fieldset class="only-2d" hidden>
+          <legend>Valley cross-section</legend>
+          <label>Valley width <span class="unit">m</span>
+            <input type="number" name="width" value="300" min="40" max="2000" step="10"></label>
+          <label>Cells across the valley
+            <input type="number" name="cells_y" value="20" min="6" max="40" step="1"></label>
+          <label>Channel half-width <span class="unit">m</span>
+            <input type="number" name="half_width" value="60" min="5" max="500" step="5"></label>
+          <label>Bank height <span class="unit">m above the channel bed</span>
+            <input type="number" name="bank_height" value="1.5" min="0.1" max="10" step="any"></label>
+          <label>Channel depth <span class="unit">m</span>
+            <input type="number" name="channel_depth" value="1.0" min="0.05" max="10" step="any"></label>
         </fieldset>
         <fieldset>
           <legend>Forcing</legend>
-          <label>Upstream inflow <span class="unit">m²/min per m width</span>
+          <label class="only-1d">Upstream inflow <span class="unit">m²/min per m width</span>
             <input type="number" name="inflow" value="1.0" min="0" max="2000" step="any"></label>
+          <label class="only-2d" hidden>Upstream inflow <span class="unit">× the channel's normal flow</span>
+            <input type="number" name="inflow_multiple" value="3.0" min="0" max="20" step="any"></label>
           <label>Rain intensity <span class="unit">mm/h</span>
             <input type="number" name="rain" value="15" min="0" max="150" step="1"></label>
           <label>Rain duration <span class="unit">min</span>
@@ -104,17 +138,27 @@
       </form>
       <div id="playground-results" class="results" hidden>
         <div id="playground-metrics" class="metric-row"></div>
-        <div class="chart-block">
+        <div class="chart-block" id="pg-block-1d">
           <h3>Water depth along the reach</h3>
           <div id="pg-depth-chart"></div>
-          <div class="anim-controls">
-            <button id="pg-play-toggle" class="play" aria-label="Play or pause">▶</button>
-            <input id="pg-frame-slider" type="range" min="0" value="0" step="1" aria-label="Time">
-            <span id="pg-frame-label" class="mono"></span>
-          </div>
+        </div>
+        <div class="chart-block" id="pg-block-map" hidden>
+          <h3>Inundation map</h3>
+          <p class="chart-note">Plan view; flow runs left to right. The red outline is the
+          channel edge at the start of the run.</p>
+          <div id="pg-map-chart"></div>
+        </div>
+        <div class="anim-controls">
+          <button id="pg-play-toggle" class="play" aria-label="Play or pause">▶</button>
+          <input id="pg-frame-slider" type="range" min="0" value="0" step="1" aria-label="Time">
+          <span id="pg-frame-label" class="mono"></span>
+        </div>
+        <div class="chart-block" id="pg-block-section" hidden>
+          <h3 id="pg-section-title">Cross-section</h3>
+          <div id="pg-section-chart"></div>
         </div>
         <div class="chart-block">
-          <h3>Downstream discharge</h3>
+          <h3 id="pg-hydrograph-title">Downstream discharge</h3>
           <div id="pg-hydrograph-chart"></div>
         </div>
         <p class="fine">Manning n is converted to the model's meters-and-minutes
@@ -129,25 +173,29 @@
     <div class="prose">
       <h2>What this is</h2>
       <p>Flood Explorer is the public window onto a set of open 1-D and 2-D river flood
-      solvers (kinematic wave, Saint-Venant) with a real-world data-ingestion pipeline.
-      The <strong>Regions</strong> tab shows precomputed scenarios produced by the actual
-      Python solvers over each region's channel profile. The <strong>Playground</strong> runs
-      JavaScript ports of the same numerics in your browser; the ports are held to the
-      Python implementations by automated parity tests (tolerance ≤ 1e-8).</p>
+      solvers (kinematic wave, 1-D Saint-Venant, 2-D Saint-Venant) with a real-world
+      data-ingestion pipeline. The <strong>Regions</strong> tab shows precomputed scenarios
+      produced by the actual Python solvers over each region's channel profile or valley
+      grid. The <strong>Playground</strong> runs JavaScript ports of the same numerics in your
+      browser; all three ports are held to the Python implementations by automated parity
+      tests (tolerance ≤ 1e-8).</p>
       <h2>Where the numbers come from</h2>
       <p>The Columbia — Hanford Reach profile is built by the repository's ingestion
       pipeline from DEM elevations, USGS gauge data, and reviewed channel roughness, with
       every value carrying provenance metadata. The other regions are clearly labeled
-      synthetic reaches chosen to span contrasting flood behaviors. The 2-D solver in the
-      repository is verified to a formal numerical standard (convergence studies,
-      well-balancing, positivity, conservation); the 1-D solvers used here pass
-      mass-balance and analytical-equilibrium tests.</p>
+      synthetic reaches chosen to span contrasting flood behaviors. The 2-D solver is
+      verified to a formal numerical standard (convergence studies, well-balancing,
+      positivity, conservation); the 1-D solvers pass mass-balance and
+      analytical-equilibrium tests.</p>
       <h2>What this is not</h2>
       <p>This is a <strong>screening and education tool</strong>, not a flood forecast.
-      Depths are cross-section averages from 1-D models; they do not define a 2-D
-      inundation boundary. Roughness and geometry are estimates; the models are verified
-      numerically but not calibrated against observed flood events. Do not use this site
-      for safety-critical decisions.</p>
+      For the 1-D regions, depths are cross-section averages: they say how high the water
+      gets, not how far it spreads. The 2-D region does produce an inundation extent, but
+      over an <em>idealised</em> straight compound channel — it is a picture of how water
+      behaves on that geometry, not a map of any real floodplain, and it contains no
+      levees, buildings, bridges, culverts, or infiltration. Roughness and geometry are
+      estimates; the models are verified numerically but not calibrated against observed
+      flood events. Do not use this site for safety-critical decisions.</p>
       <h2>Units</h2>
       <p>The models compute in meters and minutes (Manning n = SI value / 60,
       g = 35316 m/min²). The interface accepts familiar units (SI n, mm/h rain) and
