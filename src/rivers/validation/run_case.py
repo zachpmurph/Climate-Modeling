@@ -24,6 +24,11 @@ if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
 from general.solvers import saint_venant_1d
+from general.solvers.profile import (
+    load_channel_geometry,
+    load_compound_cross_sections,
+    load_surveyed_cross_sections,
+)
 from rivers.validation.compare import evaluate_series
 
 
@@ -119,12 +124,57 @@ def fractional_lateral_inflow(boundary, fraction, length_m):
 
 def rectangular_normal_depth(discharge, width, manning_n, slope):
     """Solve Manning's relation for depth in a rectangular cross-section."""
-    if min(discharge, width, manning_n, slope) <= 0:
+    return manning_normal_depth(
+        discharge,
+        width,
+        0.0,
+        manning_n,
+        slope,
+    )
+
+
+def manning_normal_depth(
+    discharge,
+    bottom_width,
+    side_slope,
+    manning_n,
+    slope,
+    *,
+    table_depth=None,
+    table_width=None,
+    table_perimeter=None,
+):
+    """Solve Manning's relation for an arbitrary supported cross-section."""
+    inputs = (
+        float(discharge),
+        float(bottom_width),
+        float(side_slope),
+        float(manning_n),
+        float(slope),
+    )
+    if (
+        not all(math.isfinite(value) for value in inputs)
+        or min(discharge, bottom_width, manning_n, slope) <= 0
+        or side_slope < 0
+    ):
         raise ValueError("Normal-depth inputs must be positive")
 
     def residual(depth):
-        area = width * depth
-        hydraulic_radius = area / (width + 2.0 * depth)
+        area = saint_venant_1d._cross_section_area(
+            depth,
+            bottom_width,
+            side_slope,
+            table_depth,
+            table_width,
+        )
+        hydraulic_radius = saint_venant_1d._hydraulic_radius(
+            depth,
+            bottom_width,
+            side_slope,
+            table_depth,
+            table_width,
+            table_perimeter,
+        )
         predicted = (
             area
             * hydraulic_radius ** (2.0 / 3.0)
@@ -143,6 +193,100 @@ def rectangular_normal_depth(discharge, width, manning_n, slope):
         else:
             upper = midpoint
     return 0.5 * (lower + upper)
+
+
+def _configured_path(config_path, value):
+    path = Path(value)
+    return path if path.is_absolute() else config_path.parent / path
+
+
+def _geometry_source(config_path, reach, key):
+    if not reach.get(key):
+        raise ValueError(
+            f"{reach.get('cross_section_shape')} validation geometry requires {key}"
+        )
+    source = _configured_path(config_path, reach[key])
+    if not source.is_file():
+        raise ValueError(f"Validation geometry does not exist: {source}")
+    return source
+
+
+def load_validation_geometry(config_path, reach, x_m):
+    """Load the configured cross-section model onto validation cells."""
+    shape = reach.get("cross_section_shape", "rectangular")
+    geometry = {
+        "channel_width_m": None,
+        "channel_bottom_width_m": None,
+        "side_slope_h_to_v": None,
+        "cross_section_depth_m": None,
+        "cross_section_top_width_m": None,
+        "cross_section_wetted_perimeter_m": None,
+    }
+    provenance = {"cross_section_shape": shape}
+    if shape == "rectangular":
+        geometry["channel_width_m"] = np.linspace(
+            float(reach["upstream_width_m"]),
+            float(reach["downstream_width_m"]),
+            len(x_m),
+        )
+        return geometry, provenance
+    if shape == "trapezoidal":
+        source = _geometry_source(config_path, reach, "hydraulic_geometry")
+        width, bankfull = load_channel_geometry(source, x_m)
+        fraction = float(reach.get("bottom_width_fraction", 0.5))
+        if not 0.0 < fraction <= 1.0:
+            raise ValueError("bottom_width_fraction must be in (0, 1]")
+        bottom = fraction * width
+        geometry.update(
+            {
+                "channel_width_m": width,
+                "channel_bottom_width_m": bottom,
+                "side_slope_h_to_v": (width - bottom) / (2.0 * bankfull),
+            }
+        )
+        provenance.update(
+            {
+                "hydraulic_geometry": str(reach["hydraulic_geometry"]),
+                "bottom_width_fraction": fraction,
+            }
+        )
+        return geometry, provenance
+    if shape == "compound":
+        source = _geometry_source(
+            config_path, reach, "compound_cross_sections"
+        )
+        depth, width = load_compound_cross_sections(source, x_m)
+        geometry.update(
+            {
+                "channel_width_m": width[:, -1],
+                "cross_section_depth_m": depth,
+                "cross_section_top_width_m": width,
+            }
+        )
+        provenance["compound_cross_sections"] = str(
+            reach["compound_cross_sections"]
+        )
+        return geometry, provenance
+    if shape == "surveyed":
+        source = _geometry_source(
+            config_path, reach, "surveyed_cross_sections"
+        )
+        depth, width, perimeter = load_surveyed_cross_sections(source, x_m)
+        geometry.update(
+            {
+                "channel_width_m": width[:, -1],
+                "cross_section_depth_m": depth,
+                "cross_section_top_width_m": width,
+                "cross_section_wetted_perimeter_m": perimeter,
+            }
+        )
+        provenance["surveyed_cross_sections"] = str(
+            reach["surveyed_cross_sections"]
+        )
+        return geometry, provenance
+    raise ValueError(
+        "cross_section_shape must be rectangular, trapezoidal, compound, or surveyed"
+    )
 
 
 def run_validation_case(config_path, *, output_path=None, overrides=None):
@@ -167,8 +311,6 @@ def run_validation_case(config_path, *, output_path=None, overrides=None):
     cells = int(reach["cells"])
     slope = float(reach["slope"])
     manning_n = float(reach["manning_n"])
-    upstream_width = float(reach["upstream_width_m"])
-    downstream_width = float(reach["downstream_width_m"])
     if length_m <= 0 or cells < 2 or slope <= 0 or manning_n <= 0:
         raise ValueError("Reach length, cells, slope, and Manning n must be positive")
 
@@ -179,7 +321,10 @@ def run_validation_case(config_path, *, output_path=None, overrides=None):
     dx_m = np.full(cells, length_m / cells)
     bed_slope = np.full(cells, slope)
     roughness = np.full(cells, manning_n)
-    channel_width = np.linspace(upstream_width, downstream_width, cells)
+    geometry, geometry_provenance = load_validation_geometry(
+        config_path, reach, x_m
+    )
+    channel_width = geometry["channel_width_m"]
     boundary = discharge_boundary(upstream_times, upstream_flow)
     lateral_fraction = float(config.get("lateral_inflow_fraction", 0.0))
     lateral_inflow = fractional_lateral_inflow(
@@ -200,12 +345,39 @@ def run_validation_case(config_path, *, output_path=None, overrides=None):
             "Observed warm-up requires upstream observations through the warm-up start"
         )
     initial_q = boundary(warmup_start if warmup_forcing == "observed" else 0.0)
-    normal_depth = rectangular_normal_depth(
-        initial_q, upstream_width, manning_n, slope
-    )
     spatial_order = int(config.get("spatial_order", 1))
-    initial_depth = np.full(cells, normal_depth)
+    bottom_width = geometry["channel_bottom_width_m"]
+    if bottom_width is None:
+        bottom_width = channel_width
+    side_slope = geometry["side_slope_h_to_v"]
+    if side_slope is None:
+        side_slope = np.zeros(cells)
+    table_depth = geometry["cross_section_depth_m"]
+    table_width = geometry["cross_section_top_width_m"]
+    table_perimeter = geometry["cross_section_wetted_perimeter_m"]
+    initial_depth = np.asarray(
+        [
+            manning_normal_depth(
+                initial_q,
+                bottom_width[cell],
+                side_slope[cell],
+                roughness[cell],
+                bed_slope[cell],
+                table_depth=table_depth,
+                table_width=(
+                    None if table_width is None else table_width[cell]
+                ),
+                table_perimeter=(
+                    None if table_perimeter is None else table_perimeter[cell]
+                ),
+            )
+            for cell in range(cells)
+        ]
+    )
     initial_discharge = np.full(cells, initial_q)
+    geometry_arguments = {
+        key: value for key, value in geometry.items() if value is not None
+    }
     if warmup_min > 0:
         warmup_boundary = (
             shifted_boundary(boundary, warmup_start)
@@ -228,7 +400,7 @@ def run_validation_case(config_path, *, output_path=None, overrides=None):
             dx_m=dx_m,
             slope=bed_slope,
             manning_n=roughness,
-            channel_width_m=channel_width,
+            **geometry_arguments,
             cfl=float(config.get("cfl", 0.4)),
             spatial_order=spatial_order,
         )
@@ -248,7 +420,7 @@ def run_validation_case(config_path, *, output_path=None, overrides=None):
         dx_m=dx_m,
         slope=bed_slope,
         manning_n=roughness,
-        channel_width_m=channel_width,
+        **geometry_arguments,
         cfl=float(config.get("cfl", 0.4)),
         spatial_order=spatial_order,
     )
@@ -276,12 +448,13 @@ def run_validation_case(config_path, *, output_path=None, overrides=None):
         },
         "assumptions": {
             **reach,
+            **geometry_provenance,
             "initial_condition": (
-                "observed-upstream dynamic warm-up from uniform Manning normal flow"
+                "observed-upstream dynamic warm-up from per-cell Manning normal flow"
                 if warmup_min > 0 and warmup_forcing == "observed"
-                else "constant-boundary hydraulic warm-up from uniform Manning normal flow"
+                else "constant-boundary hydraulic warm-up from per-cell Manning normal flow"
                 if warmup_min > 0
-                else "uniform rectangular-section Manning normal depth and discharge"
+                else "per-cell cross-section Manning normal depth and discharge"
             ),
             "warmup_min": warmup_min,
             "warmup_upstream_forcing": warmup_forcing,

@@ -41,6 +41,27 @@ python src/rivers/validation/run_suite.py \
     real_world_rivers/validation/validation_suite.json
 ```
 
+Observed-event configurations can now use the same stage-dependent geometry as
+the production 1-D solver. Set `reach.cross_section_shape` to:
+
+- `rectangular` and retain `upstream_width_m` / `downstream_width_m`;
+- `trapezoidal` with `hydraulic_geometry` and an optional
+  `bottom_width_fraction`;
+- `compound` with `compound_cross_sections`; or
+- `surveyed` with `surveyed_cross_sections`.
+
+Geometry paths are resolved relative to the event JSON. Compound files use
+`station_m,depth_m,top_width_m`; raw surveyed files use
+`station_m,offset_m,elevation_m`. Startup depth is solved independently in each
+cell from its cross-section, local roughness, slope, and initial flow before the
+observed warm-up begins. This matters because applying a rectangular
+normal-depth estimate to a surveyed section creates a geometry-dependent
+startup transient that can falsely raise or lower NSE.
+
+The committed events remain rectangular: no reviewed cross-sections are
+currently available for those reaches. Enabling the code path is not permission
+to invent geometry or choose a shape from downstream scores.
+
 The current hydraulically scaled, hydrostatically well-balanced, uncalibrated
 July 2004 baseline is NSE `0.1188`, RMSE `4376.9 m³/min`, percent bias
 `-12.53%`, and Pearson `r = 0.7559`. It uses

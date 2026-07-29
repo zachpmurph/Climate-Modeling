@@ -152,6 +152,62 @@ def test_third_river_event_retains_predeclared_first_run_protocol():
     assert "No Rio Grande observation" in protocol["calibration_policy"]
 
 
+def test_validation_case_uses_surveyed_stage_dependent_geometry(tmp_path):
+    observations = tmp_path / "observations.csv"
+    observations.write_text(
+        "role,observed_at,discharge_m3_per_min\n"
+        "upstream,2020-01-01T00:00:00Z,100\n"
+        "upstream,2020-01-01T00:15:00Z,100\n"
+        "downstream,2020-01-01T00:00:00Z,100\n"
+        "downstream,2020-01-01T00:15:00Z,100\n",
+        encoding="utf-8",
+    )
+    surveys = tmp_path / "sections.csv"
+    surveys.write_text(
+        "station_m,offset_m,elevation_m\n"
+        "0,0,2\n0,2,0\n0,8,0\n0,10,2\n"
+        "100,0,3\n100,3,0\n100,9,0\n100,12,3\n",
+        encoding="utf-8",
+    )
+    config = tmp_path / "case.json"
+    config.write_text(
+        json.dumps(
+            {
+                "case": {
+                    "name": "surveyed validation",
+                    "observation_window": [
+                        "2020-01-01T00:00:00Z",
+                        "2020-01-01T00:15:00Z",
+                    ],
+                },
+                "observations": observations.name,
+                "reach": {
+                    "length_m": 100.0,
+                    "cells": 3,
+                    "slope": 0.001,
+                    "manning_n": 0.035 / 60.0,
+                    "cross_section_shape": "surveyed",
+                    "surveyed_cross_sections": surveys.name,
+                },
+                "record_interval_min": 5.0,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    evidence = run_validation_case(
+        config, output_path=tmp_path / "results.json"
+    )
+
+    assert evidence["assumptions"]["cross_section_shape"] == "surveyed"
+    assert evidence["assumptions"]["surveyed_cross_sections"] == surveys.name
+    assert (
+        evidence["assumptions"]["initial_condition"]
+        == "per-cell cross-section Manning normal depth and discharge"
+    )
+    assert evidence["scores"]["n"] == 2
+
+
 def test_observed_warmup_boundary_maps_negative_event_time_to_spinup_clock():
     boundary = discharge_boundary([-10.0, 0.0], [100.0, 200.0])
     warmup = shifted_boundary(boundary, -10.0)
