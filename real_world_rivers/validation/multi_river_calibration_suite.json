@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "suite": {
+    "name": "Historical river-balanced global-parameter calibration",
+    "rivers": [
+      "Colorado River",
+      "Truckee River",
+      "Rio Grande"
+    ]
+  },
+  "split_policy": "Parameters are selected only from two 2002 Colorado River events and the January 2017 Truckee River event. January 2004 Colorado and February 2017 Truckee are validation. July 2004 Colorado and the predeclared Rio Grande event are test-only. All events are historical and have now been inspected; this diagnoses spatial transfer but is not prospective validation.",
+  "split": {
+    "training": [
+      "glen_canyon_lees_ferry_2002-01-25.json",
+      "glen_canyon_lees_ferry_2002-07-02.json",
+      "truckee_reno_sparks_2017-01-08.json"
+    ],
+    "validation": [
+      "glen_canyon_lees_ferry_2004-01-06.json",
+      "truckee_reno_sparks_2017-02-10.json"
+    ],
+    "test": [
+      "glen_canyon_lees_ferry.json",
+      "rio_grande_alameda_albuquerque_2023-05-12.json"
+    ]
+  },
+  "objective": {
+    "nse_weight": 0.7,
+    "correlation_weight": 0.3,
+    "robustness_penalty": 0.1,
+    "correlation_robustness_penalty": 0.05,
+    "worst_event_weight": 0.15,
+    "balance_by": "river"
+  },
+  "cross_group_validation": {
+    "enabled": true,
+    "passes": 1
+  },
+  "parameter_interpretation": {
+    "manning_scale": "One global multiplier on each reach's independently estimated minutes-based Manning roughness.",
+    "width_scale": "One global multiplier on each reach's independently estimated rectangular channel width.",
+    "slope_scale": "One global multiplier on each reach's independently estimated longitudinal bed slope.",
+    "lateral_inflow_fraction": "One effective distributed reach-gain fraction applied only where measured point flows are absent; it is not a measured tributary hydrograph."
+  },
+  "parameter_grid": {
+    "manning_scale": [
+      0.8,
+      1.0,
+      1.2
+    ],
+    "width_scale": [
+      0.8,
+      1.0,
+      1.2
+    ],
+    "slope_scale": [
+      0.8,
+      1.0,
+      1.2
+    ],
+    "lateral_inflow_fraction": [
+      0.0,
+      0.075
+    ]
+  }
+}
