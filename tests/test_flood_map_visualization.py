@@ -32,6 +32,41 @@ def test_inundation_width_expands_symmetrically_above_bankfull():
     assert widths.tolist() == pytest.approx([100.0, 200.0])
 
 
+def test_dry_depths_do_not_create_flood_extent():
+    widths = animate_flood_map.inundation_widths(
+        depths_m=np.array([0.0, 1e-10]),
+        channel_widths_m=np.array([100.0, 100.0]),
+        bankfull_depths_m=np.array([2.0, 2.0]),
+        floodplain_slope=0.02,
+        max_width_m=1_000.0,
+    )
+
+    assert widths.tolist() == [0.0, 0.0]
+
+    frames = animate_flood_map.build_frames(
+        stations=np.array([0.0, 1_000.0]),
+        times=np.array([0.0]),
+        depths=np.array([[0.0, 1e-10]]),
+        centerline=np.array([[40.0, -120.0], [39.991, -120.0]]),
+        channel_widths_m=np.array([100.0, 100.0]),
+        bankfull_depths_m=np.array([2.0, 2.0]),
+        floodplain_slope=0.02,
+        max_width_m=1_000.0,
+    )
+
+    assert frames[0]["max_width_m"] == 0.0
+    assert frames[0]["segments"] == []
+
+
+def test_named_river_uses_paths_from_curated_definition():
+    markers, geometry = animate_flood_map._named_map_inputs("columbia-hanford")
+
+    assert markers == REPO_ROOT / "real_world_rivers" / "columbia_hanford_markers.csv"
+    assert geometry == REPO_ROOT / "real_world_rivers" / "columbia_hanford_geometry.csv"
+    assert markers.is_file()
+    assert geometry.is_file()
+
+
 def test_generator_uses_paired_summary_map_inputs(tmp_path):
     timeseries = tmp_path / "test_run_timeseries.csv"
     timeseries.write_text(
