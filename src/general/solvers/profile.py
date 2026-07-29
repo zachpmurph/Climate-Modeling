@@ -177,33 +177,116 @@ def domain_from_profile(profile: RiverProfile) -> Domain:
     )
 
 
-def domain2d_from_profile(profile: RiverProfile, width_m: float, cross_cells: int) -> Domain2D:
-    """Extrude a 1-D profile across a rectangular channel.
+def load_channel_geometry(path, station_m):
+    """Interpolate reviewed channel width and bankfull depth onto model stations."""
+    with Path(path).open(newline="", encoding="utf-8-sig") as handle:
+        rows = list(csv.DictReader(handle))
+    if not rows:
+        raise ValueError("Channel geometry CSV is empty")
+    rows.sort(key=lambda row: float(row["station_m"]))
+    geometry_stations = np.asarray([float(row["station_m"]) for row in rows])
+    widths = np.asarray([float(row["width_m"]) for row in rows])
+    bankfull = np.asarray([float(row["bankfull_depth_m"]) for row in rows])
+    if np.any(~np.isfinite(geometry_stations)) or np.any(np.diff(geometry_stations) <= 0):
+        raise ValueError("Geometry stations must be finite and strictly increasing")
+    if np.any(~np.isfinite(widths)) or np.any(widths <= 0):
+        raise ValueError("Channel widths must be finite and positive")
+    if np.any(~np.isfinite(bankfull)) or np.any(bankfull <= 0):
+        raise ValueError("Bankfull depths must be finite and positive")
+    stations = np.asarray(station_m, dtype=float)
+    return (
+        np.interp(stations, geometry_stations, widths),
+        np.interp(stations, geometry_stations, bankfull),
+    )
+
+
+def domain2d_from_profile(
+    profile: RiverProfile,
+    width_m: float,
+    cross_cells: int,
+    *,
+    channel_width_m=None,
+    bankfull_depth_m=None,
+    floodplain_slope: float = 0.02,
+) -> Domain2D:
+    """Build a 2-D channel/floodplain domain from a longitudinal profile.
 
     Longitudinal slope and roughness are repeated across the channel. The
-    cross-channel bed slope is zero; callers needing richer terrain can build a
-    ``Domain2D`` directly.
+    legacy default is flat across ``width_m``. Supplying ``channel_width_m``
+    and ``bankfull_depth_m`` creates a centred parabolic channel whose banks
+    meet the bankfull elevation, with planar floodplain rising laterally at
+    ``floodplain_slope`` beyond the reviewed channel width.
     """
     if not np.isfinite(width_m) or width_m <= 0:
         raise ValueError("width_m must be finite and positive")
     if cross_cells < 1:
         raise ValueError("cross_cells must be at least 1")
+    if not np.isfinite(floodplain_slope) or floodplain_slope <= 0:
+        raise ValueError("floodplain_slope must be finite and positive")
 
     dy = float(width_m) / int(cross_cells)
     y_m = np.linspace(0.5 * dy, float(width_m) - 0.5 * dy, int(cross_cells))
     shape = (len(profile.station_m), int(cross_cells))
+    if (channel_width_m is None) != (bankfull_depth_m is None):
+        raise ValueError(
+            "channel_width_m and bankfull_depth_m must be supplied together"
+        )
+    if channel_width_m is None:
+        channel_width = np.full(len(profile.station_m), float(width_m))
+        bankfull_depth = np.zeros(len(profile.station_m))
+    else:
+        channel_width = np.asarray(channel_width_m, dtype=float)
+        bankfull_depth = np.asarray(bankfull_depth_m, dtype=float)
+        if channel_width.ndim == 0:
+            channel_width = np.full(len(profile.station_m), float(channel_width))
+        if bankfull_depth.ndim == 0:
+            bankfull_depth = np.full(
+                len(profile.station_m), float(bankfull_depth)
+            )
+        if (
+            channel_width.shape != profile.station_m.shape
+            or np.any(~np.isfinite(channel_width))
+            or np.any(channel_width <= 0)
+            or np.any(channel_width >= width_m)
+        ):
+            raise ValueError(
+                "channel_width_m must contain one positive width smaller than the 2-D domain"
+            )
+        if (
+            bankfull_depth.shape != profile.station_m.shape
+            or np.any(~np.isfinite(bankfull_depth))
+            or np.any(bankfull_depth <= 0)
+        ):
+            raise ValueError(
+                "bankfull_depth_m must contain one finite positive depth per station"
+            )
+
     bed_profile = np.zeros(len(profile.station_m), dtype=float)
     if len(bed_profile) > 1:
         station_spacing = np.diff(profile.station_m)
         face_slope = 0.5 * (profile.slope[:-1] + profile.slope[1:])
         bed_profile[1:] = -np.cumsum(face_slope * station_spacing)
+    offset = np.abs(y_m[None, :] - 0.5 * float(width_m))
+    half_channel_width = 0.5 * channel_width[:, None]
+    channel_fraction = np.minimum(offset / half_channel_width, 1.0)
+    outside_distance = np.maximum(offset - half_channel_width, 0.0)
+    lateral_bed = (
+        bankfull_depth[:, None] * channel_fraction**2
+        + floodplain_slope * outside_distance
+    )
+    bed = bed_profile[:, None] + lateral_bed
+    slope_y = np.zeros(shape)
+    if len(y_m) > 1:
+        slope_y[:, 1:] = -(bed[:, 1:] - bed[:, :-1]) / np.diff(y_m)[None, :]
+        slope_y[:, 0] = slope_y[:, 1]
+
     return Domain2D(
         x_m=np.asarray(profile.station_m, dtype=float).copy(),
         y_m=y_m,
         dx_m=np.asarray(profile.dx_m, dtype=float).copy(),
         dy_m=np.full(int(cross_cells), dy),
         slope_x=np.broadcast_to(np.asarray(profile.slope)[:, None], shape).copy(),
-        slope_y=np.zeros(shape),
+        slope_y=slope_y,
         manning_n=np.broadcast_to(np.asarray(profile.manning_n)[:, None], shape).copy(),
-        bed_elevation_m=np.broadcast_to(bed_profile[:, None], shape).copy(),
+        bed_elevation_m=bed,
     )

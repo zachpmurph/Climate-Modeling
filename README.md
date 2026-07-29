@@ -104,7 +104,7 @@ The rationale for each transition is given alongside the change.
 | **4c — Kinematic wave consolidated** | `a282b4f` `e1ec579` | Folded the real-river kinematic wave capability (per-cell slope and Manning's $n$, upstream inflow, rainfall) into `linear_advection.py` and removed the duplicate `river_kinematic_wave.py` and its pre-harness runner. `linear_advection.py` now runs standalone on a profile (or a built-in demo) and is the `kinematic_wave` solver in the harness. `--solver river_kinematic_wave` is replaced by `--solver kinematic_wave`. | The overland-flow file and the real-river file had diverged into near-duplicate kinematic wave solvers. Consolidating to one implementation removes the redundancy and the need for a separate file to run a real-profile simulation. |
 | **4d — Model-neutral flood reporting** | `6116048` | Added a reporting consumer for saved time-series CSV and summary JSON artifacts. It produces a self-contained interactive HTML report and versioned outcomes JSON with peak depth, timing, reach-threshold exceedance, and mass-balance diagnostics. | Reporting should evolve independently from numerical model development. Consuming saved artifacts prevents visualization code from coupling to solver internals and makes the interpretation boundary explicit. |
 | **4e — Profile-grid dynamic wave and forcing** | Current branch | Saint-Venant now runs on the supplied nonuniform profile grid with per-cell bed slope and Manning roughness. Both solvers accept spatially and temporally varying rainfall callables. Profile initial depth, rainfall, and labels are transferred into `Scenario`. | Reconstructing a uniform grid and using module-level coefficients discarded real-reach variation. Sampling rainfall only once also prevented event functions from changing through time. |
-| **4f — Integrated 2-D shallow water** | Current branch | Added `Domain2D` and a registered `saint_venant_2d` solver. The unified runner extrudes a profile across a requested width, applies spatial terrain, roughness, and rainfall, saves complete fields to NPZ, and produces plan-view area-based flood reports. | The standalone 2-D solver could not consume ingested profiles or participate in shared simulation and reporting workflows. |
+| **4f — Integrated 2-D shallow water** | Current branch | Added `Domain2D` and a registered `saint_venant_2d` solver. The unified runner builds a terrain-backed channel and floodplain from reviewed width/bankfull geometry, applies spatial terrain, roughness, and rainfall, saves complete fields to NPZ, and produces plan-view area-based flood reports. | The standalone 2-D solver could not consume ingested profiles or participate in shared simulation and reporting workflows; a flat cross-channel extrusion could not represent overbank inundation. |
 | **4g — Tier 3 numerical verification** | Current branch | Added explicit bed elevation, hydrostatic reconstruction, a conservative draining limiter, finite-state diagnostics, periodic verification boundaries, analytic convergence, non-flat equilibrium, 1-D reduction, radial symmetry, strict mass, and wet/dry gates. Pinned dependencies and clean-checkout CI preserve evidence. | Stability and visual plausibility do not establish PDE accuracy. The solver now has quantitative, reproducible evidence for first-order convergence, well-balancedness, positivity, multidimensional symmetry, and machine-precision conservation within its documented scope. |
 | **4h — Geographic flood screening** | Current branch | Added an interactive topographic map that animates canonical saved depth time series along a reviewed river centerline. The runner can record portable marker and geometry paths in its summary so the map command auto-discovers them. | Existing reports quantify outcomes but do not place a 1-D result in geographic context. The map makes scenario review easier while explicitly retaining the distinction between estimated cross-section width and a terrain-resolving 2-D inundation boundary. |
 | **4i — Observed baseline and well-balanced 1-D dynamics** | Current branch | Added an approved-USGS two-gauge validation case and rebuilt 1-D Saint-Venant bed coupling with hydrostatic reconstruction and a conservative draining limiter. | Exact flat-bed and synthetic tests hid spurious currents over real topography. The observed case now quantifies field error, while the 1-D solver preserves a non-flat lake at rest without mass-adding depth floors. |
@@ -157,8 +157,10 @@ python src/rivers/simulations/run_simulation.py PROFILE --solver SOLVER --t-fina
 | `--left-inflow` | `0.0` | Constant upstream inflow flux, m²/min |
 | `--rainfall-rate` | `0.0` | Uniform rainfall rate, m/min |
 | `--cfl` | `0.5` | CFL target (0 < CFL ≤ 1) |
-| `--width` | — | Channel width in metres; required for `saint_venant_2d` |
-| `--cross-cells` | `10` | Number of cells across a 2-D channel |
+| `--width` | — | Total channel-plus-floodplain domain width in metres; required for `saint_venant_2d` |
+| `--cross-cells` | `10` | Number of cells across a 2-D domain |
+| `--hydraulic-geometry` | — | Reviewed `station_m,width_m,bankfull_depth_m` CSV; required for `saint_venant_2d` |
+| `--floodplain-slope` | `0.02` | Lateral rise/run outside the reviewed bankfull channel |
 | `--output-dir` | `data/real_world_rivers/runs/` | Output directory |
 | `--run-name` | `simulation` | Filename prefix for outputs |
 
@@ -182,21 +184,26 @@ python src/rivers/simulations/run_simulation.py \
     --run-name hanford_sv
 ```
 
-**Example — 2-D Saint-Venant on an extruded rectangular channel:**
+**Example — 2-D Saint-Venant on a terrain-backed channel and floodplain:**
 ```bash
 python src/rivers/simulations/run_simulation.py \
     real_world_rivers/tools/example_river_profile.csv \
     --solver saint_venant_2d \
     --width 100 \
     --cross-cells 20 \
+    --hydraulic-geometry real_world_rivers/tools/example_geometry.csv \
     --t-final 10 \
     --run-name hanford_sv2
 ```
 
-The 2-D runner repeats profile slope, Manning roughness, initial depth, and
-rainfall across the requested width. It writes a full `<run>_fields.npz`, a
-summary JSON, and a cross-channel-mean CSV for compatibility with 1-D tools.
-Build laterally varying cases programmatically by passing a `Domain2D` directly.
+The 2-D runner uses the reviewed channel width and bankfull depth to construct a
+centred parabolic channel, then raises the floodplain beyond each bank at
+`--floodplain-slope`. Profile initial depth is applied as a level water surface,
+so higher bank and floodplain cells start dry. It writes a full
+`<run>_fields.npz`, a summary JSON, and a cross-channel-mean CSV for
+compatibility with 1-D tools. This synthetic cross-section is safer than a flat
+extrusion but is not a DEM or surveyed cross-section; build measured terrain
+cases programmatically by passing a `Domain2D` directly.
 
 Each solver declares which `Scenario` knobs it supports. Passing a knob a solver
 doesn't support raises `UnsupportedScenario` immediately rather than silently

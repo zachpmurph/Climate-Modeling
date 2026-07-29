@@ -12,6 +12,7 @@ from rivers.simulations.ingest_to_simulate import profile_to_domain_scenario
 
 
 PROFILE_PATH = "real_world_rivers/tools/example_river_profile.csv"
+GEOMETRY_PATH = "real_world_rivers/tools/example_geometry.csv"
 
 
 def _make_scenario(**kwargs):
@@ -172,6 +173,90 @@ def test_2d_solver_uses_extruded_profile_and_shared_scenario():
         np.sum(profile.rainfall_rate_m_per_min * profile.dx_m) * 20.0 * 0.1
     )
     assert result.mass_source == pytest.approx(expected_source)
+
+
+def test_reviewed_geometry_builds_channel_and_floodplain_terrain():
+    from general.solvers.profile import (
+        domain2d_from_profile,
+        load_channel_geometry,
+        load_profile,
+    )
+
+    profile = load_profile(PROFILE_PATH)
+    channel_width, bankfull_depth = load_channel_geometry(
+        GEOMETRY_PATH, profile.station_m
+    )
+    domain = domain2d_from_profile(
+        profile,
+        width_m=100.0,
+        cross_cells=20,
+        channel_width_m=channel_width,
+        bankfull_depth_m=bankfull_depth,
+        floodplain_slope=0.02,
+    )
+
+    assert np.allclose(channel_width, [20.0, 24.0, 24.0, 24.0, 24.0])
+    assert np.allclose(bankfull_depth, [2.5, 2.8, 2.8, 2.8, 2.8])
+    lateral_bed = domain.bed_elevation_m - domain.bed_elevation_m[:, 9:10]
+    assert np.all(lateral_bed[:, 0] > bankfull_depth)
+    assert np.allclose(lateral_bed, lateral_bed[:, ::-1])
+    assert np.any(domain.slope_y > 0)
+    assert np.any(domain.slope_y < 0)
+
+
+def test_runner_requires_reviewed_geometry_for_2d():
+    with pytest.raises(SystemExit, match="hydraulic-geometry is required"):
+        run_simulation.main(
+            [
+                PROFILE_PATH,
+                "--solver",
+                "saint_venant_2d",
+                "--width",
+                "100",
+                "--t-final",
+                "0",
+            ]
+        )
+
+
+def test_runner_initializes_2d_depth_from_level_water_surface(tmp_path):
+    output_dir = tmp_path / "runs"
+    run_simulation.main(
+        [
+            PROFILE_PATH,
+            "--solver",
+            "saint_venant_2d",
+            "--width",
+            "100",
+            "--cross-cells",
+            "20",
+            "--hydraulic-geometry",
+            GEOMETRY_PATH,
+            "--t-final",
+            "0",
+            "--output-dir",
+            str(output_dir),
+            "--run-name",
+            "terrain",
+        ]
+    )
+
+    fields = np.load(output_dir / "terrain_fields.npz")
+    initial = fields["depth_initial_m"]
+    bed = fields["bed_elevation_m"]
+    assert np.all(initial[:, 0] == 0.0)
+    assert np.all(initial[:, -1] == 0.0)
+    assert np.allclose(np.max(initial, axis=1), 0.04)
+    wet = initial > 0
+    water_surface = bed + initial
+    for row in range(len(initial)):
+        assert np.ptp(water_surface[row, wet[row]]) < 1e-12
+
+    summary = json.loads(
+        (output_dir / "terrain_summary.json").read_text(encoding="utf-8")
+    )
+    assert summary["grid"]["hydraulic_geometry"] == GEOMETRY_PATH
+    assert summary["grid"]["bankfull_depth_m"] == [2.5, 2.8, 2.8, 2.8, 2.8]
 
 
 def test_runner_records_portable_map_inputs(tmp_path):

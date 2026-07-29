@@ -11,7 +11,12 @@ if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
 from general.solvers.contract import Domain2D
-from general.solvers.profile import domain2d_from_profile, domain_from_profile, load_profile
+from general.solvers.profile import (
+    domain2d_from_profile,
+    domain_from_profile,
+    load_channel_geometry,
+    load_profile,
+)
 from rivers.simulations.ingest_to_simulate import scenario_from_profile
 from rivers.simulations.registry import SOLVERS, dispatch
 
@@ -53,6 +58,17 @@ def parse_args(argv=None):
         default=10,
         help="Number of cells across the channel for saint_venant_2d (default: 10)",
     )
+    p.add_argument(
+        "--hydraulic-geometry",
+        type=Path,
+        help="Reviewed station/width/bankfull CSV required for a terrain-backed 2-D run",
+    )
+    p.add_argument(
+        "--floodplain-slope",
+        type=float,
+        default=0.02,
+        help="Lateral rise/run outside the reviewed channel width (default: 0.02)",
+    )
     p.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     p.add_argument("--run-name", default="simulation")
     p.add_argument(
@@ -81,10 +97,30 @@ def main(argv=None):
     if args.solver == "saint_venant_2d":
         if args.width is None:
             raise SystemExit("error: --width is required for saint_venant_2d")
-        domain = domain2d_from_profile(profile, args.width, args.cross_cells)
+        if args.hydraulic_geometry is None:
+            raise SystemExit(
+                "error: --hydraulic-geometry is required for saint_venant_2d"
+            )
+        if not args.hydraulic_geometry.is_file():
+            raise SystemExit(
+                f"error: hydraulic geometry does not exist: {args.hydraulic_geometry}"
+            )
+        channel_width, bankfull_depth = load_channel_geometry(
+            args.hydraulic_geometry, profile.station_m
+        )
+        domain = domain2d_from_profile(
+            profile,
+            args.width,
+            args.cross_cells,
+            channel_width_m=channel_width,
+            bankfull_depth_m=bankfull_depth,
+            floodplain_slope=args.floodplain_slope,
+        )
     else:
-        if args.width is not None:
-            raise SystemExit("error: --width is only valid with saint_venant_2d")
+        if args.width is not None or args.hydraulic_geometry is not None:
+            raise SystemExit(
+                "error: --width and --hydraulic-geometry are only valid with saint_venant_2d"
+            )
         domain = domain_from_profile(profile)
 
     scenario = scenario_from_profile(
@@ -95,6 +131,18 @@ def main(argv=None):
         rainfall_rate_m_per_min=args.rainfall_rate,
         cfl=args.cfl,
     )
+    if isinstance(domain, Domain2D):
+        channel_depth = (
+            np.zeros(len(profile.station_m))
+            if profile.initial_depth_m is None
+            else np.asarray(profile.initial_depth_m, dtype=float)
+        )
+        channel_bed = np.min(domain.bed_elevation_m, axis=1)
+        water_surface = channel_bed + channel_depth
+        scenario.initial_depth_m = np.maximum(
+            water_surface[:, None] - domain.bed_elevation_m,
+            0.0,
+        )
 
     result = dispatch(args.solver, domain, scenario)
 
@@ -165,6 +213,9 @@ def main(argv=None):
             "nx": len(result.domain.x_m),
             "ny": len(result.domain.y_m),
             "width_m": float(np.sum(result.domain.dy_m)),
+            "hydraulic_geometry": _portable_path(args.hydraulic_geometry),
+            "floodplain_slope": args.floodplain_slope,
+            "bankfull_depth_m": bankfull_depth.tolist(),
         }
     if args.map_markers is not None:
         summary["map_inputs"] = {
