@@ -404,6 +404,47 @@ def test_rectangular_width_gives_volumetric_rainfall_mass_balance():
     )
 
 
+def test_distributed_lateral_inflow_has_separate_conservative_mass_accounting():
+    x_m = np.array([0.0, 100.0, 250.0])
+    dx_m = np.array([50.0, 125.0, 100.0])
+    width = np.array([10.0, 20.0, 30.0])
+    lateral_rate = 0.2  # m^3/min per metre of reach
+    duration = 0.05
+
+    result = sv.run_model(
+        float(np.sum(dx_m)),
+        duration,
+        h_init=np.full(3, 0.2),
+        q_init=np.zeros(3),
+        left_inflow=0.0,
+        rainfall=lambda x, t: np.zeros_like(x),
+        lateral_inflow=lambda x, t: np.full_like(x, lateral_rate),
+        x_m=x_m,
+        dx_m=dx_m,
+        slope=np.zeros(3),
+        manning_n=np.full(3, 0.001),
+        bed_elevation_m=np.zeros(3),
+        channel_width_m=width,
+        downstream_boundary="wall",
+    )
+
+    expected_lateral = lateral_rate * float(np.sum(dx_m)) * duration
+    storage_delta = float(
+        np.sum(width * (result["h_final"] - result["h_initial"]) * dx_m)
+    )
+    assert result["mass_lateral_inflow"] == pytest.approx(expected_lateral)
+    assert result["mass_rainfall"] == pytest.approx(0.0)
+    assert result["mass_source"] == pytest.approx(expected_lateral)
+    assert storage_delta == pytest.approx(
+        result["mass_inflow"]
+        + result["mass_source"]
+        - result["mass_outflow"]
+        + result["mass_floor_correction"],
+        rel=1e-11,
+        abs=1e-11,
+    )
+
+
 def test_exposed_rainfall_function_is_spatial_and_mass_conservative():
     x_m = np.array([0.0, 100.0, 250.0])
     dx_m = np.array([50.0, 125.0, 100.0])

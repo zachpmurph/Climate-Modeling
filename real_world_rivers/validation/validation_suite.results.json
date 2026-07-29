@@ -14,15 +14,15 @@
       "name": "Glen Canyon Dam to Lees Ferry \u2014 2004-07-01",
       "status": "uncalibrated_baseline",
       "scores": {
-        "nse": 0.3713141167337086,
-        "rmse": 3697.075491132537,
-        "bias": -2278.464560917427,
-        "percent_bias": -9.165236396739722,
-        "pearson_r": 0.7875730610488633,
+        "nse": 0.1188439984073244,
+        "rmse": 4376.912514477588,
+        "bias": -3114.940745193823,
+        "percent_bias": -12.530003222890862,
+        "pearson_r": 0.7559090459291324,
         "n": 97
       },
       "observation_count": {
-        "upstream": 289,
+        "upstream": 433,
         "downstream": 97
       }
     },
@@ -31,15 +31,15 @@
       "name": "Glen Canyon Dam to Lees Ferry \u2014 2002-01-25 winter ramp",
       "status": "out_of_sample_validation",
       "scores": {
-        "nse": -0.06985132496891744,
-        "rmse": 4359.040242123059,
-        "bias": -3295.472084679075,
-        "percent_bias": -14.1290487538485,
-        "pearson_r": 0.736011267123909,
+        "nse": -0.2717925551996643,
+        "rmse": 4752.666092040199,
+        "bias": -3774.0493571133866,
+        "percent_bias": -16.180907012986726,
+        "pearson_r": 0.7282752247390328,
         "n": 97
       },
       "observation_count": {
-        "upstream": 289,
+        "upstream": 433,
         "downstream": 97
       }
     },
@@ -48,15 +48,15 @@
       "name": "Glen Canyon Dam to Lees Ferry \u2014 2002-07-02 summer ramp",
       "status": "out_of_sample_validation",
       "scores": {
-        "nse": 0.23278425819151916,
-        "rmse": 4460.518069138607,
-        "bias": -3234.0030750849983,
-        "percent_bias": -12.37837540780695,
-        "pearson_r": 0.8010647050143422,
+        "nse": -0.03203967106660044,
+        "rmse": 5173.38436535633,
+        "bias": -4051.3378324999176,
+        "percent_bias": -15.506781975838672,
+        "pearson_r": 0.7788261313541228,
         "n": 97
       },
       "observation_count": {
-        "upstream": 289,
+        "upstream": 433,
         "downstream": 97
       }
     },
@@ -65,44 +65,44 @@
       "name": "Glen Canyon Dam to Lees Ferry \u2014 2004-01-06 winter ramp",
       "status": "out_of_sample_validation",
       "scores": {
-        "nse": 0.5584164363198421,
-        "rmse": 6726.996167354488,
-        "bias": -2930.2670549560853,
-        "percent_bias": -12.992267867460113,
-        "pearson_r": 0.8082326923028735,
+        "nse": 0.3838236028207589,
+        "rmse": 7946.34212666703,
+        "bias": -4843.899813119421,
+        "percent_bias": -21.47696531234101,
+        "pearson_r": 0.8117441678719638,
         "n": 97
       },
       "observation_count": {
-        "upstream": 289,
+        "upstream": 433,
         "downstream": 97
       }
     }
   ],
   "score_summary": {
     "nse": {
-      "minimum": -0.06985132496891744,
-      "median": 0.3020491874626139,
-      "maximum": 0.5584164363198421
+      "minimum": -0.2717925551996643,
+      "median": 0.04340216367036198,
+      "maximum": 0.3838236028207589
     },
     "rmse": {
-      "minimum": 3697.075491132537,
-      "median": 4409.779155630833,
-      "maximum": 6726.996167354488
+      "minimum": 4376.912514477588,
+      "median": 4963.025228698265,
+      "maximum": 7946.34212666703
     },
     "bias": {
-      "minimum": -3295.472084679075,
-      "median": -3082.135065020542,
-      "maximum": -2278.464560917427
+      "minimum": -4843.899813119421,
+      "median": -3912.693594806652,
+      "maximum": -3114.940745193823
     },
     "percent_bias": {
-      "minimum": -14.1290487538485,
-      "median": -12.685321637633532,
-      "maximum": -9.165236396739722
+      "minimum": -21.47696531234101,
+      "median": -15.8438444944127,
+      "maximum": -12.530003222890862
     },
     "pearson_r": {
-      "minimum": 0.736011267123909,
-      "median": 0.7943188830316028,
-      "maximum": 0.8082326923028735
+      "minimum": 0.7282752247390328,
+      "median": 0.7673675886416276,
+      "maximum": 0.8117441678719638
     }
   }
 }

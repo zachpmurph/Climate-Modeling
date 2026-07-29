@@ -6,7 +6,7 @@ import argparse
 import csv
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 SRC_ROOT = Path(__file__).resolve().parents[2]
@@ -34,9 +34,19 @@ def _as_utc_iso(value):
     return timestamp.astimezone(timezone.utc).isoformat()
 
 
+def _as_query_time(timestamp):
+    return timestamp.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def collect_event_rows(config, *, requester=request_json):
     """Return validated CSV rows and the resolved provider URLs."""
     start, end = config["case"]["observation_window"]
+    start_time = datetime.fromisoformat(start.replace("Z", "+00:00"))
+    warmup = config.get("warmup", {})
+    warmup_min = float(
+        warmup.get("duration_min", config.get("warmup_min", 0.0))
+    )
+    observed_warmup = warmup.get("upstream_forcing") == "observed"
     expected_roles = {"upstream", "downstream"}
     sources = config.get("sources", [])
     roles = {source.get("role") for source in sources}
@@ -48,9 +58,14 @@ def collect_event_rows(config, *, requester=request_json):
     for source in sources:
         role = source["role"]
         gauge = source["gauge"]
+        query_start = start
+        if role == "upstream" and observed_warmup:
+            query_start = _as_query_time(
+                start_time - timedelta(minutes=warmup_min)
+            )
         observations, url, gauge_id = fetch_usgs_flow(
             gauge,
-            start,
+            query_start,
             end,
             requester=requester,
         )
@@ -83,7 +98,12 @@ def collect_event_rows(config, *, requester=request_json):
         selected = [row for row in rows if row["role"] == role]
         if len(selected) < 2:
             raise ValueError(f"Event needs at least two {role} observations")
-        if selected[0]["observed_at"] != _as_utc_iso(start):
+        expected_start = start
+        if role == "upstream" and observed_warmup:
+            expected_start = _as_query_time(
+                start_time - timedelta(minutes=warmup_min)
+            )
+        if selected[0]["observed_at"] != _as_utc_iso(expected_start):
             raise ValueError(f"{role} observations do not begin at the configured start")
         if selected[-1]["observed_at"] != _as_utc_iso(end):
             raise ValueError(f"{role} observations do not end at the configured end")

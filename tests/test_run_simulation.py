@@ -81,6 +81,15 @@ def test_unsupported_initial_discharge_on_kinematic_wave():
 
 
 # ── SimulationResult shape invariants ─────────────────────────────────────
+def test_unsupported_lateral_inflow_on_kinematic_wave():
+    domain = _load_domain()
+    scenario = _make_scenario(
+        lateral_inflow=lambda x, t: np.zeros_like(x)
+    )
+    with pytest.raises(UnsupportedScenario, match="lateral_inflow"):
+        dispatch("kinematic_wave", domain, scenario)
+
+
 def test_simulation_result_shapes_kinematic_wave():
     domain = _load_domain()
     scenario = _make_scenario(t_final_min=3.0, left_inflow=0.0006)
@@ -467,7 +476,50 @@ def test_runner_records_time_varying_forcing_inputs(tmp_path):
     assert summary["forcing_inputs"] == {
         "inflow_series": str(inflow_path),
         "rainfall_series": str(rainfall_path),
+        "lateral_inflow_series": None,
+        "lateral_inflow_rate_m3_per_min_per_m": 0.0,
     }
+
+
+def test_runner_exposes_time_varying_lateral_inflow(tmp_path, monkeypatch):
+    lateral_path = tmp_path / "lateral.csv"
+    lateral_path.write_text(
+        "t_min,lateral_inflow_m3_per_min_per_m\n0,0.1\n1,0.2\n",
+        encoding="utf-8",
+    )
+    captured = {}
+    actual_dispatch = run_simulation.dispatch
+
+    def capture(solver_name, domain, scenario):
+        captured["at_half_minute"] = scenario.lateral_inflow(
+            domain.x_m, 0.5
+        )
+        return actual_dispatch(solver_name, domain, scenario)
+
+    monkeypatch.setattr(run_simulation, "dispatch", capture)
+    run_simulation.main(
+        [
+            PROFILE_PATH,
+            "--solver",
+            "saint_venant",
+            "--lateral-inflow-series",
+            str(lateral_path),
+            "--t-final",
+            "0",
+            "--output-dir",
+            str(tmp_path),
+            "--run-name",
+            "lateral",
+        ]
+    )
+
+    assert np.all(captured["at_half_minute"] == pytest.approx(0.15))
+    summary = json.loads(
+        (tmp_path / "lateral_summary.json").read_text(encoding="utf-8")
+    )
+    assert summary["forcing_inputs"]["lateral_inflow_series"] == str(
+        lateral_path
+    )
 
 
 def test_runner_records_prescribed_downstream_stage(tmp_path):

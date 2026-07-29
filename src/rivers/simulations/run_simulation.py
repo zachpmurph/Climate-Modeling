@@ -103,6 +103,20 @@ def parse_args(argv=None):
         help="CSV with t_min,rainfall_rate_m_per_min for a uniform time-varying storm",
     )
     p.add_argument(
+        "--lateral-inflow-rate",
+        type=float,
+        default=0.0,
+        help="Uniform lateral discharge in m^3/min per metre of reach",
+    )
+    p.add_argument(
+        "--lateral-inflow-series",
+        type=Path,
+        help=(
+            "CSV with t_min,lateral_inflow_m3_per_min_per_m for uniform "
+            "time-varying distributed reach inflow"
+        ),
+    )
+    p.add_argument(
         "--downstream-boundary",
         choices=("outflow", "wall", "stage"),
         default="outflow",
@@ -179,6 +193,23 @@ def main(argv=None):
             raise SystemExit(f"error: map input does not exist: {map_path}")
     if args.inflow_series is not None and args.left_inflow != 0.0:
         raise SystemExit("error: use either --left-inflow or --inflow-series, not both")
+    if (
+        args.lateral_inflow_series is not None
+        and args.lateral_inflow_rate != 0.0
+    ):
+        raise SystemExit(
+            "error: use either --lateral-inflow-rate or "
+            "--lateral-inflow-series, not both"
+        )
+    if args.lateral_inflow_rate < 0.0:
+        raise SystemExit("error: --lateral-inflow-rate must be non-negative")
+    if args.solver != "saint_venant" and (
+        args.lateral_inflow_series is not None
+        or args.lateral_inflow_rate != 0.0
+    ):
+        raise SystemExit(
+            "error: lateral inflow currently requires --solver saint_venant"
+        )
     if args.solver != "saint_venant" and (
         args.downstream_boundary != "outflow"
         or args.downstream_stage is not None
@@ -199,7 +230,11 @@ def main(argv=None):
         raise SystemExit(
             "error: --downstream-stage is required only with --downstream-boundary stage"
         )
-    for forcing_path in (args.inflow_series, args.rainfall_series):
+    for forcing_path in (
+        args.inflow_series,
+        args.rainfall_series,
+        args.lateral_inflow_series,
+    ):
         if forcing_path is not None and not forcing_path.is_file():
             raise SystemExit(f"error: forcing input does not exist: {forcing_path}")
 
@@ -214,6 +249,14 @@ def main(argv=None):
             if args.rainfall_series is None
             else _load_temporal_series(
                 args.rainfall_series, "rainfall_rate_m_per_min"
+            )
+        )
+        temporal_lateral_inflow = (
+            None
+            if args.lateral_inflow_series is None
+            else _load_temporal_series(
+                args.lateral_inflow_series,
+                "lateral_inflow_m3_per_min_per_m",
             )
         )
     except ValueError as exc:
@@ -293,6 +336,24 @@ def main(argv=None):
 
         combined_rainfall.breakpoints_min = temporal_rainfall.breakpoints_min
         scenario.rainfall = combined_rainfall
+
+    if args.lateral_inflow_rate != 0.0 or temporal_lateral_inflow is not None:
+        lateral_forcing = (
+            args.lateral_inflow_rate
+            if temporal_lateral_inflow is None
+            else temporal_lateral_inflow
+        )
+
+        def uniform_lateral_inflow(x, time):
+            return np.full_like(
+                x, _forcing_value(lateral_forcing, time), dtype=float
+            )
+
+        if hasattr(lateral_forcing, "breakpoints_min"):
+            uniform_lateral_inflow.breakpoints_min = (
+                lateral_forcing.breakpoints_min
+            )
+        scenario.lateral_inflow = uniform_lateral_inflow
 
     if isinstance(domain, Domain2D):
         channel_depth = (
@@ -409,6 +470,8 @@ def main(argv=None):
         "fields_path": None if fields_path is None else str(fields_path),
         "mass_inflow": result.mass_inflow,
         "mass_source": result.mass_source,
+        "mass_rainfall": result.extra.get("mass_rainfall"),
+        "mass_lateral_inflow": result.extra.get("mass_lateral_inflow"),
         "mass_outflow": result.mass_outflow,
         "mass_correction": result.mass_correction,
         "mass_balance_error": mass_balance_error,
@@ -434,6 +497,12 @@ def main(argv=None):
                 if args.rainfall_series is None
                 else _portable_path(args.rainfall_series)
             ),
+            "lateral_inflow_series": (
+                None
+                if args.lateral_inflow_series is None
+                else _portable_path(args.lateral_inflow_series)
+            ),
+            "lateral_inflow_rate_m3_per_min_per_m": args.lateral_inflow_rate,
         },
         "downstream_boundary": {
             "type": args.downstream_boundary,

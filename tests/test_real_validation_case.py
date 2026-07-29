@@ -5,8 +5,10 @@ from pathlib import Path
 import pytest
 
 from rivers.validation.run_case import (
+    discharge_boundary,
     load_two_gauge_observations,
     run_validation_case,
+    shifted_boundary,
 )
 from rivers.validation.fetch_event import collect_event_rows
 from rivers.validation.run_sensitivity import build_variants
@@ -27,9 +29,10 @@ def test_committed_two_gauge_observations_are_complete_and_ordered():
 
     upstream_times, upstream_flow = observations["upstream"]
     downstream_times, downstream_flow = observations["downstream"]
-    assert len(upstream_times) == 289
+    assert len(upstream_times) == 433
     assert len(downstream_times) == 97
-    assert upstream_times[0] == downstream_times[0] == 0.0
+    assert upstream_times[0] == pytest.approx(-720.0)
+    assert downstream_times[0] == 0.0
     assert upstream_times[-1] == downstream_times[-1] == pytest.approx(1440.0)
     assert min(upstream_flow) > 0
     assert min(downstream_flow) > 0
@@ -40,8 +43,10 @@ def test_real_case_reproduces_tracked_uncalibrated_baseline(tmp_path):
     actual = run_validation_case(CASE, output_path=tmp_path / "results.json")
 
     assert actual["status"] == "uncalibrated_baseline"
-    assert actual["observations"]["upstream_count"] == 289
+    assert actual["observations"]["upstream_count"] == 433
     assert actual["observations"]["downstream_count"] == 97
+    assert actual["assumptions"]["warmup_upstream_forcing"] == "observed"
+    assert actual["mass"]["lateral_inflow_m3"] == pytest.approx(0.0)
     for metric in ("nse", "rmse", "bias", "percent_bias", "pearson_r"):
         assert actual["scores"][metric] == pytest.approx(
             tracked["scores"][metric], rel=1e-10, abs=1e-10
@@ -93,7 +98,7 @@ def test_multi_event_suite_observations_and_results_are_reproducible(tmp_path):
         observations = load_two_gauge_observations(observation_path)
         with observation_path.open(newline="", encoding="utf-8") as handle:
             raw_rows = list(csv.DictReader(handle))
-        assert len(observations["upstream"][0]) == 289
+        assert len(observations["upstream"][0]) == 433
         assert len(observations["downstream"][0]) == 97
         assert {row["approval_status"] for row in raw_rows} == {"Approved"}
         assert observations["upstream"][0][-1] == pytest.approx(1440.0)
@@ -111,6 +116,15 @@ def test_multi_event_suite_observations_and_results_are_reproducible(tmp_path):
             assert actual["scores"][metric] == pytest.approx(
                 tracked["scores"][metric], rel=1e-10, abs=1e-10
             )
+
+
+def test_observed_warmup_boundary_maps_negative_event_time_to_spinup_clock():
+    boundary = discharge_boundary([-10.0, 0.0], [100.0, 200.0])
+    warmup = shifted_boundary(boundary, -10.0)
+
+    assert warmup(0.0) == pytest.approx(100.0)
+    assert warmup(10.0) == pytest.approx(200.0)
+    assert warmup.breakpoints_min == pytest.approx((0.0, 10.0))
 
 
 def test_fetch_event_normalizes_approved_usgs_rows():

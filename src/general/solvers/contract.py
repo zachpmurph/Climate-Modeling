@@ -48,6 +48,7 @@ class Scenario:
     initial_discharge_y: float | np.ndarray = 0.0
     left_inflow: float | Callable[[float], float] = 0.0
     rainfall: Callable[[np.ndarray, float], np.ndarray] | None = None
+    lateral_inflow: Callable[[np.ndarray, float], np.ndarray] | None = None
     rainfall_2d: Callable[[np.ndarray, np.ndarray, float], np.ndarray] | None = None
     cfl: float = 0.5
     labels: tuple[str, ...] = ()

@@ -1,0 +1,691 @@
+{
+  "schema_version": 1,
+  "suite": {
+    "name": "Glen Canyon Dam to Lees Ferry global-parameter calibration",
+    "river": "Colorado River"
+  },
+  "method": {
+    "optimizer": "deterministic coordinate search",
+    "passes_requested": 2,
+    "global_parameters_only": true,
+    "event_specific_fitting": false,
+    "objective": {
+      "nse_weight": 0.7,
+      "correlation_weight": 0.3,
+      "robustness_penalty": 0.1
+    },
+    "parameter_grid": {
+      "manning_scale": [
+        0.8,
+        1.0,
+        1.2
+      ],
+      "width_scale": [
+        0.8,
+        1.0,
+        1.2
+      ],
+      "slope_scale": [
+        0.8,
+        1.0,
+        1.2
+      ],
+      "lateral_inflow_fraction": [
+        0.0,
+        0.075,
+        0.15
+      ]
+    },
+    "parameter_interpretation": {
+      "manning_scale": "Global multiplier on the estimated minutes-based Manning roughness.",
+      "width_scale": "Global multiplier on both estimated rectangular channel widths.",
+      "slope_scale": "Global multiplier on the estimated longitudinal bed slope.",
+      "lateral_inflow_fraction": "Effective distributed reach gain as a fraction of observed upstream flow; this is not a measured tributary hydrograph."
+    },
+    "split_policy": "Parameters are selected from the two 2002 training events only. The January 2004 event is validation and July 2004 is reported as a historical test. Because all four scores were inspected during model development, neither held-out split is a pristine prospective test; a future event must provide that final gate."
+  },
+  "selected_parameters": {
+    "manning_scale": 0.8,
+    "width_scale": 1.2,
+    "slope_scale": 1.2,
+    "lateral_inflow_fraction": 0.075
+  },
+  "parameter_diagnostics": {
+    "boundary_hits": {
+      "manning_scale": [
+        "minimum"
+      ],
+      "width_scale": [
+        "maximum"
+      ],
+      "slope_scale": [
+        "maximum"
+      ]
+    },
+    "identifiability_warning": true,
+    "interpretation": "A boundary hit means the tested range did not bracket an optimum. Geometry, slope, roughness, and lateral gain may compensate for one another; selected values are effective model parameters until supported by independent measurements."
+  },
+  "training_objective": 0.7816771876011938,
+  "baseline_splits": {
+    "training": {
+      "events": [
+        {
+          "config": "glen_canyon_lees_ferry_2002-01-25.json",
+          "scores": {
+            "nse": -0.2717925551996643,
+            "rmse": 4752.666092040199,
+            "bias": -3774.0493571133866,
+            "percent_bias": -16.180907012986726,
+            "pearson_r": 0.7282752247390328,
+            "n": 97
+          }
+        },
+        {
+          "config": "glen_canyon_lees_ferry_2002-07-02.json",
+          "scores": {
+            "nse": -0.03203967106660044,
+            "rmse": 5173.38436535633,
+            "bias": -4051.3378324999176,
+            "percent_bias": -15.506781975838672,
+            "pearson_r": 0.7788261313541228,
+            "n": 97
+          }
+        }
+      ],
+      "summary": {
+        "nse": {
+          "minimum": -0.2717925551996643,
+          "mean": -0.15191611313313236,
+          "maximum": -0.03203967106660044
+        },
+        "rmse": {
+          "minimum": 4752.666092040199,
+          "mean": 4963.025228698265,
+          "maximum": 5173.38436535633
+        },
+        "bias": {
+          "minimum": -4051.3378324999176,
+          "mean": -3912.693594806652,
+          "maximum": -3774.0493571133866
+        },
+        "percent_bias": {
+          "minimum": -16.180907012986726,
+          "mean": -15.8438444944127,
+          "maximum": -15.506781975838672
+        },
+        "pearson_r": {
+          "minimum": 0.7282752247390328,
+          "mean": 0.7535506780465778,
+          "maximum": 0.7788261313541228
+        }
+      }
+    },
+    "validation": {
+      "events": [
+        {
+          "config": "glen_canyon_lees_ferry_2004-01-06.json",
+          "scores": {
+            "nse": 0.3838236028207589,
+            "rmse": 7946.34212666703,
+            "bias": -4843.899813119421,
+            "percent_bias": -21.47696531234101,
+            "pearson_r": 0.8117441678719638,
+            "n": 97
+          }
+        }
+      ],
+      "summary": {
+        "nse": {
+          "minimum": 0.3838236028207589,
+          "mean": 0.3838236028207589,
+          "maximum": 0.3838236028207589
+        },
+        "rmse": {
+          "minimum": 7946.34212666703,
+          "mean": 7946.34212666703,
+          "maximum": 7946.34212666703
+        },
+        "bias": {
+          "minimum": -4843.899813119421,
+          "mean": -4843.899813119421,
+          "maximum": -4843.899813119421
+        },
+        "percent_bias": {
+          "minimum": -21.47696531234101,
+          "mean": -21.47696531234101,
+          "maximum": -21.47696531234101
+        },
+        "pearson_r": {
+          "minimum": 0.8117441678719638,
+          "mean": 0.8117441678719638,
+          "maximum": 0.8117441678719638
+        }
+      }
+    },
+    "test": {
+      "events": [
+        {
+          "config": "glen_canyon_lees_ferry.json",
+          "scores": {
+            "nse": 0.1188439984073244,
+            "rmse": 4376.912514477588,
+            "bias": -3114.940745193823,
+            "percent_bias": -12.530003222890862,
+            "pearson_r": 0.7559090459291324,
+            "n": 97
+          }
+        }
+      ],
+      "summary": {
+        "nse": {
+          "minimum": 0.1188439984073244,
+          "mean": 0.1188439984073244,
+          "maximum": 0.1188439984073244
+        },
+        "rmse": {
+          "minimum": 4376.912514477588,
+          "mean": 4376.912514477588,
+          "maximum": 4376.912514477588
+        },
+        "bias": {
+          "minimum": -3114.940745193823,
+          "mean": -3114.940745193823,
+          "maximum": -3114.940745193823
+        },
+        "percent_bias": {
+          "minimum": -12.530003222890862,
+          "mean": -12.530003222890862,
+          "maximum": -12.530003222890862
+        },
+        "pearson_r": {
+          "minimum": 0.7559090459291324,
+          "mean": 0.7559090459291324,
+          "maximum": 0.7559090459291324
+        }
+      }
+    }
+  },
+  "splits": {
+    "training": {
+      "events": [
+        {
+          "config": "glen_canyon_lees_ferry_2002-01-25.json",
+          "scores": {
+            "nse": 0.7252859496881765,
+            "rmse": 2208.8671679160984,
+            "bias": -447.31720904573274,
+            "percent_bias": -1.9178334674493474,
+            "pearson_r": 0.8646468772741827,
+            "n": 97
+          }
+        },
+        {
+          "config": "glen_canyon_lees_ferry_2002-07-02.json",
+          "scores": {
+            "nse": 0.7621710517695213,
+            "rmse": 2483.4699422914946,
+            "bias": -439.0227836831306,
+            "percent_bias": -1.6803907426301334,
+            "pearson_r": 0.8880964040262624,
+            "n": 97
+          }
+        }
+      ],
+      "summary": {
+        "nse": {
+          "minimum": 0.7252859496881765,
+          "mean": 0.7437285007288489,
+          "maximum": 0.7621710517695213
+        },
+        "rmse": {
+          "minimum": 2208.8671679160984,
+          "mean": 2346.1685551037963,
+          "maximum": 2483.4699422914946
+        },
+        "bias": {
+          "minimum": -447.31720904573274,
+          "mean": -443.16999636443165,
+          "maximum": -439.0227836831306
+        },
+        "percent_bias": {
+          "minimum": -1.9178334674493474,
+          "mean": -1.7991121050397405,
+          "maximum": -1.6803907426301334
+        },
+        "pearson_r": {
+          "minimum": 0.8646468772741827,
+          "mean": 0.8763716406502225,
+          "maximum": 0.8880964040262624
+        }
+      }
+    },
+    "validation": {
+      "events": [
+        {
+          "config": "glen_canyon_lees_ferry_2004-01-06.json",
+          "scores": {
+            "nse": 0.7599937820056727,
+            "rmse": 4959.36390617083,
+            "bias": -1470.1449507445948,
+            "percent_bias": -6.518353667377249,
+            "pearson_r": 0.9183751499347652,
+            "n": 97
+          }
+        }
+      ],
+      "summary": {
+        "nse": {
+          "minimum": 0.7599937820056727,
+          "mean": 0.7599937820056727,
+          "maximum": 0.7599937820056727
+        },
+        "rmse": {
+          "minimum": 4959.36390617083,
+          "mean": 4959.36390617083,
+          "maximum": 4959.36390617083
+        },
+        "bias": {
+          "minimum": -1470.1449507445948,
+          "mean": -1470.1449507445948,
+          "maximum": -1470.1449507445948
+        },
+        "percent_bias": {
+          "minimum": -6.518353667377249,
+          "mean": -6.518353667377249,
+          "maximum": -6.518353667377249
+        },
+        "pearson_r": {
+          "minimum": 0.9183751499347652,
+          "mean": 0.9183751499347652,
+          "maximum": 0.9183751499347652
+        }
+      }
+    },
+    "test": {
+      "events": [
+        {
+          "config": "glen_canyon_lees_ferry.json",
+          "scores": {
+            "nse": 0.7220183082604266,
+            "rmse": 2458.383096264997,
+            "bias": 464.4660716719103,
+            "percent_bias": 1.8683377473398353,
+            "pearson_r": 0.8711682573511366,
+            "n": 97
+          }
+        }
+      ],
+      "summary": {
+        "nse": {
+          "minimum": 0.7220183082604266,
+          "mean": 0.7220183082604266,
+          "maximum": 0.7220183082604266
+        },
+        "rmse": {
+          "minimum": 2458.383096264997,
+          "mean": 2458.383096264997,
+          "maximum": 2458.383096264997
+        },
+        "bias": {
+          "minimum": 464.4660716719103,
+          "mean": 464.4660716719103,
+          "maximum": 464.4660716719103
+        },
+        "percent_bias": {
+          "minimum": 1.8683377473398353,
+          "mean": 1.8683377473398353,
+          "maximum": 1.8683377473398353
+        },
+        "pearson_r": {
+          "minimum": 0.8711682573511366,
+          "mean": 0.8711682573511366,
+          "maximum": 0.8711682573511366
+        }
+      }
+    }
+  },
+  "improvement": {
+    "training": {
+      "mean_nse_delta": 0.8956446138619812,
+      "mean_pearson_r_delta": 0.12282096260364472,
+      "mean_absolute_percent_bias_before": 15.8438444944127,
+      "mean_absolute_percent_bias_after": 1.7991121050397405
+    },
+    "validation": {
+      "mean_nse_delta": 0.3761701791849138,
+      "mean_pearson_r_delta": 0.10663098206280142,
+      "mean_absolute_percent_bias_before": 21.47696531234101,
+      "mean_absolute_percent_bias_after": 6.518353667377249
+    },
+    "test": {
+      "mean_nse_delta": 0.6031743098531022,
+      "mean_pearson_r_delta": 0.11525921142200413,
+      "mean_absolute_percent_bias_before": 12.530003222890862,
+      "mean_absolute_percent_bias_after": 1.8683377473398353
+    }
+  },
+  "trace": [
+    {
+      "step": "initial",
+      "parameters": {
+        "manning_scale": 1.0,
+        "width_scale": 1.0,
+        "slope_scale": 1.0,
+        "lateral_inflow_fraction": 0.0
+      },
+      "objective": 0.10773628001412752,
+      "training_events": [
+        {
+          "config": "glen_canyon_lees_ferry_2002-01-25.json",
+          "scores": {
+            "nse": -0.2717925551996643,
+            "rmse": 4752.666092040199,
+            "bias": -3774.0493571133866,
+            "percent_bias": -16.180907012986726,
+            "pearson_r": 0.7282752247390328,
+            "n": 97
+          }
+        },
+        {
+          "config": "glen_canyon_lees_ferry_2002-07-02.json",
+          "scores": {
+            "nse": -0.03203967106660044,
+            "rmse": 5173.38436535633,
+            "bias": -4051.3378324999176,
+            "percent_bias": -15.506781975838672,
+            "pearson_r": 0.7788261313541228,
+            "n": 97
+          }
+        }
+      ]
+    },
+    {
+      "step": "coordinate",
+      "pass": 1,
+      "parameter": "manning_scale",
+      "parameters": {
+        "manning_scale": 0.8,
+        "width_scale": 1.0,
+        "slope_scale": 1.0,
+        "lateral_inflow_fraction": 0.0
+      },
+      "objective": 0.4664186170578168,
+      "training_events": [
+        {
+          "config": "glen_canyon_lees_ferry_2002-01-25.json",
+          "scores": {
+            "nse": 0.2581749686476372,
+            "rmse": 3629.776676894124,
+            "bias": -2513.754001255132,
+            "percent_bias": -10.777500742317553,
+            "pearson_r": 0.7852270589301025,
+            "n": 97
+          }
+        },
+        {
+          "config": "glen_canyon_lees_ferry_2002-07-02.json",
+          "scores": {
+            "nse": 0.40180358396437976,
+            "rmse": 3938.6596489556737,
+            "bias": -2688.5911523533414,
+            "percent_bias": -10.290772713957068,
+            "pearson_r": 0.8321566371328839,
+            "n": 97
+          }
+        }
+      ]
+    },
+    {
+      "step": "coordinate",
+      "pass": 1,
+      "parameter": "width_scale",
+      "parameters": {
+        "manning_scale": 0.8,
+        "width_scale": 1.2,
+        "slope_scale": 1.0,
+        "lateral_inflow_fraction": 0.0
+      },
+      "objective": 0.5264070256110545,
+      "training_events": [
+        {
+          "config": "glen_canyon_lees_ferry_2002-01-25.json",
+          "scores": {
+            "nse": 0.342120049047721,
+            "rmse": 3418.2395095467195,
+            "bias": -2423.712047640183,
+            "percent_bias": -10.391453729984484,
+            "pearson_r": 0.8281548027066006,
+            "n": 97
+          }
+        },
+        {
+          "config": "glen_canyon_lees_ferry_2002-07-02.json",
+          "scores": {
+            "nse": 0.4544770041983959,
+            "rmse": 3761.2576289696062,
+            "bias": -2600.3193710166092,
+            "percent_bias": -9.952906230242238,
+            "pearson_r": 0.8599512288430483,
+            "n": 97
+          }
+        }
+      ]
+    },
+    {
+      "step": "coordinate",
+      "pass": 1,
+      "parameter": "slope_scale",
+      "parameters": {
+        "manning_scale": 0.8,
+        "width_scale": 1.2,
+        "slope_scale": 1.2,
+        "lateral_inflow_fraction": 0.0
+      },
+      "objective": 0.7169894195727248,
+      "training_events": [
+        {
+          "config": "glen_canyon_lees_ferry_2002-01-25.json",
+          "scores": {
+            "nse": 0.6125393656454843,
+            "rmse": 2623.269781918492,
+            "bias": -1666.5385725595802,
+            "percent_bias": -7.1451385831285075,
+            "pearson_r": 0.8988901022417304,
+            "n": 97
+          }
+        },
+        {
+          "config": "glen_canyon_lees_ferry_2002-07-02.json",
+          "scores": {
+            "nse": 0.6654406258742307,
+            "rmse": 2945.527976011439,
+            "bias": -1798.0542904510326,
+            "percent_bias": -6.88217991574911,
+            "pearson_r": 0.9167198014400147,
+            "n": 97
+          }
+        }
+      ]
+    },
+    {
+      "step": "coordinate",
+      "pass": 1,
+      "parameter": "lateral_inflow_fraction",
+      "parameters": {
+        "manning_scale": 0.8,
+        "width_scale": 1.2,
+        "slope_scale": 1.2,
+        "lateral_inflow_fraction": 0.075
+      },
+      "objective": 0.7816771876011938,
+      "training_events": [
+        {
+          "config": "glen_canyon_lees_ferry_2002-01-25.json",
+          "scores": {
+            "nse": 0.7252859496881765,
+            "rmse": 2208.8671679160984,
+            "bias": -447.31720904573274,
+            "percent_bias": -1.9178334674493474,
+            "pearson_r": 0.8646468772741827,
+            "n": 97
+          }
+        },
+        {
+          "config": "glen_canyon_lees_ferry_2002-07-02.json",
+          "scores": {
+            "nse": 0.7621710517695213,
+            "rmse": 2483.4699422914946,
+            "bias": -439.0227836831306,
+            "percent_bias": -1.6803907426301334,
+            "pearson_r": 0.8880964040262624,
+            "n": 97
+          }
+        }
+      ]
+    },
+    {
+      "step": "coordinate",
+      "pass": 2,
+      "parameter": "manning_scale",
+      "parameters": {
+        "manning_scale": 0.8,
+        "width_scale": 1.2,
+        "slope_scale": 1.2,
+        "lateral_inflow_fraction": 0.075
+      },
+      "objective": 0.7816771876011938,
+      "training_events": [
+        {
+          "config": "glen_canyon_lees_ferry_2002-01-25.json",
+          "scores": {
+            "nse": 0.7252859496881765,
+            "rmse": 2208.8671679160984,
+            "bias": -447.31720904573274,
+            "percent_bias": -1.9178334674493474,
+            "pearson_r": 0.8646468772741827,
+            "n": 97
+          }
+        },
+        {
+          "config": "glen_canyon_lees_ferry_2002-07-02.json",
+          "scores": {
+            "nse": 0.7621710517695213,
+            "rmse": 2483.4699422914946,
+            "bias": -439.0227836831306,
+            "percent_bias": -1.6803907426301334,
+            "pearson_r": 0.8880964040262624,
+            "n": 97
+          }
+        }
+      ]
+    },
+    {
+      "step": "coordinate",
+      "pass": 2,
+      "parameter": "width_scale",
+      "parameters": {
+        "manning_scale": 0.8,
+        "width_scale": 1.2,
+        "slope_scale": 1.2,
+        "lateral_inflow_fraction": 0.075
+      },
+      "objective": 0.7816771876011938,
+      "training_events": [
+        {
+          "config": "glen_canyon_lees_ferry_2002-01-25.json",
+          "scores": {
+            "nse": 0.7252859496881765,
+            "rmse": 2208.8671679160984,
+            "bias": -447.31720904573274,
+            "percent_bias": -1.9178334674493474,
+            "pearson_r": 0.8646468772741827,
+            "n": 97
+          }
+        },
+        {
+          "config": "glen_canyon_lees_ferry_2002-07-02.json",
+          "scores": {
+            "nse": 0.7621710517695213,
+            "rmse": 2483.4699422914946,
+            "bias": -439.0227836831306,
+            "percent_bias": -1.6803907426301334,
+            "pearson_r": 0.8880964040262624,
+            "n": 97
+          }
+        }
+      ]
+    },
+    {
+      "step": "coordinate",
+      "pass": 2,
+      "parameter": "slope_scale",
+      "parameters": {
+        "manning_scale": 0.8,
+        "width_scale": 1.2,
+        "slope_scale": 1.2,
+        "lateral_inflow_fraction": 0.075
+      },
+      "objective": 0.7816771876011938,
+      "training_events": [
+        {
+          "config": "glen_canyon_lees_ferry_2002-01-25.json",
+          "scores": {
+            "nse": 0.7252859496881765,
+            "rmse": 2208.8671679160984,
+            "bias": -447.31720904573274,
+            "percent_bias": -1.9178334674493474,
+            "pearson_r": 0.8646468772741827,
+            "n": 97
+          }
+        },
+        {
+          "config": "glen_canyon_lees_ferry_2002-07-02.json",
+          "scores": {
+            "nse": 0.7621710517695213,
+            "rmse": 2483.4699422914946,
+            "bias": -439.0227836831306,
+            "percent_bias": -1.6803907426301334,
+            "pearson_r": 0.8880964040262624,
+            "n": 97
+          }
+        }
+      ]
+    },
+    {
+      "step": "coordinate",
+      "pass": 2,
+      "parameter": "lateral_inflow_fraction",
+      "parameters": {
+        "manning_scale": 0.8,
+        "width_scale": 1.2,
+        "slope_scale": 1.2,
+        "lateral_inflow_fraction": 0.075
+      },
+      "objective": 0.7816771876011938,
+      "training_events": [
+        {
+          "config": "glen_canyon_lees_ferry_2002-01-25.json",
+          "scores": {
+            "nse": 0.7252859496881765,
+            "rmse": 2208.8671679160984,
+            "bias": -447.31720904573274,
+            "percent_bias": -1.9178334674493474,
+            "pearson_r": 0.8646468772741827,
+            "n": 97
+          }
+        },
+        {
+          "config": "glen_canyon_lees_ferry_2002-07-02.json",
+          "scores": {
+            "nse": 0.7621710517695213,
+            "rmse": 2483.4699422914946,
+            "bias": -439.0227836831306,
+            "percent_bias": -1.6803907426301334,
+            "pearson_r": 0.8880964040262624,
+            "n": 97
+          }
+        }
+      ]
+    }
+  ]
+}

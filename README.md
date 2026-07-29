@@ -125,6 +125,7 @@ The rationale for each transition is given alongside the change.
 | **4p — Manning fixture units** | Current branch | Converted the shipped example profile, reviewed-roughness example, standalone kinematic demo, and ingestion fixtures from conventional SI seconds-based Manning values to the repository's minutes-based values (`n_model = n_SI / 60`). | Supplying `0.035` directly to a minutes-based solver makes roughness 60× too large and mislabels a seconds-scale Manning flux as per-minute flow. |
 | **4q — Structural sensitivity evidence** | Current branch | Added a reproducible one-at-a-time matrix for the held-out Colorado River case, covering roughness, width, grid resolution, and reconstruction order. Results and score ranges are tracked without selecting or fitting a best parameter. | One field score hides parameter dependence and can encourage accidental calibration. The matrix exposes model risk while preserving the downstream gauge as validation data. |
 | **4r — Multi-event observed validation** | Current branch | Added three approved-USGS out-of-sample events, a reproducible provider fetcher, and a four-event suite with fixed geometry, roughness, grid, and numerical settings. | A single event cannot distinguish transferable behavior from a lucky hydrograph match. Fixed-parameter multi-event scores expose shared bias and condition-dependent skill without event-by-event tuning. |
+| **4s — Adaptive multi-event hydraulics** | Current branch | Replaced constant-flow startup with a 12-hour observed upstream spin-up, added conservative time-varying lateral inflow with separate mass accounting, and added constrained global calibration of roughness, width, slope, and reach gain. The optimizer combines NSE, correlation, and an event-consistency penalty using explicit training/validation/test splits. | A constant startup can create a lucky initial state, while single-event tuning confounds geometry and forcing. Global parameters and held-out events test whether improvements transfer across hydrographs. |
 
 ---
 
@@ -175,6 +176,8 @@ python src/rivers/simulations/run_simulation.py PROFILE --solver SOLVER --t-fina
 | `--inflow-series` | — | CSV with `t_min,left_inflow`; mutually exclusive with nonzero `--left-inflow` |
 | `--rainfall-rate` | `0.0` | Uniform rainfall rate, m/min |
 | `--rainfall-series` | — | CSV with `t_min,rainfall_rate_m_per_min`; added to profile and constant rainfall |
+| `--lateral-inflow-rate` | `0.0` | 1-D Saint-Venant distributed inflow, m³/min per metre of reach |
+| `--lateral-inflow-series` | — | CSV with `t_min,lateral_inflow_m3_per_min_per_m`; mutually exclusive with nonzero constant lateral inflow |
 | `--downstream-boundary` | `outflow` | 1-D Saint-Venant: `outflow`, `wall`, or `stage` |
 | `--downstream-stage` | — | Fixed water-surface elevation for a `stage` boundary |
 | `--spatial-order` | `1` | Saint-Venant reconstruction order: robust first-order or less-diffusive second-order |
@@ -391,6 +394,8 @@ python src/rivers/validation/run_sensitivity.py \
     real_world_rivers/validation/glen_canyon_lees_ferry.json
 python src/rivers/validation/run_suite.py \
     real_world_rivers/validation/validation_suite.json
+python src/rivers/validation/calibrate_suite.py \
+    real_world_rivers/validation/calibration_suite.json
 ```
 
 The field case is deliberately uncalibrated. Its downstream observations are
@@ -401,10 +406,16 @@ range, grid refinement is nearly neutral, and second-order reconstruction expose
 strong sensitivity to the simplified steady-flow initialization. Do not choose a
 variant from this matrix as a calibration.
 
-The four-event fixed-parameter suite has median NSE `0.302` (range `-0.070` to
-`0.558`) and percent bias from `-14.13%` to `-9.17%`. Correlation remains
-`0.736–0.808`, so the model generally follows hydrograph timing but persistently
-underpredicts discharge volume.
+With observed pre-event spin-up, the four-event uncalibrated suite has median NSE
+`0.043` (range `-0.272` to `0.384`) and percent bias from `-21.48%` to `-12.53%`.
+This is worse than constant-flow startup, showing that the old initialization was
+optimistic rather than physically transferable.
+
+The constrained global calibration selects roughness `0.8×`, width `1.2×`, slope
+`1.2×`, and distributed reach gain `7.5%`. It produces training NSE
+`0.725–0.762`, validation NSE `0.760`, and historical-test NSE `0.722`, with
+correlation `0.865–0.918`. Roughness, width, and slope hit search bounds, so these
+are effective parameters—not independently identified physical measurements.
 
 Dependencies are pinned in `requirements.txt`. The GitHub Actions verification
 workflow runs the complete suite and matrix from a clean checkout.
@@ -428,6 +439,7 @@ src/rivers/validation/run_case.py              # held-out two-gauge field valida
 src/rivers/validation/run_sensitivity.py       # one-at-a-time structural sensitivity
 src/rivers/validation/fetch_event.py            # reproducible approved-USGS event fetch
 src/rivers/validation/run_suite.py              # fixed-parameter multi-event evidence
+src/rivers/validation/calibrate_suite.py        # constrained global multi-event optimizer
 src/rivers/reporting/generate_flood_report.py  # saved artifacts → HTML + outcomes JSON
 src/rivers/visualization/animate_flood_map.py  # saved time series → geographic HTML animation
 src/rivers/ingest/run_ingestion.py             # config-driven ingestion CLI (one reach or --all)

@@ -182,9 +182,10 @@ current documented method.
    - The 1-D solver now supports transmissive outflow, wall, and prescribed-stage
      downstream boundaries with regression tests. The 2-D solver still uses its
      simpler boundary set and needs case-specific open-boundary justification.
-   - The committed four-event, two-gauge suite and one-at-a-time sensitivity
-     matrix establish an uncalibrated baseline on one regulated reach, not
-     transferable predictive skill.
+   - The committed four-event, two-gauge suite, global calibration split, and
+     one-at-a-time sensitivity matrix establish development evidence on one
+     regulated reach, not transferable predictive skill. A future prospective
+     event and another river remain required.
 
 2. **Add partially dry non-flat shoreline equilibria.**
    - This would strengthen the coupling between well-balanced topography and

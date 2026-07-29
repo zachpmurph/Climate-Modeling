@@ -32,7 +32,7 @@ def _timestamp(value: str) -> datetime:
 
 
 def load_two_gauge_observations(path):
-    """Return relative minutes and discharge arrays for upstream/downstream gauges."""
+    """Return minutes relative to the first held-out downstream observation."""
     with Path(path).open(newline="", encoding="utf-8-sig") as handle:
         rows = list(csv.DictReader(handle))
     if not rows:
@@ -49,7 +49,12 @@ def load_two_gauge_observations(path):
             raise ValueError("Observed discharge must be finite and non-negative")
         parsed.append((role, timestamp, discharge))
 
-    origin = min(timestamp for _, timestamp, _ in parsed)
+    downstream_timestamps = [
+        timestamp for role, timestamp, _ in parsed if role == "downstream"
+    ]
+    if not downstream_timestamps:
+        raise ValueError("Validation case needs downstream observations")
+    origin = min(downstream_timestamps)
     result = {}
     for role in ("upstream", "downstream"):
         selected = sorted(
@@ -78,7 +83,38 @@ def discharge_boundary(times_min, discharge_m3_per_min):
     def boundary(time_min):
         return float(np.interp(time_min, times, discharge))
 
+    boundary.breakpoints_min = tuple(float(value) for value in times)
     return boundary
+
+
+def shifted_boundary(boundary, offset_min):
+    """Shift a forcing onto a simulation clock while retaining its breakpoints."""
+    offset = float(offset_min)
+
+    def shifted(time_min):
+        return boundary(float(time_min) + offset)
+
+    shifted.breakpoints_min = tuple(
+        float(value - offset)
+        for value in getattr(boundary, "breakpoints_min", ())
+    )
+    return shifted
+
+
+def fractional_lateral_inflow(boundary, fraction, length_m):
+    """Distribute a fraction of upstream flow uniformly along the reach."""
+    fraction = float(fraction)
+    if not math.isfinite(fraction) or not 0.0 <= fraction <= 1.0:
+        raise ValueError("lateral_inflow_fraction must be between 0 and 1")
+    length = float(length_m)
+
+    def lateral(x_m, time_min):
+        flow = boundary(time_min) if callable(boundary) else float(boundary)
+        rate = fraction * flow / length
+        return np.full_like(x_m, rate, dtype=float)
+
+    lateral.breakpoints_min = getattr(boundary, "breakpoints_min", ())
+    return lateral
 
 
 def rectangular_normal_depth(discharge, width, manning_n, slope):
@@ -145,23 +181,49 @@ def run_validation_case(config_path, *, output_path=None, overrides=None):
     roughness = np.full(cells, manning_n)
     channel_width = np.linspace(upstream_width, downstream_width, cells)
     boundary = discharge_boundary(upstream_times, upstream_flow)
-    initial_q = boundary(0.0)
+    lateral_fraction = float(config.get("lateral_inflow_fraction", 0.0))
+    lateral_inflow = fractional_lateral_inflow(
+        boundary, lateral_fraction, length_m
+    )
+    warmup_config = config.get("warmup", {})
+    warmup_min = float(
+        warmup_config.get("duration_min", config.get("warmup_min", 0.0))
+    )
+    warmup_forcing = warmup_config.get("upstream_forcing", "constant_initial")
+    if warmup_forcing not in {"constant_initial", "observed"}:
+        raise ValueError(
+            "warmup upstream_forcing must be 'constant_initial' or 'observed'"
+        )
+    warmup_start = -warmup_min
+    if warmup_forcing == "observed" and upstream_times[0] > warmup_start + 1e-9:
+        raise ValueError(
+            "Observed warm-up requires upstream observations through the warm-up start"
+        )
+    initial_q = boundary(warmup_start if warmup_forcing == "observed" else 0.0)
     normal_depth = rectangular_normal_depth(
         initial_q, upstream_width, manning_n, slope
     )
-    warmup_min = float(config.get("warmup_min", 0.0))
     spatial_order = int(config.get("spatial_order", 1))
     initial_depth = np.full(cells, normal_depth)
     initial_discharge = np.full(cells, initial_q)
     if warmup_min > 0:
+        warmup_boundary = (
+            shifted_boundary(boundary, warmup_start)
+            if warmup_forcing == "observed"
+            else initial_q
+        )
+        warmup_lateral = fractional_lateral_inflow(
+            warmup_boundary, lateral_fraction, length_m
+        )
         warmup = saint_venant_1d.run_model(
             length_m,
             warmup_min,
             record_interval=warmup_min,
             h_init=initial_depth,
             q_init=initial_discharge,
-            left_inflow=initial_q,
+            left_inflow=warmup_boundary,
             rainfall=lambda x, time: np.zeros_like(x),
+            lateral_inflow=warmup_lateral,
             x_m=x_m,
             dx_m=dx_m,
             slope=bed_slope,
@@ -181,6 +243,7 @@ def run_validation_case(config_path, *, output_path=None, overrides=None):
         q_init=initial_discharge,
         left_inflow=boundary,
         rainfall=lambda x, time: np.zeros_like(x),
+        lateral_inflow=lateral_inflow,
         x_m=x_m,
         dx_m=dx_m,
         slope=bed_slope,
@@ -214,13 +277,21 @@ def run_validation_case(config_path, *, output_path=None, overrides=None):
         "assumptions": {
             **reach,
             "initial_condition": (
-                "constant-boundary hydraulic warm-up from uniform Manning normal flow"
+                "observed-upstream dynamic warm-up from uniform Manning normal flow"
+                if warmup_min > 0 and warmup_forcing == "observed"
+                else "constant-boundary hydraulic warm-up from uniform Manning normal flow"
                 if warmup_min > 0
                 else "uniform rectangular-section Manning normal depth and discharge"
             ),
             "warmup_min": warmup_min,
+            "warmup_upstream_forcing": warmup_forcing,
             "spatial_order": spatial_order,
-            "lateral_inflow": "zero",
+            "lateral_inflow": (
+                "zero"
+                if lateral_fraction == 0.0
+                else "uniformly distributed fraction of observed upstream flow"
+            ),
+            "lateral_inflow_fraction": lateral_fraction,
             "rainfall": "zero",
         },
         "scores": {
@@ -237,6 +308,8 @@ def run_validation_case(config_path, *, output_path=None, overrides=None):
             "source_m3": float(result["mass_source"]),
             "outflow_m3": float(result["mass_outflow"]),
             "floor_correction_m3": float(result["mass_floor_correction"]),
+            "rainfall_m3": float(result["mass_rainfall"]),
+            "lateral_inflow_m3": float(result["mass_lateral_inflow"]),
         },
         "series": {
             "observed_times_min": target_times.tolist(),

@@ -342,6 +342,22 @@ def _evaluate_rainfall(rainfall, x_m, t):
     return values
 
 
+def _evaluate_lateral_inflow(lateral_inflow, x_m, t):
+    """Evaluate distributed lateral discharge in m^3/min per metre of reach."""
+    if lateral_inflow is None:
+        return np.zeros_like(x_m, dtype=float)
+    values = np.asarray(lateral_inflow(x_m, t), dtype=float)
+    if values.ndim == 0:
+        values = np.full_like(x_m, float(values), dtype=float)
+    if values.shape != x_m.shape:
+        raise ValueError("lateral_inflow must return one value per cell")
+    if not np.all(np.isfinite(values)) or np.any(values < 0):
+        raise ValueError(
+            "lateral_inflow must return finite, non-negative discharge per reach length"
+        )
+    return values
+
+
 def _cap_dt_at_forcing_breakpoints(dt, time, *forcings):
     for forcing in forcings:
         for breakpoint in getattr(forcing, "breakpoints_min", ()):
@@ -367,6 +383,7 @@ def run_model(
     q_init=None,
     left_inflow=None,
     rainfall=None,
+    lateral_inflow=None,
     x_m=None,
     dx_m=None,
     slope=None,
@@ -384,9 +401,11 @@ def run_model(
     returning that discharge. With ``channel_width_m`` it is total flow in
     m^3/min; the legacy unit-width mode uses m^2/min. None is a no-inflow upstream
     boundary. rainfall is a callable ``rainfall(x_m, t_min)`` returning one
-    non-negative rate in m/min per cell. ``spatial_order=2`` uses limited
-    reconstruction with a two-stage SSP update. The downstream boundary may be
-    transmissive outflow, a reflecting wall, or a prescribed stage.
+    non-negative rate in m/min per cell. ``lateral_inflow(x_m, t_min)`` returns
+    distributed lateral discharge in m^3/min per metre of reach. It adds water
+    without longitudinal momentum. ``spatial_order=2`` uses limited reconstruction
+    with a two-stage SSP update. The downstream boundary may be transmissive
+    outflow, a reflecting wall, or a prescribed stage.
     """
     x, dx, bed_slope, roughness = _prepare_grid(
         L,
@@ -448,6 +467,8 @@ def run_model(
 
     mass_inflow = 0.0
     mass_source = 0.0
+    mass_rainfall = 0.0
+    mass_lateral_inflow = 0.0
     mass_outflow = 0.0
     mass_floor_correction = 0.0
     t_current = 0.0
@@ -473,9 +494,13 @@ def run_model(
             correction_right,
             geometry_balance,
         ) = flux_data
-        source = _evaluate_rainfall(rainfall_function, x, stage_time)
+        rainfall_source = _evaluate_rainfall(rainfall_function, x, stage_time)
+        lateral_source = _evaluate_lateral_inflow(
+            lateral_inflow, x, stage_time
+        )
         area = width * h_stage
-        area_source = width * source
+        rainfall_area_source = width * rainfall_source
+        area_source = rainfall_area_source + lateral_source
         flux_h, flux_q = _limit_draining_fluxes(
             area, area_source, dt, dx, flux_h, flux_q
         )
@@ -512,6 +537,8 @@ def run_model(
             "inflow_rate": float(flux_h[0]),
             "downstream_rate": float(flux_h[-1]),
             "source_rate": float(np.sum(area_source * dx)),
+            "rainfall_rate": float(np.sum(rainfall_area_source * dx)),
+            "lateral_inflow_rate": float(np.sum(lateral_source * dx)),
             "floor_volume": float(np.sum(floor_addition * dx)),
         }
         return h_new, q_new, diagnostics
@@ -549,6 +576,7 @@ def run_model(
             t_current,
             left_inflow,
             rainfall_function,
+            lateral_inflow,
             downstream_stage_m,
         )
 
@@ -588,6 +616,8 @@ def run_model(
         else:
             mass_inflow -= downstream_mass
         mass_source += diagnostics["source_rate"] * dt
+        mass_rainfall += diagnostics["rainfall_rate"] * dt
+        mass_lateral_inflow += diagnostics["lateral_inflow_rate"] * dt
 
         h, q = h_new, q_new
         t_next = t_current + dt
@@ -623,6 +653,8 @@ def run_model(
         "q_final": q,
         "mass_inflow": mass_inflow,
         "mass_source": mass_source,
+        "mass_rainfall": mass_rainfall,
+        "mass_lateral_inflow": mass_lateral_inflow,
         "mass_outflow": mass_outflow,
         "mass_floor_correction": mass_floor_correction,
     }
@@ -647,6 +679,7 @@ class _SaintVenantSolver:
             "initial_discharge",
             "left_inflow",
             "rainfall",
+            "lateral_inflow",
             "cfl",
             "downstream_boundary",
             "downstream_stage",
@@ -677,6 +710,7 @@ class _SaintVenantSolver:
                 if scenario.rainfall is not None
                 else lambda x, t: np.zeros_like(x, dtype=float)
             ),
+            lateral_inflow=scenario.lateral_inflow,
             x_m=domain.x_m,
             dx_m=domain.dx_m,
             slope=domain.slope,
@@ -707,6 +741,8 @@ class _SaintVenantSolver:
                 "discharge_history": raw["q_history"],
                 "discharge_initial": raw["q_initial"],
                 "discharge_final": raw["q_final"],
+                "mass_rainfall": raw["mass_rainfall"],
+                "mass_lateral_inflow": raw["mass_lateral_inflow"],
             },
         )
 
