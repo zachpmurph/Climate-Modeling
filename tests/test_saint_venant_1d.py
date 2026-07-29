@@ -495,6 +495,45 @@ def test_compound_section_rainfall_and_lateral_inflow_conserve_volume():
     )
 
 
+def test_surveyed_wetted_perimeter_controls_manning_friction():
+    cells = 5
+    x_m = np.arange(cells, dtype=float)
+    levels = np.array([0.0, 1.0, 3.0, 4.0])
+    width, perimeter = sv.tabulated_section.survey_table(
+        [0.0, 2.0, 6.0, 10.0, 13.0],
+        [3.0, 0.0, 0.0, 1.0, 4.0],
+        levels,
+    )
+    widths = np.broadcast_to(width, (cells, len(levels))).copy()
+    perimeters = np.broadcast_to(
+        perimeter, (cells, len(levels))
+    ).copy()
+    kwargs = {
+        "L": float(cells),
+        "T_final": 0.01,
+        "h_init": np.ones(cells),
+        "q_init": np.ones(cells),
+        "left_inflow": 1.0,
+        "rainfall": lambda x, t: np.zeros_like(x),
+        "x_m": x_m,
+        "dx_m": np.ones(cells),
+        "slope": np.zeros(cells),
+        "manning_n": np.full(cells, 0.01),
+        "bed_elevation_m": np.zeros(cells),
+        "cross_section_depth_m": levels,
+        "cross_section_top_width_m": widths,
+    }
+
+    symmetric = sv.run_model(**kwargs)
+    surveyed = sv.run_model(
+        **kwargs,
+        cross_section_wetted_perimeter_m=perimeters,
+    )
+
+    assert surveyed["cross_section_shape"] == "surveyed_asymmetric"
+    assert np.max(np.abs(surveyed["q_final"] - symmetric["q_final"])) > 1e-8
+
+
 def test_second_order_reconstruction_preserves_varying_width_lake():
     x_m = np.linspace(0.0, 1000.0, 101)
     dx_m = np.full_like(x_m, 1000.0 / len(x_m))

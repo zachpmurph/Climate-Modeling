@@ -17,6 +17,9 @@ GEOMETRY_PATH = "real_world_rivers/tools/example_geometry.csv"
 COMPOUND_GEOMETRY_PATH = (
     "real_world_rivers/tools/example_compound_cross_sections.csv"
 )
+SURVEYED_GEOMETRY_PATH = (
+    "real_world_rivers/tools/example_surveyed_cross_sections.csv"
+)
 
 
 def _make_scenario(**kwargs):
@@ -501,6 +504,46 @@ def test_runner_loads_compound_cross_sections_and_records_assumptions(
     assert section["top_width_m"][1] == [9.0, 15.0, 35.0, 75.0]
     assert section["above_reviewed_depth"] == "vertical_wall_extrapolation"
     assert section["bank_symmetry_assumption"] is True
+    assert summary["mass_unit"] == "m3"
+    assert summary["discharge_unit"] == "m3_per_min"
+    assert abs(summary["mass_balance_error"]) < 1e-9
+
+
+def test_runner_loads_raw_asymmetric_cross_section_surveys(tmp_path):
+    output_dir = tmp_path / "runs"
+    run_simulation.main(
+        [
+            PROFILE_PATH,
+            "--solver",
+            "saint_venant",
+            "--cross-section-shape",
+            "surveyed",
+            "--surveyed-cross-sections",
+            SURVEYED_GEOMETRY_PATH,
+            "--left-inflow",
+            "0.6",
+            "--spatial-order",
+            "2",
+            "--t-final",
+            "0.01",
+            "--output-dir",
+            str(output_dir),
+            "--run-name",
+            "surveyed",
+        ]
+    )
+
+    summary = json.loads(
+        (output_dir / "surveyed_summary.json").read_text(encoding="utf-8")
+    )
+    section = summary["cross_section"]
+    assert section["shape"] == "surveyed_asymmetric"
+    assert section["surveyed_cross_sections"] == SURVEYED_GEOMETRY_PATH
+    assert section["source_format"] == (
+        "station_offset_elevation_polyline"
+    )
+    assert section["bank_symmetry_assumption"] is False
+    assert len(section["wetted_perimeter_m"]) == 5
     assert summary["mass_unit"] == "m3"
     assert summary["discharge_unit"] == "m3_per_min"
     assert abs(summary["mass_balance_error"]) < 1e-9

@@ -18,6 +18,7 @@ from general.solvers.profile import (
     load_compound_cross_sections,
     load_profile,
     load_reviewed_terrain,
+    load_surveyed_cross_sections,
     resample_profile,
 )
 from rivers.simulations.ingest_to_simulate import scenario_from_profile
@@ -239,7 +240,7 @@ def parse_args(argv=None):
     )
     p.add_argument(
         "--cross-section-shape",
-        choices=("rectangular", "trapezoidal", "compound"),
+        choices=("rectangular", "trapezoidal", "compound", "surveyed"),
         default="rectangular",
         help="1-D channel shape (default: rectangular)",
     )
@@ -249,6 +250,14 @@ def parse_args(argv=None):
         help=(
             "Reviewed station/depth/top-width CSV for stage-dependent "
             "compound 1-D sections"
+        ),
+    )
+    p.add_argument(
+        "--surveyed-cross-sections",
+        type=Path,
+        help=(
+            "Reviewed station/offset/elevation CSV for asymmetric surveyed "
+            "1-D sections"
         ),
     )
     p.add_argument(
@@ -369,6 +378,30 @@ def main(argv=None):
             "error: use compound cross-sections or parameterized hydraulic "
             "geometry, not both"
         )
+    if args.cross_section_shape == "surveyed" and (
+        args.solver != "saint_venant"
+        or args.surveyed_cross_sections is None
+    ):
+        raise SystemExit(
+            "error: surveyed cross-sections require --solver saint_venant "
+            "and --surveyed-cross-sections"
+        )
+    if (
+        args.surveyed_cross_sections is not None
+        and args.cross_section_shape != "surveyed"
+    ):
+        raise SystemExit(
+            "error: --surveyed-cross-sections requires "
+            "--cross-section-shape surveyed"
+        )
+    if args.surveyed_cross_sections is not None and (
+        args.hydraulic_geometry is not None
+        or args.compound_cross_sections is not None
+    ):
+        raise SystemExit(
+            "error: use surveyed cross-sections, compound stage-width "
+            "curves, or parameterized geometry, not more than one"
+        )
     if args.terrain_grid is not None and args.solver != "saint_venant_2d":
         raise SystemExit(
             "error: --terrain-grid requires --solver saint_venant_2d"
@@ -417,6 +450,7 @@ def main(argv=None):
         args.lateral_inflow_points,
         args.downstream_stage_series,
         args.compound_cross_sections,
+        args.surveyed_cross_sections,
         args.terrain_grid,
     ):
         if forcing_path is not None and not forcing_path.is_file():
@@ -506,7 +540,24 @@ def main(argv=None):
             raise SystemExit(
                 "error: --width is only valid with saint_venant_2d"
             )
-        if args.compound_cross_sections is not None:
+        if args.surveyed_cross_sections is not None:
+            try:
+                (
+                    section_depth,
+                    section_width,
+                    section_perimeter,
+                ) = load_surveyed_cross_sections(
+                    args.surveyed_cross_sections, profile.station_m
+                )
+            except ValueError as exc:
+                raise SystemExit(f"error: {exc}") from exc
+            domain = domain_from_profile(
+                profile,
+                cross_section_depth_m=section_depth,
+                cross_section_top_width_m=section_width,
+                cross_section_wetted_perimeter_m=section_perimeter,
+            )
+        elif args.compound_cross_sections is not None:
             try:
                 section_depth, section_width = (
                     load_compound_cross_sections(
@@ -874,23 +925,38 @@ def main(argv=None):
                 }
             )
         if result.domain.cross_section_top_width_m is not None:
-            summary["cross_section"].update(
-                {
-                    "compound_cross_sections": _portable_path(
-                        args.compound_cross_sections
-                    ),
-                    "depth_levels_m": (
-                        result.domain.cross_section_depth_m.tolist()
-                    ),
-                    "top_width_m": (
-                        result.domain.cross_section_top_width_m.tolist()
-                    ),
-                    "above_reviewed_depth": (
-                        "vertical_wall_extrapolation"
-                    ),
-                    "bank_symmetry_assumption": True,
-                }
-            )
+            section_metadata = {
+                "depth_levels_m": (
+                    result.domain.cross_section_depth_m.tolist()
+                ),
+                "top_width_m": (
+                    result.domain.cross_section_top_width_m.tolist()
+                ),
+                "above_reviewed_depth": "vertical_wall_extrapolation",
+                "bank_symmetry_assumption": (
+                    result.domain.cross_section_wetted_perimeter_m is None
+                ),
+            }
+            if result.domain.cross_section_wetted_perimeter_m is None:
+                section_metadata["compound_cross_sections"] = (
+                    _portable_path(args.compound_cross_sections)
+                )
+            else:
+                section_metadata.update(
+                    {
+                        "surveyed_cross_sections": _portable_path(
+                            args.surveyed_cross_sections
+                        ),
+                        "source_format": (
+                            "station_offset_elevation_polyline"
+                        ),
+                        "wetted_perimeter_m": (
+                            result.domain
+                            .cross_section_wetted_perimeter_m.tolist()
+                        ),
+                    }
+                )
+            summary["cross_section"].update(section_metadata)
         if result.domain.channel_bottom_width_m is not None:
             summary["cross_section"]["channel_bottom_width_m"] = (
                 result.domain.channel_bottom_width_m.tolist()

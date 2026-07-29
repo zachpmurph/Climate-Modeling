@@ -142,6 +142,7 @@ The rationale for each transition is given alongside the change.
 | **4aa — Compound stage–width sections** | Current branch | Added reviewed, per-cell piecewise-linear stage–width curves to 1-D Saint-Venant. Area, pressure, top width, symmetric-bank wetted perimeter, hydraulic radius, rainfall capture, and depth-from-area are evaluated from the full curve; longitudinal interpolation, provenance, mass balance, and lake-at-rest gates are included. | One trapezoid cannot represent benches or rapid floodplain widening. Stage–width curves let storage and conveyance change at multiple surveyed elevations without fitting those changes into Manning roughness. |
 | **4ab — Reviewed 2-D terrain grids** | Current branch | Added a reviewable Cartesian terrain CSV path for 2-D Saint-Venant. The runner validates a complete grid, cell dimensions, elevation, optional per-cell roughness, reach alignment, initial water surface, and provenance; saved fields now retain terrain slopes and roughness. | Parameterized parabolic channels cannot reproduce real banks, floodplain relief, or spatial land-cover resistance. A reviewed grid lets those controls enter explicitly rather than being absorbed by synthetic terrain parameters. |
 | **4ac — Terrain-aware 2-D ensembles** | Current branch | Extended probabilistic 2-D runs to reviewed terrain. Ensembles can scale the reviewed roughness grid, perturb cross-channel relief, apply a vertical-datum offset, and vary forcing/stage while rejecting synthetic width, bankfull, floodplain-slope, and longitudinal-slope parameters. Bed and roughness quantiles are retained. | Applying synthetic-domain parameters to a reviewed DEM would change the meaning of the observations. Terrain-specific perturbations keep uncertainty explicit without silently rebuilding the supplied surface. |
+| **4ad — Raw asymmetric 1-D surveys** | Current branch | Added `station_m,offset_m,elevation_m` cross-section polylines. They are reduced to conservative stage–width curves while retaining the exact asymmetric polyline wetted perimeter for Manning friction. The second-order SSP step now averages conserved area rather than depth, eliminating nonlinear-geometry volume drift. | Symmetric banks can bias hydraulic radius even when stage–area storage is correct. Raw survey geometry removes that assumption, and conservative SSP averaging is required once area is nonlinear in depth. |
 
 ---
 
@@ -204,8 +205,9 @@ python src/rivers/simulations/run_simulation.py PROFILE --solver SOLVER --t-fina
 | `--width` | — | Total channel-plus-floodplain domain width in metres; required for `saint_venant_2d` |
 | `--cross-cells` | `10` | Number of cells across a 2-D domain |
 | `--hydraulic-geometry` | — | Reviewed `station_m,width_m,bankfull_depth_m` CSV; optional for physical 1-D sections and required for 2-D |
-| `--cross-section-shape` | `rectangular` | 1-D Saint-Venant section shape: `rectangular`, `trapezoidal`, or `compound` |
+| `--cross-section-shape` | `rectangular` | 1-D Saint-Venant section shape: `rectangular`, `trapezoidal`, `compound`, or `surveyed` |
 | `--compound-cross-sections` | — | Reviewed `station_m,depth_m,top_width_m` CSV; required for `--cross-section-shape compound` |
+| `--surveyed-cross-sections` | — | Reviewed `station_m,offset_m,elevation_m` CSV; required for `--cross-section-shape surveyed` |
 | `--bottom-width-fraction` | `0.5` | Trapezoid bottom width divided by reviewed bankfull width, in `(0, 1]` |
 | `--floodplain-slope` | `0.02` | Lateral rise/run outside the reviewed bankfull channel |
 | `--terrain-grid` | — | Reviewed Cartesian `x_m,y_m,dx_m,dy_m,bed_elevation_m[,manning_n]` CSV for 2-D; replaces synthetic width/geometry inputs |
@@ -254,6 +256,22 @@ python src/rivers/simulations/run_simulation.py \
 
 See [the compound cross-section contract](docs/compound_cross_sections.md)
 before converting survey products.
+
+For raw asymmetric section polylines:
+
+```bash
+python src/rivers/simulations/run_simulation.py \
+    real_world_rivers/tools/example_river_profile.csv \
+    --solver saint_venant \
+    --cross-section-shape surveyed \
+    --surveyed-cross-sections \
+      real_world_rivers/tools/example_surveyed_cross_sections.csv \
+    --t-final 10 \
+    --left-inflow 0.6 \
+    --run-name surveyed_sv
+```
+
+See [the surveyed cross-section contract](docs/surveyed_cross_sections.md).
 
 **Example — 2-D Saint-Venant on a terrain-backed channel and floodplain:**
 ```bash
@@ -612,7 +630,7 @@ channel/floodplain terrain.
 
 ## Next steps
 
-- Retain raw asymmetric cross-section coordinates in 1-D and estimate
-  basin-specific uncertainty distributions from reviewed evidence.
+- Estimate basin-specific uncertainty distributions from reviewed evidence and
+  evaluate coverage on future or untouched-river events.
 - Estimate basin-specific joint uncertainty distributions and test ensemble
   coverage on a future event or untouched third river.

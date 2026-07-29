@@ -224,6 +224,7 @@ def domain_from_profile(
     side_slope_h_to_v=None,
     cross_section_depth_m=None,
     cross_section_top_width_m=None,
+    cross_section_wetted_perimeter_m=None,
 ) -> Domain:
     """Build a Domain from a RiverProfile (uses per-cell slope and Manning n)."""
     if (channel_width_m is None) != (bankfull_depth_m is None):
@@ -253,6 +254,13 @@ def domain_from_profile(
             "cross_section_depth_m and cross_section_top_width_m must be "
             "supplied together"
         )
+    if (
+        cross_section_wetted_perimeter_m is not None
+        and cross_section_depth_m is None
+    ):
+        raise ValueError(
+            "cross_section_wetted_perimeter_m requires a tabulated section"
+        )
     if cross_section_depth_m is not None and (
         channel_bottom_width_m is not None or side_slope_h_to_v is not None
     ):
@@ -261,11 +269,17 @@ def domain_from_profile(
         )
     section_depth = None
     section_width = None
+    section_perimeter = None
     if cross_section_depth_m is not None:
-        section_depth, section_width = tabulated_section.validate_table(
+        (
+            section_depth,
+            section_width,
+            section_perimeter,
+        ) = tabulated_section.validate_table(
             cross_section_depth_m,
             cross_section_top_width_m,
             cell_count=len(profile.station_m),
+            wetted_perimeter_m=cross_section_wetted_perimeter_m,
         )
     bottom_width = (
         None
@@ -309,6 +323,7 @@ def domain_from_profile(
         side_slope_h_to_v=side_slope,
         cross_section_depth_m=section_depth,
         cross_section_top_width_m=section_width,
+        cross_section_wetted_perimeter_m=section_perimeter,
     )
 
 
@@ -402,6 +417,98 @@ def load_compound_cross_sections(path, station_m):
         ]
     )
     return common_depth, interpolated_widths
+
+
+def load_surveyed_cross_sections(path, station_m):
+    """Reduce asymmetric offset/elevation surveys onto model stations.
+
+    Input rows contain ``station_m,offset_m,elevation_m``. Each section is
+    converted to common relative-depth top-width and exact polyline wetted-
+    perimeter curves, then both curves are interpolated longitudinally.
+    """
+    with Path(path).open(newline="", encoding="utf-8-sig") as handle:
+        rows = list(csv.DictReader(handle))
+    if not rows:
+        raise ValueError("Surveyed cross-section CSV is empty")
+    grouped = {}
+    try:
+        for row in rows:
+            station = float(row["station_m"])
+            offset = float(row["offset_m"])
+            elevation = float(row["elevation_m"])
+            grouped.setdefault(station, []).append((offset, elevation))
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError(
+            "Surveyed cross-section CSV must contain numeric station_m, "
+            "offset_m, and elevation_m columns"
+        ) from exc
+    survey_stations = np.asarray(sorted(grouped), dtype=float)
+    if (
+        len(survey_stations) < 2
+        or np.any(~np.isfinite(survey_stations))
+        or np.any(np.diff(survey_stations) <= 0.0)
+    ):
+        raise ValueError(
+            "Surveyed cross-sections require at least two finite, distinct "
+            "river stations"
+        )
+
+    sections = []
+    relative_levels = []
+    for station in survey_stations:
+        samples = sorted(grouped[float(station)])
+        offsets = np.asarray([sample[0] for sample in samples], dtype=float)
+        elevations = np.asarray(
+            [sample[1] for sample in samples], dtype=float
+        )
+        # This validation call also checks representability of the section.
+        tabulated_section.survey_properties_at_depth(
+            offsets, elevations, np.array([0.0])
+        )
+        sections.append((offsets, elevations))
+        relative_levels.extend(elevations - np.min(elevations))
+    common_depth = np.unique(np.asarray(relative_levels, dtype=float))
+    if len(common_depth) < 2:
+        raise ValueError(
+            "Surveyed cross-sections need at least two distinct elevations"
+        )
+
+    survey_widths = []
+    survey_perimeters = []
+    for offsets, elevations in sections:
+        width, perimeter = tabulated_section.survey_table(
+            offsets, elevations, common_depth
+        )
+        survey_widths.append(width)
+        survey_perimeters.append(perimeter)
+    survey_widths = np.asarray(survey_widths)
+    survey_perimeters = np.asarray(survey_perimeters)
+    target_stations = np.asarray(station_m, dtype=float)
+    interpolated_widths = np.column_stack(
+        [
+            np.interp(
+                target_stations, survey_stations, survey_widths[:, level]
+            )
+            for level in range(len(common_depth))
+        ]
+    )
+    interpolated_perimeters = np.column_stack(
+        [
+            np.interp(
+                target_stations,
+                survey_stations,
+                survey_perimeters[:, level],
+            )
+            for level in range(len(common_depth))
+        ]
+    )
+    tabulated_section.validate_table(
+        common_depth,
+        interpolated_widths,
+        cell_count=len(target_stations),
+        wetted_perimeter_m=interpolated_perimeters,
+    )
+    return common_depth, interpolated_widths, interpolated_perimeters
 
 
 def load_reviewed_terrain(path, profile):

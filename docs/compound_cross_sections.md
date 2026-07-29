@@ -42,6 +42,10 @@ banks. Above the highest reviewed depth the solver uses vertical walls; it does
 not extrapolate floodplain widening. Both assumptions are recorded in the run
 summary.
 
+When raw offset/elevation coordinates are available, use
+`--cross-section-shape surveyed` instead. That path retains the asymmetric
+polyline wetted perimeter rather than making the symmetric-bank assumption.
+
 This representation is appropriate for sensitivity analysis and for survey
 products already reduced to stage–width curves. It is not equivalent to
 retaining raw asymmetric offset/elevation coordinates, disconnected overbank

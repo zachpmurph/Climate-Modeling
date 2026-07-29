@@ -188,12 +188,13 @@ calibrated uniform reach-gain fraction.
   not invent those values and
   rerun calibration: doing so would add another compensating parameter to an
   already boundary-limited fit.
-- Tabulated sections represent storage and conveyance transitions, but their
-  wetted perimeter currently assumes symmetric banks and they do not retain raw
-  asymmetric survey coordinates or disconnected floodplain pools. Measured
-  tributary hydrographs are also absent from the committed Colorado case. The
-  calibrated lateral-flow fraction is an effective distributed gain, not a
-  substitute for those observations.
+- Raw offset/elevation survey sections retain asymmetric polyline wetted
+  perimeter; stage–width-only sections still assume symmetric banks. Neither
+  representation supports disconnected floodplain pools or horizontal
+  above-bottom benches without preprocessing. Measured tributary hydrographs
+  are also absent from the committed Colorado case. The calibrated
+  lateral-flow fraction is an effective distributed gain, not a substitute for
+  those observations.
 - USGS parameter `00065` is gage height, but it becomes a model water-surface
   elevation only after applying the station's gage datum consistently with the
   model bed datum. Never pass raw gage height as absolute stage without that

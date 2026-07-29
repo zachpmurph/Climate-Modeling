@@ -43,3 +43,54 @@ def test_compound_section_rejects_narrowing_or_misaligned_curves():
         cross_section.validate_table(
             [0.0, 1.0], [[2.0, 3.0]], cell_count=2
         )
+
+
+def test_asymmetric_survey_retains_exact_polyline_wetted_perimeter():
+    offset = np.array([0.0, 2.0, 6.0, 10.0, 13.0])
+    elevation = np.array([3.0, 0.0, 0.0, 1.0, 4.0])
+    levels = np.array([0.0, 1.0, 3.0, 4.0])
+    width, perimeter = cross_section.survey_table(
+        offset, elevation, levels
+    )
+
+    assert width[0] == pytest.approx(4.0)
+    assert width[1] == pytest.approx(26.0 / 3.0)
+    assert perimeter[1] == pytest.approx(
+        4.0 + np.sqrt(13.0) / 3.0 + np.sqrt(17.0)
+    )
+    surveyed_radius = cross_section.hydraulic_radius(
+        levels,
+        width[None, :],
+        np.array([1.0]),
+        perimeter[None, :],
+    )
+    inferred_symmetric_radius = cross_section.hydraulic_radius(
+        levels, width[None, :], np.array([1.0])
+    )
+    assert surveyed_radius[0] != pytest.approx(
+        inferred_symmetric_radius[0]
+    )
+
+
+def test_raw_survey_rejects_unrepresentable_horizontal_bench():
+    with pytest.raises(ValueError, match="horizontal survey benches"):
+        cross_section.survey_table(
+            [0.0, 2.0, 5.0, 8.0, 10.0],
+            [3.0, 0.0, 0.0, 2.0, 2.0],
+            [0.0, 1.0, 2.0, 3.0],
+        )
+
+
+def test_raw_survey_rejects_disconnected_or_v_shaped_bottom():
+    with pytest.raises(ValueError, match="one connected flat bottom"):
+        cross_section.survey_table(
+            [0.0, 2.0, 4.0, 6.0, 8.0],
+            [3.0, 0.0, 2.0, 0.0, 3.0],
+            [0.0, 1.0, 2.0, 3.0],
+        )
+    with pytest.raises(ValueError, match="one connected flat bottom"):
+        cross_section.survey_table(
+            [0.0, 4.0, 8.0],
+            [3.0, 0.0, 3.0],
+            [0.0, 1.0, 2.0, 3.0],
+        )

@@ -25,6 +25,7 @@ class Domain:
     side_slope_h_to_v: np.ndarray | None = None  # trapezoid side slope per bank, shape (nx,)
     cross_section_depth_m: np.ndarray | None = None  # common stage-curve depths, shape (nlevel,)
     cross_section_top_width_m: np.ndarray | None = None  # compound width curves, shape (nx, nlevel)
+    cross_section_wetted_perimeter_m: np.ndarray | None = None  # surveyed curves, shape (nx, nlevel)
 
 
 @dataclass(frozen=True)

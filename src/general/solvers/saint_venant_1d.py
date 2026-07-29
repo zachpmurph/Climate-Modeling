@@ -93,10 +93,11 @@ def _hydraulic_radius(
     side_slope,
     table_depth=None,
     table_width=None,
+    table_perimeter=None,
 ):
     if table_depth is not None:
         return tabulated_section.hydraulic_radius(
-            table_depth, table_width, h
+            table_depth, table_width, h, table_perimeter
         )
     area = _cross_section_area(h, bottom_width, side_slope)
     perimeter = bottom_width + 2.0 * h * np.sqrt(1.0 + side_slope**2)
@@ -742,6 +743,7 @@ def run_model(
     side_slope_h_to_v=None,
     cross_section_depth_m=None,
     cross_section_top_width_m=None,
+    cross_section_wetted_perimeter_m=None,
     downstream_boundary="outflow",
     downstream_stage_m=None,
     spatial_order=1,
@@ -789,6 +791,13 @@ def run_model(
             "cross_section_depth_m and cross_section_top_width_m must be "
             "supplied together"
         )
+    if (
+        cross_section_wetted_perimeter_m is not None
+        and cross_section_depth_m is None
+    ):
+        raise ValueError(
+            "cross_section_wetted_perimeter_m requires a tabulated section"
+        )
     if cross_section_depth_m is not None and (
         channel_bottom_width_m is not None or side_slope_h_to_v is not None
     ):
@@ -798,11 +807,17 @@ def run_model(
         )
     table_depth = None
     table_width = None
+    table_perimeter = None
     if cross_section_depth_m is not None:
-        table_depth, table_width = tabulated_section.validate_table(
+        (
+            table_depth,
+            table_width,
+            table_perimeter,
+        ) = tabulated_section.validate_table(
             cross_section_depth_m,
             cross_section_top_width_m,
             cell_count=n_cells,
+            wetted_perimeter_m=cross_section_wetted_perimeter_m,
         )
     bottom_width = _cell_values(
         (
@@ -833,7 +848,11 @@ def run_model(
         channel_width_m is not None or table_width is not None
     )
     cross_section_shape = (
-        "compound_tabulated"
+        (
+            "surveyed_asymmetric"
+            if table_perimeter is not None
+            else "compound_tabulated"
+        )
         if table_width is not None
         else (
             "trapezoidal"
@@ -980,6 +999,7 @@ def run_model(
                 side_slope,
                 table_depth,
                 table_width,
+                table_perimeter,
             )
             if uses_cross_section
             else h_new
@@ -1040,7 +1060,6 @@ def run_model(
             lateral_inflow,
             downstream_stage_m,
         )
-
         h_previous = h.copy()
         q_previous = q.copy()
         first_flux_data = (
@@ -1059,7 +1078,29 @@ def run_model(
             h_euler, q_euler, second_diagnostics = euler_stage(
                 h_stage, q_stage, second_time, dt
             )
-            h_new = 0.5 * (h + h_euler)
+            area_new = 0.5 * (
+                _cross_section_area(
+                    h,
+                    bottom_width,
+                    side_slope,
+                    table_depth,
+                    table_width,
+                )
+                + _cross_section_area(
+                    h_euler,
+                    bottom_width,
+                    side_slope,
+                    table_depth,
+                    table_width,
+                )
+            )
+            h_new = _depth_from_area(
+                area_new,
+                bottom_width,
+                side_slope,
+                table_depth,
+                table_width,
+            )
             q_new = 0.5 * (q + q_euler)
             diagnostics = {
                 key: 0.5 * (first_diagnostics[key] + second_diagnostics[key])
@@ -1106,6 +1147,7 @@ def run_model(
         "side_slope_h_to_v": side_slope,
         "cross_section_depth_m": table_depth,
         "cross_section_top_width_m": table_width,
+        "cross_section_wetted_perimeter_m": table_perimeter,
         "cross_section_shape": cross_section_shape,
         "top_width_history": _top_width(
             np.array(h_history),
@@ -1207,6 +1249,9 @@ class _SaintVenantSolver:
             cross_section_top_width_m=getattr(
                 domain, "cross_section_top_width_m", None
             ),
+            cross_section_wetted_perimeter_m=getattr(
+                domain, "cross_section_wetted_perimeter_m", None
+            ),
             downstream_boundary=scenario.downstream_boundary,
             downstream_stage_m=scenario.downstream_stage_m,
             spatial_order=scenario.spatial_order,
@@ -1230,6 +1275,9 @@ class _SaintVenantSolver:
                 "cross_section_depth_m": raw["cross_section_depth_m"],
                 "cross_section_top_width_m": raw[
                     "cross_section_top_width_m"
+                ],
+                "cross_section_wetted_perimeter_m": raw[
+                    "cross_section_wetted_perimeter_m"
                 ],
                 "cross_section_shape": raw["cross_section_shape"],
                 "top_width_history": raw["top_width_history"],
