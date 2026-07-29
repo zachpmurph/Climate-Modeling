@@ -204,7 +204,7 @@ def run_validation_case(config_path, *, output_path=None, overrides=None):
         "schema_version": 1,
         "case": config["case"],
         "solver": "saint_venant",
-        "status": "uncalibrated_baseline",
+        "status": config.get("validation_status", "uncalibrated_baseline"),
         "observations": {
             "path": str(observation_path),
             "upstream_count": int(len(upstream_times)),

@@ -1,3 +1,4 @@
+import csv
 import json
 from pathlib import Path
 
@@ -7,7 +8,9 @@ from rivers.validation.run_case import (
     load_two_gauge_observations,
     run_validation_case,
 )
+from rivers.validation.fetch_event import collect_event_rows
 from rivers.validation.run_sensitivity import build_variants
+from rivers.validation.run_suite import summarize_results
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -15,6 +18,8 @@ CASE = REPO_ROOT / "real_world_rivers" / "validation" / "glen_canyon_lees_ferry.
 OBSERVATIONS = CASE.with_name("glen_canyon_lees_ferry_2004-07-01.csv")
 EVIDENCE = CASE.with_suffix(".results.json")
 SENSITIVITY = CASE.with_suffix(".sensitivity.json")
+SUITE = CASE.with_name("validation_suite.json")
+SUITE_EVIDENCE = SUITE.with_suffix(".results.json")
 
 
 def test_committed_two_gauge_observations_are_complete_and_ordered():
@@ -74,3 +79,96 @@ def test_tracked_sensitivity_evidence_covers_every_variant():
     assert {run["name"] for run in evidence["runs"]} == configured
     assert evidence["score_ranges"]["nse"]["minimum"] < 0.0
     assert evidence["score_ranges"]["nse"]["maximum"] > 0.5
+
+
+def test_multi_event_suite_observations_and_results_are_reproducible(tmp_path):
+    manifest = json.loads(SUITE.read_text(encoding="utf-8"))
+    tracked_suite = json.loads(SUITE_EVIDENCE.read_text(encoding="utf-8"))
+
+    assert len(manifest["cases"]) == tracked_suite["case_count"] == 4
+    for relative_path in manifest["cases"]:
+        config_path = SUITE.parent / relative_path
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        observation_path = config_path.parent / config["observations"]
+        observations = load_two_gauge_observations(observation_path)
+        with observation_path.open(newline="", encoding="utf-8") as handle:
+            raw_rows = list(csv.DictReader(handle))
+        assert len(observations["upstream"][0]) == 289
+        assert len(observations["downstream"][0]) == 97
+        assert {row["approval_status"] for row in raw_rows} == {"Approved"}
+        assert observations["upstream"][0][-1] == pytest.approx(1440.0)
+        assert observations["downstream"][0][-1] == pytest.approx(1440.0)
+
+        tracked = json.loads(
+            config_path.with_suffix(".results.json").read_text(encoding="utf-8")
+        )
+        actual = run_validation_case(
+            config_path,
+            output_path=tmp_path / f"{config_path.stem}.results.json",
+        )
+        assert actual["status"] == tracked["status"]
+        for metric in ("nse", "rmse", "bias", "percent_bias", "pearson_r"):
+            assert actual["scores"][metric] == pytest.approx(
+                tracked["scores"][metric], rel=1e-10, abs=1e-10
+            )
+
+
+def test_fetch_event_normalizes_approved_usgs_rows():
+    config = {
+        "case": {
+            "observation_window": [
+                "2020-01-01T00:00:00Z",
+                "2020-01-01T00:15:00Z",
+            ]
+        },
+        "sources": [
+            {"role": "upstream", "gauge": "USGS-1"},
+            {"role": "downstream", "gauge": "USGS-2"},
+        ],
+    }
+
+    def requester(url, params=None):
+        site = params["monitoring_location_id"]
+        values = (100.0, 110.0) if site == "USGS-1" else (90.0, 105.0)
+        features = [
+            {
+                "properties": {
+                    "parameter_code": "00060",
+                    "time": timestamp,
+                    "value": value,
+                    "unit_of_measure": "ft^3/s",
+                    "approval_status": "Approved",
+                }
+            }
+            for timestamp, value in zip(
+                ("2020-01-01T00:00:00Z", "2020-01-01T00:15:00Z"),
+                values,
+            )
+        ]
+        return {"features": features}, f"https://example.test/{site}"
+
+    rows, urls = collect_event_rows(config, requester=requester)
+
+    assert len(rows) == 4
+    assert [row["role"] for row in rows] == [
+        "upstream",
+        "upstream",
+        "downstream",
+        "downstream",
+    ]
+    assert rows[0]["observed_at"] == "2020-01-01T00:00:00+00:00"
+    assert float(rows[0]["discharge_m3_per_min"]) == pytest.approx(
+        100.0 * 0.028316846592 * 60.0
+    )
+    assert set(urls) == {"upstream", "downstream"}
+
+
+def test_suite_summary_uses_event_ranges_and_medians():
+    summary = summarize_results(
+        [
+            {"scores": {key: value for key in ("nse", "rmse", "bias", "percent_bias", "pearson_r")}}
+            for value in (1.0, 3.0, 2.0)
+        ]
+    )
+
+    assert summary["nse"] == {"minimum": 1.0, "median": 2.0, "maximum": 3.0}

@@ -182,8 +182,9 @@ current documented method.
    - The 1-D solver now supports transmissive outflow, wall, and prescribed-stage
      downstream boundaries with regression tests. The 2-D solver still uses its
      simpler boundary set and needs case-specific open-boundary justification.
-   - The committed two-gauge case and one-at-a-time sensitivity matrix establish
-     an uncalibrated baseline, not transferable predictive skill.
+   - The committed four-event, two-gauge suite and one-at-a-time sensitivity
+     matrix establish an uncalibrated baseline on one regulated reach, not
+     transferable predictive skill.
 
 2. **Add partially dry non-flat shoreline equilibria.**
    - This would strengthen the coupling between well-balanced topography and
@@ -191,7 +192,7 @@ current documented method.
    - Estimated effort: 2–4 focused engineering days.
 
 3. **Add independent events and uncertainty distributions.**
-   - Numerical verification and one observed event do not establish correct
+   - Numerical verification and four observed events on one reach do not establish correct
      terrain, roughness, forcing, boundary data, or flood outcomes elsewhere.
    - Calibrate only on separate events, then report out-of-sample performance
      and probabilistic input uncertainty.
