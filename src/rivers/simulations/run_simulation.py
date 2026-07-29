@@ -17,6 +17,7 @@ from general.solvers.profile import (
     load_channel_geometry,
     load_compound_cross_sections,
     load_profile,
+    load_reviewed_terrain,
     resample_profile,
 )
 from rivers.simulations.ingest_to_simulate import scenario_from_profile
@@ -265,6 +266,14 @@ def parse_args(argv=None):
         default=0.02,
         help="Lateral rise/run outside the reviewed channel width (default: 0.02)",
     )
+    p.add_argument(
+        "--terrain-grid",
+        type=Path,
+        help=(
+            "Reviewed Cartesian x/y/dx/dy/bed CSV for saint_venant_2d; "
+            "replaces synthetic channel terrain"
+        ),
+    )
     p.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     p.add_argument("--run-name", default="simulation")
     p.add_argument(
@@ -360,6 +369,17 @@ def main(argv=None):
             "error: use compound cross-sections or parameterized hydraulic "
             "geometry, not both"
         )
+    if args.terrain_grid is not None and args.solver != "saint_venant_2d":
+        raise SystemExit(
+            "error: --terrain-grid requires --solver saint_venant_2d"
+        )
+    if args.terrain_grid is not None and (
+        args.width is not None or args.hydraulic_geometry is not None
+    ):
+        raise SystemExit(
+            "error: reviewed terrain replaces --width and "
+            "--hydraulic-geometry"
+        )
     if not np.isfinite(args.bottom_width_fraction) or not (
         0.0 < args.bottom_width_fraction <= 1.0
     ):
@@ -397,6 +417,7 @@ def main(argv=None):
         args.lateral_inflow_points,
         args.downstream_stage_series,
         args.compound_cross_sections,
+        args.terrain_grid,
     ):
         if forcing_path is not None and not forcing_path.is_file():
             raise SystemExit(f"error: forcing input does not exist: {forcing_path}")
@@ -445,27 +466,41 @@ def main(argv=None):
     except ValueError as exc:
         raise SystemExit(f"error: {exc}") from exc
     if args.solver == "saint_venant_2d":
-        if args.width is None:
-            raise SystemExit("error: --width is required for saint_venant_2d")
-        if args.hydraulic_geometry is None:
-            raise SystemExit(
-                "error: --hydraulic-geometry is required for saint_venant_2d"
+        if args.terrain_grid is not None:
+            try:
+                domain, terrain_roughness_source = load_reviewed_terrain(
+                    args.terrain_grid, profile
+                )
+            except ValueError as exc:
+                raise SystemExit(f"error: {exc}") from exc
+        else:
+            terrain_roughness_source = "river_profile_repeated_across_y"
+            if args.width is None:
+                raise SystemExit(
+                    "error: --width is required for synthetic "
+                    "saint_venant_2d terrain"
+                )
+            if args.hydraulic_geometry is None:
+                raise SystemExit(
+                    "error: --hydraulic-geometry is required for synthetic "
+                    "saint_venant_2d terrain"
+                )
+            if not args.hydraulic_geometry.is_file():
+                raise SystemExit(
+                    "error: hydraulic geometry does not exist: "
+                    f"{args.hydraulic_geometry}"
+                )
+            channel_width, bankfull_depth = load_channel_geometry(
+                args.hydraulic_geometry, profile.station_m
             )
-        if not args.hydraulic_geometry.is_file():
-            raise SystemExit(
-                f"error: hydraulic geometry does not exist: {args.hydraulic_geometry}"
+            domain = domain2d_from_profile(
+                profile,
+                args.width,
+                args.cross_cells,
+                channel_width_m=channel_width,
+                bankfull_depth_m=bankfull_depth,
+                floodplain_slope=args.floodplain_slope,
             )
-        channel_width, bankfull_depth = load_channel_geometry(
-            args.hydraulic_geometry, profile.station_m
-        )
-        domain = domain2d_from_profile(
-            profile,
-            args.width,
-            args.cross_cells,
-            channel_width_m=channel_width,
-            bankfull_depth_m=bankfull_depth,
-            floodplain_slope=args.floodplain_slope,
-        )
     else:
         if args.width is not None:
             raise SystemExit(
@@ -559,9 +594,13 @@ def main(argv=None):
 
     if isinstance(domain, Domain2D):
         channel_depth = (
-            np.zeros(len(profile.station_m))
+            np.zeros(len(domain.x_m))
             if profile.initial_depth_m is None
-            else np.asarray(profile.initial_depth_m, dtype=float)
+            else np.interp(
+                domain.x_m,
+                profile.station_m,
+                np.asarray(profile.initial_depth_m, dtype=float),
+            )
         )
         channel_bed = np.min(domain.bed_elevation_m, axis=1)
         water_surface = channel_bed + channel_depth
@@ -664,6 +703,9 @@ def main(argv=None):
             dx_m=result.domain.dx_m,
             dy_m=result.domain.dy_m,
             bed_elevation_m=result.extra["bed_elevation_m"],
+            slope_x=result.domain.slope_x,
+            slope_y=result.domain.slope_y,
+            manning_n=result.domain.manning_n,
             times_min=result.times,
             depth_m=result.depth_history,
             depth_initial_m=result.depth_initial,
@@ -739,11 +781,15 @@ def main(argv=None):
         "mass_unit": "m3" if physical_volume else "m2",
         "profile_resolution": {
             "source_observation_stations": source_cells,
-            "solver_cells": len(profile.station_m),
+            "solver_cells": len(result.domain.x_m),
             "method": (
-                "source_grid"
-                if args.longitudinal_cells is None
-                else "linear_interpolation_derived_grid"
+                "reviewed_terrain_longitudinal_grid"
+                if args.terrain_grid is not None
+                else (
+                    "source_grid"
+                    if args.longitudinal_cells is None
+                    else "linear_interpolation_derived_grid"
+                )
             ),
             "creates_observations": False,
         },
@@ -784,10 +830,28 @@ def main(argv=None):
             "nx": len(result.domain.x_m),
             "ny": len(result.domain.y_m),
             "width_m": float(np.sum(result.domain.dy_m)),
-            "hydraulic_geometry": _portable_path(args.hydraulic_geometry),
-            "floodplain_slope": args.floodplain_slope,
-            "bankfull_depth_m": bankfull_depth.tolist(),
+            "terrain_source": (
+                "reviewed_grid"
+                if args.terrain_grid is not None
+                else "parameterized_channel_and_floodplain"
+            ),
+            "terrain_grid": (
+                None
+                if args.terrain_grid is None
+                else _portable_path(args.terrain_grid)
+            ),
+            "roughness_source": terrain_roughness_source,
         }
+        if args.terrain_grid is None:
+            summary["grid"].update(
+                {
+                    "hydraulic_geometry": _portable_path(
+                        args.hydraulic_geometry
+                    ),
+                    "floodplain_slope": args.floodplain_slope,
+                    "bankfull_depth_m": bankfull_depth.tolist(),
+                }
+            )
     elif (
         result.domain.channel_width_m is not None
         or result.domain.cross_section_top_width_m is not None

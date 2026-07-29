@@ -323,6 +323,76 @@ def test_runner_initializes_2d_depth_from_level_water_surface(tmp_path):
     assert summary["grid"]["bankfull_depth_m"] == [2.5, 2.8, 2.8, 2.8, 2.8]
 
 
+def test_runner_uses_reviewed_2d_terrain_and_cell_roughness(tmp_path):
+    terrain_path = tmp_path / "terrain.csv"
+    rows = [
+        "x_m,y_m,dx_m,dy_m,bed_elevation_m,manning_n",
+    ]
+    for x, bed_base in ((0, 0.0), (2000, -2.0), (4000, -3.4)):
+        for y, lateral_bed, roughness in (
+            (0, 1.0, 0.0012),
+            (10, 0.0, 0.0007),
+            (20, 1.2, 0.0015),
+        ):
+            rows.append(
+                f"{x},{y},1000,10,{bed_base + lateral_bed},{roughness}"
+            )
+    terrain_path.write_text("\n".join(rows) + "\n", encoding="utf-8")
+    output_dir = tmp_path / "runs"
+
+    run_simulation.main(
+        [
+            PROFILE_PATH,
+            "--solver",
+            "saint_venant_2d",
+            "--terrain-grid",
+            str(terrain_path),
+            "--left-inflow",
+            "0.6",
+            "--t-final",
+            "0.01",
+            "--output-dir",
+            str(output_dir),
+            "--run-name",
+            "reviewed",
+        ]
+    )
+
+    fields = np.load(output_dir / "reviewed_fields.npz")
+    assert fields["bed_elevation_m"].shape == (3, 3)
+    assert fields["bed_elevation_m"][1].tolist() == [-1.0, -2.0, -0.8]
+    assert fields["manning_n"][0].tolist() == [0.0012, 0.0007, 0.0015]
+    assert np.allclose(np.max(fields["depth_initial_m"], axis=1), 0.04)
+
+    summary = json.loads(
+        (output_dir / "reviewed_summary.json").read_text(encoding="utf-8")
+    )
+    assert summary["grid"]["terrain_source"] == "reviewed_grid"
+    assert summary["grid"]["terrain_grid"] == str(terrain_path)
+    assert summary["grid"]["roughness_source"] == "terrain_grid"
+    assert summary["profile_resolution"]["solver_cells"] == 3
+    assert (
+        summary["profile_resolution"]["method"]
+        == "reviewed_terrain_longitudinal_grid"
+    )
+    assert abs(summary["mass_balance_error"]) < 1e-10
+
+
+def test_reviewed_terrain_rejects_incomplete_cartesian_grid(tmp_path):
+    from general.solvers.profile import load_profile, load_reviewed_terrain
+
+    terrain_path = tmp_path / "incomplete.csv"
+    terrain_path.write_text(
+        "x_m,y_m,dx_m,dy_m,bed_elevation_m\n"
+        "0,0,1,1,0\n"
+        "0,1,1,1,0\n"
+        "1,0,1,1,0\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="every cell"):
+        load_reviewed_terrain(terrain_path, load_profile(PROFILE_PATH))
+
+
 @pytest.mark.parametrize("solver", ["kinematic_wave", "saint_venant"])
 def test_runner_applies_reviewed_geometry_to_1d_solvers(tmp_path, solver):
     output_dir = tmp_path / "runs"

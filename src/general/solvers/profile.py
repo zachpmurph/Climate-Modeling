@@ -404,6 +404,145 @@ def load_compound_cross_sections(path, station_m):
     return common_depth, interpolated_widths
 
 
+def load_reviewed_terrain(path, profile):
+    """Load a complete Cartesian terrain grid from a reviewable long CSV.
+
+    Required columns are ``x_m,y_m,dx_m,dy_m,bed_elevation_m``. An optional
+    complete ``manning_n`` column overrides longitudinal profile roughness.
+    """
+    with Path(path).open(newline="", encoding="utf-8-sig") as handle:
+        reader = csv.DictReader(handle)
+        fieldnames = set(reader.fieldnames or ())
+        rows = list(reader)
+    required = {"x_m", "y_m", "dx_m", "dy_m", "bed_elevation_m"}
+    missing = required - fieldnames
+    if missing:
+        raise ValueError(
+            f"Terrain CSV is missing required columns: {sorted(missing)}"
+        )
+    if not rows:
+        raise ValueError("Terrain CSV is empty")
+
+    has_roughness_column = "manning_n" in fieldnames
+    parsed = []
+    try:
+        for row in rows:
+            roughness_text = row.get("manning_n", "")
+            parsed.append(
+                (
+                    float(row["x_m"]),
+                    float(row["y_m"]),
+                    float(row["dx_m"]),
+                    float(row["dy_m"]),
+                    float(row["bed_elevation_m"]),
+                    (
+                        None
+                        if roughness_text is None
+                        or not roughness_text.strip()
+                        else float(roughness_text)
+                    ),
+                )
+            )
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            "Terrain grid columns must contain numeric values"
+        ) from exc
+    values = np.asarray(
+        [item[:5] for item in parsed],
+        dtype=float,
+    )
+    if np.any(~np.isfinite(values)):
+        raise ValueError("Terrain grid values must be finite")
+
+    x_m = np.unique(values[:, 0])
+    y_m = np.unique(values[:, 1])
+    if (
+        len(x_m) < 2
+        or len(y_m) < 2
+        or np.any(np.diff(x_m) <= 0.0)
+        or np.any(np.diff(y_m) <= 0.0)
+    ):
+        raise ValueError(
+            "Terrain grid needs at least two strictly increasing x and y cells"
+        )
+    if len(parsed) != len(x_m) * len(y_m):
+        raise ValueError(
+            "Terrain CSV must contain every cell of one complete Cartesian grid"
+        )
+
+    x_index = {value: index for index, value in enumerate(x_m)}
+    y_index = {value: index for index, value in enumerate(y_m)}
+    bed = np.full((len(x_m), len(y_m)), np.nan)
+    roughness_grid = np.full_like(bed, np.nan)
+    dx_grid = np.full_like(bed, np.nan)
+    dy_grid = np.full_like(bed, np.nan)
+    seen = set()
+    roughness_presence = []
+    for x, y, dx, dy, elevation, roughness in parsed:
+        key = (x, y)
+        if key in seen:
+            raise ValueError(f"Terrain CSV contains duplicate cell {key}")
+        seen.add(key)
+        i, j = x_index[x], y_index[y]
+        bed[i, j] = elevation
+        dx_grid[i, j] = dx
+        dy_grid[i, j] = dy
+        roughness_presence.append(roughness is not None)
+        if roughness is not None:
+            roughness_grid[i, j] = roughness
+    if np.any(~np.isfinite(bed)):
+        raise ValueError(
+            "Terrain CSV must contain every x/y coordinate combination"
+        )
+    if np.any(dx_grid <= 0.0) or np.any(dy_grid <= 0.0):
+        raise ValueError("Terrain cell widths must be positive")
+    if not np.allclose(dx_grid, dx_grid[:, :1]):
+        raise ValueError("dx_m must be constant across y for each x cell")
+    if not np.allclose(dy_grid, dy_grid[:1, :]):
+        raise ValueError("dy_m must be constant across x for each y cell")
+    if x_m[0] < profile.station_m[0] or x_m[-1] > profile.station_m[-1]:
+        raise ValueError(
+            "Terrain x coordinates must lie inside the river profile reach"
+        )
+    if has_roughness_column and any(roughness_presence) and not all(
+        roughness_presence
+    ):
+        raise ValueError(
+            "Terrain manning_n must be supplied for every cell or none"
+        )
+    if all(roughness_presence):
+        if np.any(~np.isfinite(roughness_grid)) or np.any(
+            roughness_grid <= 0.0
+        ):
+            raise ValueError(
+                "Terrain manning_n values must be finite and positive"
+            )
+        manning_n = roughness_grid
+        roughness_source = "terrain_grid"
+    else:
+        longitudinal_roughness = np.interp(
+            x_m, profile.station_m, profile.manning_n
+        )
+        manning_n = np.broadcast_to(
+            longitudinal_roughness[:, None], bed.shape
+        ).copy()
+        roughness_source = "river_profile_interpolated_across_y"
+
+    slope_x = -np.gradient(bed, x_m, axis=0, edge_order=1)
+    slope_y = -np.gradient(bed, y_m, axis=1, edge_order=1)
+    domain = Domain2D(
+        x_m=x_m,
+        y_m=y_m,
+        dx_m=dx_grid[:, 0].copy(),
+        dy_m=dy_grid[0, :].copy(),
+        slope_x=slope_x,
+        slope_y=slope_y,
+        manning_n=manning_n,
+        bed_elevation_m=bed,
+    )
+    return domain, roughness_source
+
+
 def domain2d_from_profile(
     profile: RiverProfile,
     width_m: float,

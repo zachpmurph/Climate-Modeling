@@ -30,8 +30,8 @@ validation; the flood-outcome report remains depth based.
 
 For a 2-D run, the summary additionally points to `<run>_fields.npz`. That
 artifact contains `x_m`, `y_m`, `dx_m`, `dy_m`, `bed_elevation_m`,
-`times_min`, `depth_m`, `discharge_x_m2_per_min`, and
-`discharge_y_m2_per_min`. Time-dependent fields have shape
+`slope_x`, `slope_y`, `manning_n`, `times_min`, `depth_m`,
+`discharge_x_m2_per_min`, and `discharge_y_m2_per_min`. Time-dependent fields have shape
 `(snapshot, x, y)`. The CSV remains a cross-channel mean for compatibility;
 the reporter automatically uses the NPZ for 2-D outcomes.
 

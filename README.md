@@ -140,6 +140,7 @@ The rationale for each transition is given alongside the change.
 | **4y — Dry-shoreline equilibrium gate** | Current branch | Added a partially dry, non-flat lake-at-rest verification case with an exposed shoreline. The acceptance gate requires zero shoreline advance, zero depth error, negligible momentum, and no mass-adding floor correction. | Wet/dry dam breaks and fully wet equilibria test different pieces of the scheme. Their combination verifies that topographic balancing does not create water or motion at a stationary dry shoreline. |
 | **4z — Saved 1-D flow histories** | Current branch | The unified runner now writes every recorded 1-D Saint-Venant discharge field to `<run>_discharge.csv`, records its path and units in the run summary, and keeps its time/station grid aligned with depth. | Event calibration and validation target observed gauge flow. Persisting modeled flow makes NSE and correlation scoring reproducible without rerunning the solver or reaching into internal result objects. |
 | **4aa — Compound stage–width sections** | Current branch | Added reviewed, per-cell piecewise-linear stage–width curves to 1-D Saint-Venant. Area, pressure, top width, symmetric-bank wetted perimeter, hydraulic radius, rainfall capture, and depth-from-area are evaluated from the full curve; longitudinal interpolation, provenance, mass balance, and lake-at-rest gates are included. | One trapezoid cannot represent benches or rapid floodplain widening. Stage–width curves let storage and conveyance change at multiple surveyed elevations without fitting those changes into Manning roughness. |
+| **4ab — Reviewed 2-D terrain grids** | Current branch | Added a reviewable Cartesian terrain CSV path for 2-D Saint-Venant. The runner validates a complete grid, cell dimensions, elevation, optional per-cell roughness, reach alignment, initial water surface, and provenance; saved fields now retain terrain slopes and roughness. | Parameterized parabolic channels cannot reproduce real banks, floodplain relief, or spatial land-cover resistance. A reviewed grid lets those controls enter explicitly rather than being absorbed by synthetic terrain parameters. |
 
 ---
 
@@ -206,6 +207,7 @@ python src/rivers/simulations/run_simulation.py PROFILE --solver SOLVER --t-fina
 | `--compound-cross-sections` | — | Reviewed `station_m,depth_m,top_width_m` CSV; required for `--cross-section-shape compound` |
 | `--bottom-width-fraction` | `0.5` | Trapezoid bottom width divided by reviewed bankfull width, in `(0, 1]` |
 | `--floodplain-slope` | `0.02` | Lateral rise/run outside the reviewed bankfull channel |
+| `--terrain-grid` | — | Reviewed Cartesian `x_m,y_m,dx_m,dy_m,bed_elevation_m[,manning_n]` CSV for 2-D; replaces synthetic width/geometry inputs |
 | `--output-dir` | `data/real_world_rivers/runs/` | Output directory |
 | `--run-name` | `simulation` | Filename prefix for outputs |
 
@@ -272,6 +274,21 @@ so higher bank and floodplain cells start dry. It writes a full
 compatibility with 1-D tools. This synthetic cross-section is safer than a flat
 extrusion but is not a DEM or surveyed cross-section; build measured terrain
 cases programmatically by passing a `Domain2D` directly.
+
+Alternatively, pass `--terrain-grid` to use a complete reviewed elevation grid
+instead of constructing synthetic terrain:
+
+```bash
+python src/rivers/simulations/run_simulation.py \
+    real_world_rivers/tools/example_river_profile.csv \
+    --solver saint_venant_2d \
+    --terrain-grid reviewed_terrain.csv \
+    --t-final 10 \
+    --run-name reviewed_sv2
+```
+
+See [the reviewed terrain contract](docs/reviewed_terrain.md) for the grid,
+datum, roughness, and preprocessing requirements.
 
 ### Reproducible 2-D uncertainty ensembles
 
@@ -579,7 +596,7 @@ channel/floodplain terrain.
 
 ## Next steps
 
-- Replace symmetric stage–width curves and synthetic 2-D terrain with raw
-  asymmetric cross-section coordinates and reviewed elevation models.
+- Retain raw asymmetric cross-section coordinates in 1-D and add
+  terrain-aware uncertainty ensembles for reviewed 2-D grids.
 - Estimate basin-specific joint uncertainty distributions and test ensemble
   coverage on a future event or untouched third river.
