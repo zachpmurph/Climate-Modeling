@@ -114,6 +114,16 @@ It shows that a constant estimated rectangular width, generic roughness, free
 outlet, and zero unmeasured reach exchange do not transfer reliably to this
 sand-bed reach.
 
+A separate post-baseline experiment replaces only the free outlet with 241
+approved downstream gage-height observations converted from the Albuquerque
+NAVD88 gage datum into the model's upstream-datum coordinate system. It is
+stage-conditioned discharge validation, not an independent forecast. NSE rises
+to `0.0666`, RMSE falls from `425.0` to `209.3 m³/min`, and percent bias falls
+to `+0.49%`, while correlation declines to `0.4605`. The predicted peak moves
+from the window end to minute `1065`, still far ahead of the observed minute
+`2310` peak. This isolates the free outlet as a major volume/level error source
+but does not explain the remaining timing and shape error.
+
 The observed spin-up scores are worse than the former constant-flow warm-up.
 That is useful evidence: repeating the first event flow created an optimistic
 initial state that did not represent the preceding release history.
@@ -127,6 +137,16 @@ python src/rivers/validation/fetch_event.py \
 
 The fetcher rejects non-approved observations and requires both gauges to cover
 the complete configured window.
+
+Fetch and datum-normalize a configured stage boundary with:
+
+```bash
+python src/rivers/validation/fetch_stage_control.py \
+    real_world_rivers/validation/rio_grande_alameda_albuquerque_2023-05-12_stage.json
+```
+
+The stage fetcher rejects non-approved values, unsupported units, incomplete
+warm-up coverage, and provider URLs that differ from the committed source.
 
 Run the committed one-at-a-time structural sensitivity matrix with:
 

@@ -26,6 +26,11 @@ EVIDENCE = CASE.with_suffix(".results.json")
 SENSITIVITY = CASE.with_suffix(".sensitivity.json")
 SUITE = CASE.with_name("validation_suite.json")
 SUITE_EVIDENCE = SUITE.with_suffix(".results.json")
+RIO_STAGE_CASE = CASE.with_name(
+    "rio_grande_alameda_albuquerque_2023-05-12_stage.json"
+)
+RIO_STAGE_EVIDENCE = RIO_STAGE_CASE.with_suffix(".results.json")
+RIO_STAGE_SERIES = RIO_STAGE_CASE.with_suffix(".csv")
 
 
 def test_committed_two_gauge_observations_are_complete_and_ordered():
@@ -153,6 +158,39 @@ def test_third_river_event_retains_predeclared_first_run_protocol():
     assert protocol["declared_before_observation_fetch"] is True
     assert "first completed run" in protocol["first_run_policy"]
     assert "No Rio Grande observation" in protocol["calibration_policy"]
+
+
+def test_measured_stage_experiment_reproduces_without_replacing_baseline(
+    tmp_path,
+):
+    tracked = json.loads(RIO_STAGE_EVIDENCE.read_text(encoding="utf-8"))
+    baseline = json.loads(
+        RIO_STAGE_CASE.with_name(
+            "rio_grande_alameda_albuquerque_2023-05-12.results.json"
+        ).read_text(encoding="utf-8")
+    )
+    actual = run_validation_case(
+        RIO_STAGE_CASE,
+        output_path=tmp_path / "rio-stage-results.json",
+    )
+    with RIO_STAGE_SERIES.open(newline="", encoding="utf-8") as handle:
+        stage_rows = list(csv.DictReader(handle))
+
+    assert len(stage_rows) == 241
+    assert {row["approval_status"] for row in stage_rows} == {"Approved"}
+    assert stage_rows[0]["observed_at"] == "2023-05-11T12:00:00+00:00"
+    assert stage_rows[-1]["observed_at"] == "2023-05-14T00:00:00+00:00"
+    assert actual["status"] == "post_baseline_measured_stage_experiment"
+    assert actual["assumptions"]["downstream_boundary"] == "stage"
+    for metric in ("nse", "rmse", "bias", "percent_bias", "pearson_r"):
+        assert actual["scores"][metric] == pytest.approx(
+            tracked["scores"][metric], rel=1e-10, abs=1e-10
+        )
+    assert actual["scores"]["nse"] > baseline["scores"]["nse"]
+    assert actual["scores"]["rmse"] < baseline["scores"]["rmse"]
+    assert abs(actual["scores"]["percent_bias"]) < abs(
+        baseline["scores"]["percent_bias"]
+    )
 
 
 def test_validation_case_uses_surveyed_stage_dependent_geometry(tmp_path):

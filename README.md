@@ -149,6 +149,7 @@ The rationale for each transition is given alongside the change.
 | **4ah — Measured event controls and withdrawals** | Current branch | Added timestamped downstream-stage and signed point-flow controls to observed-event validation, including warm-up coverage gates and provenance. Point withdrawals now remove proportional momentum, are capped by available water, and work through the production CLI as well as validation. | A free outlet and zero reach exchange force backwater, tributaries, returns, and diversions into fitted width or roughness. Supplying those observations directly reduces compensating parameters and makes cross-event NSE/correlation optimization more physically interpretable. |
 | **4ai — River-balanced calibration** | Current branch | Added optional equal-per-river aggregation of event NSE and correlation plus leave-one-river-out refits that exclude every event from the held river before scoring it. Existing event-balanced manifests retain their original behavior. | Directly averaging all events gives the best-sampled river the most influence and leave-one-event-out can leak reach-specific geometry and bias through sister events. River-balanced fitting measures spatial transfer rather than event count. |
 | **4aj — Multi-river transfer evidence** | Current branch | Precommitted a historical Colorado/Truckee training and validation split with Rio Grande test-only, then retained the complete river-balanced fit and leave-one-river-out evidence. The fit improves training but sharply degrades the second Truckee and Rio Grande events. | A global multiplier can look successful on averaged training scores while failing spatially. The retained negative result shows that estimated width, slope, roughness, and uniform reach gain are not transferable substitutes for measured reach structure and controls. |
+| **4ak — Observed-stage boundary experiment** | Current branch | Added a reproducible approved-USGS gage-height fetch with explicit NAVD88-to-model datum conversion, then ran a separate Rio Grande stage-conditioned discharge experiment without replacing the predeclared baseline. | The free outlet was a suspected structural error. Observed stage halves RMSE and nearly removes bias but does not fix correlation or peak timing, separating boundary-level error from remaining geometry and reach-exchange error. |
 
 ---
 
@@ -567,6 +568,13 @@ were fetched or scored. Its retained first run has NSE `-2.848`, correlation
 the weak dynamics: the model attenuates the observed range and misses the peak
 timing. No Rio Grande parameter was adjusted after seeing this result.
 
+Using approved downstream stage as a measured boundary in a separate
+post-baseline experiment raises Rio Grande NSE to `0.067`, reduces RMSE from
+`425` to `209 m³/min`, and reduces percent bias to `+0.49%`. Correlation falls
+to `0.461`, and the predicted peak remains badly mistimed. This indicates that
+the free outlet explains much of the level/volume error but not the hydrograph
+shape.
+
 The constrained global calibration selects roughness `0.8×`, width `1.2×`, slope
 `1.2×`, and distributed reach gain `7.5%`. It produces training NSE
 `0.725–0.762`, validation NSE `0.760`, and historical-test NSE `0.722`, with
@@ -598,6 +606,7 @@ src/rivers/simulations/ingest_to_simulate.py   # profile_path → (Domain, Scena
 src/rivers/validation/run_case.py              # held-out two-gauge field validation
 src/rivers/validation/run_sensitivity.py       # one-at-a-time structural sensitivity
 src/rivers/validation/fetch_event.py            # reproducible approved-USGS event fetch
+src/rivers/validation/fetch_stage_control.py     # approved stage fetch + datum conversion
 src/rivers/validation/run_suite.py              # fixed-parameter multi-event evidence
 src/rivers/validation/calibrate_suite.py        # constrained global multi-event optimizer
 src/rivers/reporting/generate_flood_report.py  # saved artifacts → HTML + outcomes JSON
