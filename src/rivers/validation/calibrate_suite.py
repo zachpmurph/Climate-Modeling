@@ -313,6 +313,81 @@ def coordinate_search(
     return current, trace
 
 
+def training_pareto_front(evaluations, *, selected_parameters=None):
+    """Retain candidates not dominated on training NSE and correlation."""
+    candidates = []
+    seen = set()
+    for evaluation in evaluations:
+        parameters = dict(evaluation["parameters"])
+        key = tuple(sorted(parameters.items()))
+        if key in seen:
+            continue
+        seen.add(key)
+        components = evaluation["objective_components"]
+        if not components.get("finite", False):
+            continue
+        candidates.append(
+            {
+                "parameters": parameters,
+                "mean_nse": float(components["mean_nse"]),
+                "mean_correlation": float(
+                    components["mean_correlation"]
+                ),
+                "minimum_nse": float(components["minimum_nse"]),
+                "nse_standard_deviation": float(
+                    components["nse_standard_deviation"]
+                ),
+                "correlation_standard_deviation": float(
+                    components["correlation_standard_deviation"]
+                ),
+                "weighted_objective": float(evaluation["objective"]),
+            }
+        )
+    tolerance = 1e-12
+    front = []
+    for candidate in candidates:
+        dominated = any(
+            (
+                other["mean_nse"]
+                >= candidate["mean_nse"] - tolerance
+                and other["mean_correlation"]
+                >= candidate["mean_correlation"] - tolerance
+                and (
+                    other["mean_nse"]
+                    > candidate["mean_nse"] + tolerance
+                    or other["mean_correlation"]
+                    > candidate["mean_correlation"] + tolerance
+                )
+            )
+            for other in candidates
+            if other is not candidate
+        )
+        if not dominated:
+            item = dict(candidate)
+            item["selected_by_weighted_objective"] = (
+                selected_parameters is not None
+                and item["parameters"] == selected_parameters
+            )
+            front.append(item)
+    front.sort(
+        key=lambda item: (
+            -item["mean_nse"],
+            -item["mean_correlation"],
+            tuple(sorted(item["parameters"].items())),
+        )
+    )
+    return {
+        "objectives": ["mean_nse", "mean_correlation"],
+        "scope": (
+            "Unique training-only parameter sets visited by deterministic "
+            "coordinate search; validation and test scores are not used."
+        ),
+        "evaluated_candidate_count": len(candidates),
+        "front_count": len(front),
+        "candidates": front,
+    }
+
+
 def _score_summary(cases):
     metrics = ("nse", "rmse", "bias", "percent_bias", "pearson_r")
     summary = {}
@@ -758,6 +833,10 @@ def calibrate_suite(manifest_path, *, output_path=None, passes=2):
             manifest["parameter_grid"],
             passes=passes,
         )
+        pareto_front = training_pareto_front(
+            cache.values(),
+            selected_parameters=selected["parameters"],
+        )
 
         evaluated_splits = {}
         for split_name in ("training", "validation", "test"):
@@ -831,6 +910,7 @@ def calibrate_suite(manifest_path, *, output_path=None, passes=2):
         "training_objective_components": selected[
             "objective_components"
         ],
+        "training_pareto_front": pareto_front,
         "leave_one_training_event_out": leave_one_out,
         "baseline_splits": baseline_splits,
         "splits": evaluated_splits,

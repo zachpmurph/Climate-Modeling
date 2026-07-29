@@ -243,6 +243,16 @@ objective is `0.7 × mean NSE + 0.3 × mean correlation`, less penalties of
 `0.15 × (mean NSE - worst-event NSE)`. Event-specific parameter fitting is
 prohibited.
 
+The evidence also contains `training_pareto_front`. It retains parameter sets
+for which no other training candidate has both equal-or-higher mean NSE and
+equal-or-higher mean correlation with at least one strict improvement. The
+front uses the configured event- or river-balanced means and never reads
+validation or test scores. Its scope is deliberately explicit: it covers the
+unique candidates visited by deterministic coordinate search, not an
+unbounded claim about all possible parameters. Use it to see whether the
+weighted-objective selection trades correlation for NSE before examining any
+held-out result.
+
 For a multi-river manifest, set `objective.balance_by` to `river` and identify
 each event with `case.river`. The objective first averages NSE and correlation
 within each river, then weights the river means equally. This prevents a reach

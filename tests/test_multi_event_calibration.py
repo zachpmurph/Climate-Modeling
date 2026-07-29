@@ -114,6 +114,61 @@ def test_parameter_overrides_apply_one_global_physical_scaling():
     assert overrides["lateral_inflow_fraction"] == pytest.approx(0.05)
 
 
+def test_training_pareto_front_retains_nse_correlation_tradeoffs():
+    evaluations = [
+        {
+            "parameters": {"manning_scale": 0.8},
+            "objective": 0.70,
+            "objective_components": {
+                "finite": True,
+                "mean_nse": 0.80,
+                "mean_correlation": 0.70,
+                "minimum_nse": 0.60,
+                "nse_standard_deviation": 0.10,
+                "correlation_standard_deviation": 0.05,
+            },
+        },
+        {
+            "parameters": {"manning_scale": 1.0},
+            "objective": 0.72,
+            "objective_components": {
+                "finite": True,
+                "mean_nse": 0.70,
+                "mean_correlation": 0.90,
+                "minimum_nse": 0.55,
+                "nse_standard_deviation": 0.08,
+                "correlation_standard_deviation": 0.03,
+            },
+        },
+        {
+            "parameters": {"manning_scale": 1.2},
+            "objective": 0.60,
+            "objective_components": {
+                "finite": True,
+                "mean_nse": 0.60,
+                "mean_correlation": 0.65,
+                "minimum_nse": 0.40,
+                "nse_standard_deviation": 0.20,
+                "correlation_standard_deviation": 0.10,
+            },
+        },
+    ]
+
+    front = calibration.training_pareto_front(
+        evaluations,
+        selected_parameters={"manning_scale": 1.0},
+    )
+
+    assert front["evaluated_candidate_count"] == 3
+    assert front["front_count"] == 2
+    assert [item["parameters"]["manning_scale"] for item in front["candidates"]] == [
+        0.8,
+        1.0,
+    ]
+    assert front["candidates"][1]["selected_by_weighted_objective"] is True
+    assert "training-only" in front["scope"]
+
+
 def test_calibration_does_not_scale_reviewed_stage_geometry():
     config = {
         "reach": {
@@ -345,6 +400,10 @@ def test_calibration_never_uses_validation_or_test_for_selection(
     )
 
     assert evidence["selected_parameters"]["lateral_inflow_fraction"] == 0.1
+    assert evidence["training_pareto_front"]["front_count"] == 1
+    assert evidence["training_pareto_front"]["candidates"][0][
+        "parameters"
+    ]["lateral_inflow_fraction"] == 0.1
     assert calls.count("validation.json") == 1
     assert calls.count("test.json") == 1
     assert set(calls[:-2]) == {"train-a.json", "train-b.json"}
