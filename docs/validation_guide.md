@@ -62,6 +62,25 @@ The committed events remain rectangular: no reviewed cross-sections are
 currently available for those reaches. Enabling the code path is not permission
 to invent geometry or choose a shape from downstream scores.
 
+Measured event controls use optional top-level `downstream_stage_series` and
+`point_flow_series` paths in the case JSON. Paths are relative to that JSON.
+Stage rows contain `downstream_stage_m`; point-flow rows contain
+`station_m,discharge_m3_per_min`. Both formats accept either `t_min` relative
+to the scored event start or an absolute UTC `observed_at` timestamp. Every
+series must cover the complete warm-up and scored window—endpoint
+extrapolation is rejected.
+
+Point discharge is signed: positive values are tributaries or returns and
+negative values are diversions or withdrawals. A withdrawal removes
+proportional local momentum and is capped by the water physically available in
+its cell. Measured points cannot be combined with the calibrated uniform
+`lateral_inflow_fraction`; otherwise the same missing flow could be counted
+twice. Downstream stage must already be converted to the model's vertical datum,
+not supplied as raw gage height. The cross-event optimizer enforces the same
+separation: `lateral_inflow_fraction` must be fixed at zero when measured point
+flows are present, and `width_scale` must be fixed at one for reviewed
+stage-dependent sections.
+
 The current hydraulically scaled, hydrostatically well-balanced, uncalibrated
 July 2004 baseline is NSE `0.1188`, RMSE `4376.9 m³/min`, percent bias
 `-12.53%`, and Pearson `r = 0.7559`. It uses
@@ -177,11 +196,11 @@ needs defensible bankfull depth and bottom width (or a documented bottom-width
 fraction); surveyed cross-section coordinates remain preferable.
 
 Where available, also collect downstream water-surface stage and every material
-tributary or return flow between the gauges. Record diversions separately; the
-current point-source interface accepts inflows, not withdrawals. The unified runner
-accepts stage as `--downstream-stage-series` and spatial point flows as
-`--lateral-inflow-points`. These observations should replace, not accompany, a
-calibrated uniform reach-gain fraction.
+tributary, return flow, and diversion between the gauges. The unified runner
+accepts stage as `--downstream-stage-series` and signed spatial point flows as
+`--lateral-inflow-points`. Positive point values add flow; negative values
+withdraw it. These observations should replace, not accompany, a calibrated
+uniform reach-gain fraction.
 
 ## Workflow
 

@@ -121,18 +121,42 @@ def parameter_overrides(config, parameters):
     """Map global dimensionless parameters to one event's physical inputs."""
     reach = config["reach"]
     width_scale = float(parameters["width_scale"])
+    lateral_fraction = float(parameters["lateral_inflow_fraction"])
+    cross_section_shape = reach.get("cross_section_shape", "rectangular")
+    if cross_section_shape != "rectangular" and not math.isclose(
+        width_scale, 1.0
+    ):
+        raise ValueError(
+            "width_scale cannot modify reviewed stage-dependent geometry; "
+            "use width_scale=[1.0] for trapezoidal, compound, or surveyed cases"
+        )
+    if config.get("point_flow_series") is not None and not math.isclose(
+        lateral_fraction, 0.0
+    ):
+        raise ValueError(
+            "lateral_inflow_fraction cannot be fitted when measured "
+            "point_flow_series are present; use "
+            "lateral_inflow_fraction=[0.0]"
+        )
     overrides = {
         "reach": {
             "manning_n": float(reach["manning_n"])
             * float(parameters["manning_scale"]),
             "slope": float(reach["slope"]) * float(parameters["slope_scale"]),
-            "upstream_width_m": float(reach["upstream_width_m"]) * width_scale,
-            "downstream_width_m": float(reach["downstream_width_m"]) * width_scale,
         },
-        "lateral_inflow_fraction": float(
-            parameters["lateral_inflow_fraction"]
-        ),
+        "lateral_inflow_fraction": lateral_fraction,
     }
+    if cross_section_shape == "rectangular":
+        overrides["reach"].update(
+            {
+                "upstream_width_m": (
+                    float(reach["upstream_width_m"]) * width_scale
+                ),
+                "downstream_width_m": (
+                    float(reach["downstream_width_m"]) * width_scale
+                ),
+            }
+        )
     return overrides
 
 

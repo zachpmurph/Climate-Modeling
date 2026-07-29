@@ -659,6 +659,26 @@ def test_point_lateral_inflows_are_spatial_and_conservative(tmp_path):
     assert forcing.point_count == 2
 
 
+def test_point_lateral_withdrawals_remain_signed(tmp_path):
+    forcing_path = tmp_path / "diversion.csv"
+    forcing_path.write_text(
+        "station_m,t_min,discharge_m3_per_min\n"
+        "100,0,-10\n"
+        "100,10,-20\n",
+        encoding="utf-8",
+    )
+    x_m = np.array([0.0, 100.0, 250.0])
+    dx_m = np.array([50.0, 125.0, 100.0])
+
+    forcing = run_simulation._load_point_lateral_inflows(
+        forcing_path, x_m, dx_m
+    )
+
+    rates = forcing(x_m, 5.0)
+    assert rates == pytest.approx([0.0, -15.0 / 125.0, 0.0])
+    assert np.sum(rates * dx_m) == pytest.approx(-15.0)
+
+
 def test_runner_records_measured_point_and_stage_inputs(tmp_path):
     point_path = tmp_path / "tributary.csv"
     point_path.write_text(

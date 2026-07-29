@@ -708,6 +708,74 @@ def test_distributed_lateral_inflow_has_separate_conservative_mass_accounting():
     )
 
 
+@pytest.mark.parametrize("spatial_order", [1, 2])
+def test_distributed_withdrawal_conserves_volume_and_signed_mass(
+    spatial_order,
+):
+    x_m = np.array([0.0, 100.0, 250.0])
+    dx_m = np.array([50.0, 125.0, 100.0])
+    width = np.array([10.0, 20.0, 30.0])
+    withdrawal_rate = -0.2
+    duration = 0.05
+
+    result = sv.run_model(
+        float(np.sum(dx_m)),
+        duration,
+        h_init=np.full(3, 0.2),
+        q_init=np.zeros(3),
+        left_inflow=0.0,
+        rainfall=lambda x, t: np.zeros_like(x),
+        lateral_inflow=lambda x, t: np.full_like(x, withdrawal_rate),
+        x_m=x_m,
+        dx_m=dx_m,
+        slope=np.zeros(3),
+        manning_n=np.full(3, 0.001),
+        bed_elevation_m=np.zeros(3),
+        channel_width_m=width,
+        downstream_boundary="wall",
+        spatial_order=spatial_order,
+    )
+
+    expected_withdrawal = withdrawal_rate * float(np.sum(dx_m)) * duration
+    storage_delta = float(
+        np.sum(width * (result["h_final"] - result["h_initial"]) * dx_m)
+    )
+    assert result["mass_lateral_inflow"] == pytest.approx(expected_withdrawal)
+    assert result["mass_source"] == pytest.approx(expected_withdrawal)
+    assert result["mass_floor_correction"] == pytest.approx(0.0)
+    assert storage_delta == pytest.approx(expected_withdrawal, abs=1e-11)
+
+
+def test_withdrawal_is_capped_by_available_water_without_floor_creation():
+    x_m = np.array([0.0, 1.0, 2.0])
+    dx_m = np.ones(3)
+    width = np.full(3, 2.0)
+    initial_depth = np.full(3, 0.1)
+    initial_storage = float(np.sum(initial_depth * width * dx_m))
+
+    result = sv.run_model(
+        3.0,
+        0.1,
+        h_init=initial_depth,
+        q_init=np.zeros(3),
+        left_inflow=0.0,
+        rainfall=lambda x, t: np.zeros_like(x),
+        lateral_inflow=lambda x, t: np.full_like(x, -1e6),
+        x_m=x_m,
+        dx_m=dx_m,
+        slope=np.zeros(3),
+        manning_n=np.full(3, 0.001),
+        bed_elevation_m=np.zeros(3),
+        channel_width_m=width,
+        downstream_boundary="wall",
+    )
+
+    assert result["mass_lateral_inflow"] == pytest.approx(-initial_storage)
+    assert result["mass_source"] == pytest.approx(-initial_storage)
+    assert result["mass_floor_correction"] == pytest.approx(0.0)
+    assert result["h_final"] == pytest.approx(np.zeros(3))
+
+
 def test_exposed_rainfall_function_is_spatial_and_mass_conservative():
     x_m = np.array([0.0, 100.0, 250.0])
     dx_m = np.array([50.0, 125.0, 100.0])

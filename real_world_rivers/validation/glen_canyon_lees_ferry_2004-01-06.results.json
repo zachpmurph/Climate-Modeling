@@ -36,6 +36,10 @@
     "spatial_order": 1,
     "lateral_inflow": "zero",
     "lateral_inflow_fraction": 0.0,
+    "point_flow_series": null,
+    "point_flow_count": 0,
+    "downstream_boundary": "outflow",
+    "downstream_stage_series": null,
     "rainfall": "zero"
   },
   "scores": {

@@ -82,6 +82,47 @@ def test_parameter_overrides_apply_one_global_physical_scaling():
     assert overrides["lateral_inflow_fraction"] == pytest.approx(0.05)
 
 
+def test_calibration_does_not_scale_reviewed_stage_geometry():
+    config = {
+        "reach": {
+            "manning_n": 0.001,
+            "slope": 0.002,
+            "cross_section_shape": "surveyed",
+            "surveyed_cross_sections": "sections.csv",
+        }
+    }
+    parameters = {
+        "manning_scale": 1.0,
+        "width_scale": 1.2,
+        "slope_scale": 1.0,
+        "lateral_inflow_fraction": 0.0,
+    }
+
+    with pytest.raises(ValueError, match="reviewed stage-dependent geometry"):
+        calibration.parameter_overrides(config, parameters)
+
+
+def test_calibration_does_not_double_count_measured_point_flows():
+    config = {
+        "point_flow_series": "measured.csv",
+        "reach": {
+            "manning_n": 0.001,
+            "slope": 0.002,
+            "upstream_width_m": 20.0,
+            "downstream_width_m": 20.0,
+        },
+    }
+    parameters = {
+        "manning_scale": 1.0,
+        "width_scale": 1.0,
+        "slope_scale": 1.0,
+        "lateral_inflow_fraction": 0.1,
+    }
+
+    with pytest.raises(ValueError, match="measured point_flow_series"):
+        calibration.parameter_overrides(config, parameters)
+
+
 def test_coordinate_search_selects_joint_candidate_and_records_trace():
     def evaluate(parameters):
         objective = -(

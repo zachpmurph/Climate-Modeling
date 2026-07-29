@@ -106,6 +106,151 @@ def shifted_boundary(boundary, offset_min):
     return shifted
 
 
+def shifted_spatial_forcing(forcing, offset_min):
+    """Shift an ``f(x, time)`` forcing onto a new simulation clock."""
+    offset = float(offset_min)
+
+    def shifted(x_m, time_min):
+        return forcing(x_m, float(time_min) + offset)
+
+    shifted.breakpoints_min = tuple(
+        float(value - offset)
+        for value in getattr(forcing, "breakpoints_min", ())
+    )
+    return shifted
+
+
+def _event_relative_time(row, event_start):
+    relative = row.get("t_min")
+    observed = row.get("observed_at")
+    if relative is not None and str(relative).strip():
+        return float(relative)
+    if observed is not None and str(observed).strip():
+        return (
+            _timestamp(observed) - event_start
+        ).total_seconds() / 60.0
+    raise ValueError("Control rows require t_min or observed_at")
+
+
+def load_event_control_series(path, value_column, event_start):
+    """Load a timestamped or event-relative scalar control series."""
+    with Path(path).open(newline="", encoding="utf-8-sig") as handle:
+        rows = list(csv.DictReader(handle))
+    if len(rows) < 2:
+        raise ValueError(f"{path} must contain at least two control rows")
+    try:
+        times = np.asarray(
+            [_event_relative_time(row, event_start) for row in rows],
+            dtype=float,
+        )
+        values = np.asarray(
+            [float(row[value_column]) for row in rows], dtype=float
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError(
+            f"{path} must contain numeric {value_column} and either t_min "
+            "or observed_at"
+        ) from exc
+    if (
+        np.any(~np.isfinite(times))
+        or np.any(~np.isfinite(values))
+        or np.any(np.diff(times) <= 0.0)
+    ):
+        raise ValueError(
+            f"{path} control times must be finite and strictly increasing, "
+            f"with finite {value_column}"
+        )
+
+    def control(time_min):
+        return float(np.interp(time_min, times, values))
+
+    control.breakpoints_min = tuple(float(value) for value in times)
+    control.coverage_min = (float(times[0]), float(times[-1]))
+    return control
+
+
+def load_event_point_flows(path, x_m, dx_m, event_start):
+    """Map signed, timestamped point flows to conservative model-cell rates."""
+    with Path(path).open(newline="", encoding="utf-8-sig") as handle:
+        rows = list(csv.DictReader(handle))
+    if not rows:
+        raise ValueError(f"{path} must contain point-flow rows")
+    grouped = {}
+    try:
+        for row in rows:
+            station = float(row["station_m"])
+            time = _event_relative_time(row, event_start)
+            flow = float(row["discharge_m3_per_min"])
+            grouped.setdefault(station, []).append((time, flow))
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError(
+            f"{path} must contain numeric station_m, "
+            "discharge_m3_per_min, and either t_min or observed_at"
+        ) from exc
+
+    stations = np.asarray(x_m, dtype=float)
+    cell_lengths = np.asarray(dx_m, dtype=float)
+    series = []
+    all_breakpoints = set()
+    for station, observations in grouped.items():
+        observations.sort()
+        times = np.asarray([item[0] for item in observations], dtype=float)
+        flows = np.asarray([item[1] for item in observations], dtype=float)
+        if (
+            len(times) < 2
+            or not math.isfinite(station)
+            or station < stations[0]
+            or station > stations[-1]
+            or np.any(~np.isfinite(times))
+            or np.any(~np.isfinite(flows))
+            or np.any(np.diff(times) <= 0.0)
+        ):
+            raise ValueError(
+                f"Each point flow in {path} needs a station inside the "
+                "domain and at least two finite values at strictly increasing "
+                "times"
+            )
+        cell = int(np.argmin(np.abs(stations - station)))
+        series.append((cell, times, flows))
+        all_breakpoints.update(float(value) for value in times)
+
+    def lateral_flow(x, time_min):
+        rates = np.zeros_like(x, dtype=float)
+        for cell, times, flows in series:
+            rates[cell] += (
+                float(np.interp(time_min, times, flows))
+                / cell_lengths[cell]
+            )
+        return rates
+
+    lateral_flow.breakpoints_min = tuple(sorted(all_breakpoints))
+    lateral_flow.coverage_min = (
+        min(item[1][0] for item in series),
+        max(item[1][-1] for item in series),
+    )
+    lateral_flow.series_coverage_min = tuple(
+        (float(times[0]), float(times[-1])) for _, times, _ in series
+    )
+    lateral_flow.point_count = len(series)
+    return lateral_flow
+
+
+def _require_control_coverage(control, start_min, end_min, label):
+    coverages = getattr(
+        control,
+        "series_coverage_min",
+        (getattr(control, "coverage_min"),),
+    )
+    if any(
+        start > start_min + 1e-9 or end < end_min - 1e-9
+        for start, end in coverages
+    ):
+        raise ValueError(
+            f"{label} must cover the full simulation from "
+            f"{start_min:g} to {end_min:g} event minutes"
+        )
+
+
 def fractional_lateral_inflow(boundary, fraction, length_m):
     """Distribute a fraction of upstream flow uniformly along the reach."""
     fraction = float(fraction)
@@ -327,9 +472,6 @@ def run_validation_case(config_path, *, output_path=None, overrides=None):
     channel_width = geometry["channel_width_m"]
     boundary = discharge_boundary(upstream_times, upstream_flow)
     lateral_fraction = float(config.get("lateral_inflow_fraction", 0.0))
-    lateral_inflow = fractional_lateral_inflow(
-        boundary, lateral_fraction, length_m
-    )
     warmup_config = config.get("warmup", {})
     warmup_min = float(
         warmup_config.get("duration_min", config.get("warmup_min", 0.0))
@@ -344,6 +486,61 @@ def run_validation_case(config_path, *, output_path=None, overrides=None):
         raise ValueError(
             "Observed warm-up requires upstream observations through the warm-up start"
         )
+    event_start = _timestamp(config["case"]["observation_window"][0])
+    point_flow_source = config.get("point_flow_series")
+    if point_flow_source is not None and lateral_fraction != 0.0:
+        raise ValueError(
+            "Measured point_flow_series cannot be combined with a uniform "
+            "lateral_inflow_fraction"
+        )
+    if point_flow_source is None:
+        lateral_inflow = fractional_lateral_inflow(
+            boundary, lateral_fraction, length_m
+        )
+        point_flow_path = None
+    else:
+        point_flow_path = _configured_path(config_path, point_flow_source)
+        if not point_flow_path.is_file():
+            raise ValueError(
+                f"Point-flow control does not exist: {point_flow_path}"
+            )
+        lateral_inflow = load_event_point_flows(
+            point_flow_path, x_m, dx_m, event_start
+        )
+        _require_control_coverage(
+            lateral_inflow,
+            warmup_start,
+            duration,
+            "point_flow_series",
+        )
+
+    downstream_stage_source = config.get("downstream_stage_series")
+    if downstream_stage_source is None:
+        downstream_boundary = "outflow"
+        downstream_stage = None
+        downstream_stage_path = None
+    else:
+        downstream_stage_path = _configured_path(
+            config_path, downstream_stage_source
+        )
+        if not downstream_stage_path.is_file():
+            raise ValueError(
+                f"Downstream-stage control does not exist: "
+                f"{downstream_stage_path}"
+            )
+        downstream_stage = load_event_control_series(
+            downstream_stage_path,
+            "downstream_stage_m",
+            event_start,
+        )
+        _require_control_coverage(
+            downstream_stage,
+            warmup_start,
+            duration,
+            "downstream_stage_series",
+        )
+        downstream_boundary = "stage"
+
     initial_q = boundary(warmup_start if warmup_forcing == "observed" else 0.0)
     spatial_order = int(config.get("spatial_order", 1))
     bottom_width = geometry["channel_bottom_width_m"]
@@ -384,8 +581,17 @@ def run_validation_case(config_path, *, output_path=None, overrides=None):
             if warmup_forcing == "observed"
             else initial_q
         )
-        warmup_lateral = fractional_lateral_inflow(
-            warmup_boundary, lateral_fraction, length_m
+        warmup_lateral = (
+            fractional_lateral_inflow(
+                warmup_boundary, lateral_fraction, length_m
+            )
+            if point_flow_path is None
+            else shifted_spatial_forcing(lateral_inflow, warmup_start)
+        )
+        warmup_stage = (
+            None
+            if downstream_stage is None
+            else shifted_boundary(downstream_stage, warmup_start)
         )
         warmup = saint_venant_1d.run_model(
             length_m,
@@ -403,6 +609,8 @@ def run_validation_case(config_path, *, output_path=None, overrides=None):
             **geometry_arguments,
             cfl=float(config.get("cfl", 0.4)),
             spatial_order=spatial_order,
+            downstream_boundary=downstream_boundary,
+            downstream_stage_m=warmup_stage,
         )
         initial_depth = warmup["h_final"]
         initial_discharge = warmup["q_final"]
@@ -423,6 +631,8 @@ def run_validation_case(config_path, *, output_path=None, overrides=None):
         **geometry_arguments,
         cfl=float(config.get("cfl", 0.4)),
         spatial_order=spatial_order,
+        downstream_boundary=downstream_boundary,
+        downstream_stage_m=downstream_stage,
     )
 
     target = (downstream_times >= 0.0) & (downstream_times <= duration)
@@ -460,11 +670,31 @@ def run_validation_case(config_path, *, output_path=None, overrides=None):
             "warmup_upstream_forcing": warmup_forcing,
             "spatial_order": spatial_order,
             "lateral_inflow": (
-                "zero"
-                if lateral_fraction == 0.0
-                else "uniformly distributed fraction of observed upstream flow"
+                "measured signed point flows"
+                if point_flow_path is not None
+                else (
+                    "zero"
+                    if lateral_fraction == 0.0
+                    else "uniformly distributed fraction of observed upstream flow"
+                )
             ),
             "lateral_inflow_fraction": lateral_fraction,
+            "point_flow_series": (
+                None
+                if point_flow_path is None
+                else str(point_flow_source)
+            ),
+            "point_flow_count": (
+                0
+                if point_flow_path is None
+                else lateral_inflow.point_count
+            ),
+            "downstream_boundary": downstream_boundary,
+            "downstream_stage_series": (
+                None
+                if downstream_stage_path is None
+                else str(downstream_stage_source)
+            ),
             "rainfall": "zero",
         },
         "scores": {

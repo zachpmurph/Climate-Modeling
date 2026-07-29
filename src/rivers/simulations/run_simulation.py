@@ -107,11 +107,10 @@ def _load_point_lateral_inflows(path, x_m, dx_m):
             or np.any(~np.isfinite(flows))
             or times[0] != 0.0
             or np.any(np.diff(times) <= 0.0)
-            or np.any(flows < 0.0)
         ):
             raise ValueError(
                 f"Each point inflow in {path} needs a station inside the "
-                "domain and at least two finite, non-negative values with "
+                "domain and at least two finite signed values with "
                 "t_min starting at 0 and strictly increasing"
             )
         cell = int(np.argmin(np.abs(stations - station)))
@@ -184,7 +183,7 @@ def parse_args(argv=None):
         type=Path,
         help=(
             "CSV with station_m,t_min,discharge_m3_per_min for measured "
-            "tributary or return-flow inputs"
+            "tributary/return inflows (positive) or withdrawals (negative)"
         ),
     )
     p.add_argument(

@@ -6,7 +6,9 @@ from pathlib import Path
 import pytest
 
 from rivers.validation.run_case import (
+    _require_control_coverage,
     discharge_boundary,
+    load_event_control_series,
     load_two_gauge_observations,
     run_validation_case,
     shifted_boundary,
@@ -206,6 +208,99 @@ def test_validation_case_uses_surveyed_stage_dependent_geometry(tmp_path):
         == "per-cell cross-section Manning normal depth and discharge"
     )
     assert evidence["scores"]["n"] == 2
+
+
+def test_validation_case_uses_timestamped_stage_and_signed_point_flows(
+    tmp_path,
+):
+    observations = tmp_path / "observations.csv"
+    observations.write_text(
+        "role,observed_at,discharge_m3_per_min\n"
+        "upstream,2019-12-31T23:55:00Z,100\n"
+        "upstream,2020-01-01T00:00:00Z,100\n"
+        "upstream,2020-01-01T00:15:00Z,100\n"
+        "downstream,2020-01-01T00:00:00Z,100\n"
+        "downstream,2020-01-01T00:15:00Z,100\n",
+        encoding="utf-8",
+    )
+    stage = tmp_path / "downstream_stage.csv"
+    stage.write_text(
+        "observed_at,downstream_stage_m\n"
+        "2019-12-31T23:55:00Z,1.0\n"
+        "2020-01-01T00:00:00Z,1.0\n"
+        "2020-01-01T00:15:00Z,1.0\n",
+        encoding="utf-8",
+    )
+    point_flows = tmp_path / "point_flows.csv"
+    point_flows.write_text(
+        "station_m,observed_at,discharge_m3_per_min\n"
+        "50,2019-12-31T23:55:00Z,10\n"
+        "50,2020-01-01T00:00:00Z,10\n"
+        "50,2020-01-01T00:15:00Z,10\n"
+        "100,2019-12-31T23:55:00Z,-5\n"
+        "100,2020-01-01T00:00:00Z,-5\n"
+        "100,2020-01-01T00:15:00Z,-5\n",
+        encoding="utf-8",
+    )
+    config = tmp_path / "case.json"
+    config.write_text(
+        json.dumps(
+            {
+                "case": {
+                    "name": "measured controls",
+                    "observation_window": [
+                        "2020-01-01T00:00:00Z",
+                        "2020-01-01T00:15:00Z",
+                    ],
+                },
+                "observations": observations.name,
+                "downstream_stage_series": stage.name,
+                "point_flow_series": point_flows.name,
+                "reach": {
+                    "length_m": 100.0,
+                    "cells": 3,
+                    "slope": 0.001,
+                    "manning_n": 0.035 / 60.0,
+                    "upstream_width_m": 10.0,
+                    "downstream_width_m": 10.0,
+                },
+                "warmup": {
+                    "duration_min": 5.0,
+                    "upstream_forcing": "observed",
+                },
+                "record_interval_min": 5.0,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    evidence = run_validation_case(
+        config, output_path=tmp_path / "results.json"
+    )
+
+    assumptions = evidence["assumptions"]
+    assert assumptions["downstream_boundary"] == "stage"
+    assert assumptions["downstream_stage_series"] == stage.name
+    assert assumptions["lateral_inflow"] == "measured signed point flows"
+    assert assumptions["point_flow_series"] == point_flows.name
+    assert assumptions["point_flow_count"] == 2
+    assert evidence["mass"]["lateral_inflow_m3"] == pytest.approx(75.0)
+
+
+def test_measured_control_must_cover_observed_warmup(tmp_path):
+    stage = tmp_path / "stage.csv"
+    stage.write_text(
+        "t_min,downstream_stage_m\n0,1.0\n15,1.1\n",
+        encoding="utf-8",
+    )
+    control = load_event_control_series(
+        stage,
+        "downstream_stage_m",
+        datetime.fromisoformat("2020-01-01T00:00:00+00:00"),
+    )
+
+    with pytest.raises(ValueError, match="full simulation"):
+        _require_control_coverage(control, -5.0, 15.0, "stage")
 
 
 def test_observed_warmup_boundary_maps_negative_event_time_to_spinup_clock():

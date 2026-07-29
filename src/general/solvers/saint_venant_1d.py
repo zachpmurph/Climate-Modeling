@@ -692,7 +692,7 @@ def _evaluate_rainfall(rainfall, x_m, t):
 
 
 def _evaluate_lateral_inflow(lateral_inflow, x_m, t):
-    """Evaluate distributed lateral discharge in m^3/min per metre of reach."""
+    """Evaluate signed lateral discharge in m^3/min per metre of reach."""
     if lateral_inflow is None:
         return np.zeros_like(x_m, dtype=float)
     values = np.asarray(lateral_inflow(x_m, t), dtype=float)
@@ -700,9 +700,9 @@ def _evaluate_lateral_inflow(lateral_inflow, x_m, t):
         values = np.full_like(x_m, float(values), dtype=float)
     if values.shape != x_m.shape:
         raise ValueError("lateral_inflow must return one value per cell")
-    if not np.all(np.isfinite(values)) or np.any(values < 0):
+    if not np.all(np.isfinite(values)):
         raise ValueError(
-            "lateral_inflow must return finite, non-negative discharge per reach length"
+            "lateral_inflow must return finite discharge per reach length"
         )
     return values
 
@@ -756,8 +756,10 @@ def run_model(
     geometry it is total flow in m^3/min; the legacy unit-width mode uses
     m^2/min. None is a no-inflow upstream boundary. rainfall is a callable
     ``rainfall(x_m, t_min)`` returning one non-negative rate in m/min per cell.
-    ``lateral_inflow(x_m, t_min)`` returns distributed lateral discharge in
-    m^3/min per metre of reach. It adds water without longitudinal momentum.
+    ``lateral_inflow(x_m, t_min)`` returns signed distributed lateral discharge
+    in m^3/min per metre of reach. Positive flow adds water without
+    longitudinal momentum. Negative flow removes water and its proportional
+    local momentum; extraction is capped by the water available in each step.
     ``spatial_order=2`` uses limited reconstruction with a two-stage SSP update.
     The downstream boundary may be transmissive outflow, a reflecting wall, or
     a prescribed stage.
@@ -938,7 +940,7 @@ def run_model(
             geometry_balance,
         ) = flux_data
         rainfall_source = _evaluate_rainfall(rainfall_function, x, stage_time)
-        lateral_source = _evaluate_lateral_inflow(
+        requested_lateral_source = _evaluate_lateral_inflow(
             lateral_inflow, x, stage_time
         )
         area = _cross_section_area(
@@ -958,6 +960,13 @@ def run_model(
             )
             * rainfall_source
         )
+        # A withdrawal is a demand, not permission to create negative area.
+        # Cap it at the water available before flux drainage; the draining
+        # limiter below then allocates any remaining volume to face outflows.
+        lateral_source = np.maximum(
+            requested_lateral_source,
+            -area / dt - rainfall_area_source,
+        )
         area_source = rainfall_area_source + lateral_source
         flux_h, flux_q = _limit_draining_fluxes(
             area, area_source, dt, dx, flux_h, flux_q
@@ -971,6 +980,21 @@ def run_model(
             (flux_q + correction_left)[1:]
             - (flux_q + correction_right)[:-1]
             - geometry_balance
+        )
+        # Incoming side flow is assumed to carry no longitudinal momentum.
+        # Withdrawals carry the local velocity, so removing water does not
+        # spuriously accelerate what remains.
+        q_new += (
+            dt
+            * np.minimum(lateral_source, 0.0)
+            * _velocity(
+                h_stage,
+                q_stage,
+                bottom_width,
+                side_slope,
+                table_depth,
+                table_width,
+            )
         )
 
         floor_addition = np.maximum(-area_new, 0.0)
