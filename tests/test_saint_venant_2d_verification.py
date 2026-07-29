@@ -5,6 +5,7 @@ from general.verification.verify_saint_venant_2d import (
     analytic_shear_wave,
     manufactured_pressure_wave,
     nonflat_lake_at_rest,
+    partially_dry_nonflat_lake_at_rest,
     one_dimensional_reduction,
     radial_dam_break_symmetry,
     strict_periodic_mass_conservation,
@@ -40,6 +41,10 @@ def test_manufactured_pressure_wave_converges_at_first_order():
 
 def test_nonflat_lake_at_rest_is_well_balanced():
     _assert_acceptance(nonflat_lake_at_rest())
+
+
+def test_partially_dry_nonflat_lake_at_rest_preserves_shoreline():
+    _assert_acceptance(partially_dry_nonflat_lake_at_rest())
 
 
 def test_two_dimensional_solver_reduces_to_one_dimensional_solver():

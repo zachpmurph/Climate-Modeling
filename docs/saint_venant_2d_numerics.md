@@ -155,6 +155,9 @@ The committed reference result was produced with Python 3.14.4 and NumPy 2.4.4.
 | Manufactured pressure wave, 80 x cells | combined L2 error | < 0.001 | 0.000520 |
 | Non-flat lake at rest | max depth error | < 1e-12 m | 0 |
 | Non-flat lake at rest | max momentum | < 1e-11 m²/min | 2.45e-14 |
+| Partially dry non-flat lake | dry shoreline cells made wet | 0 | 0 of 320 |
+| Partially dry non-flat lake | max depth error | < 1e-12 m | 0 |
+| Partially dry non-flat lake | max momentum | < 1e-11 m²/min | 8.65e-17 |
 | 1-D reduction | depth L2 difference | < 1e-8 m | 2.88e-9 |
 | 1-D reduction | discharge L2 difference | < 1e-6 m²/min | 1.18e-7 |
 | Wet radial dam break | normalized angular deviation | < 0.02 | 0.01192 |

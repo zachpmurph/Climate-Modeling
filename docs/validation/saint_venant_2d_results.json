@@ -87,6 +87,20 @@
         "momentum_below_1e_11": true
       }
     },
+    "partially_dry_nonflat_lake_at_rest": {
+      "case": "partially_dry_nonflat_lake_at_rest",
+      "initial_dry_cell_count": 320,
+      "dry_cells_that_became_wet": 0,
+      "max_depth_error_m": 0.0,
+      "max_abs_momentum_m2_per_min": 8.646668762952091e-17,
+      "mass_floor_correction_m3": 0.0,
+      "acceptance": {
+        "depth_error_below_1e_12": true,
+        "momentum_below_1e_11": true,
+        "dry_shoreline_unchanged": true,
+        "floor_correction_below_1e_14": true
+      }
+    },
     "one_dimensional_reduction": {
       "case": "one_dimensional_reduction",
       "depth_l2_difference_m": 2.8788016160702595e-09,

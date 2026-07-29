@@ -31,13 +31,14 @@ uses a two-dimensional Gaussian bed bump and constant `h + z_b`. After
 `0.1 min`, maximum depth error is `0 m`; maximum momenta are
 `2.45e-14` and `1.16e-14 m²/min`.
 
-**Gap:** None for fully wet Cartesian lake-at-rest states. Draining wet/dry fronts
+**Gap:** None for Cartesian lake-at-rest states. Draining wet/dry fronts
 over **non-flat** bed topography are now covered directly by
 `tests/test_saint_venant_2d.py::test_wet_dry_front_over_nonflat_bed_is_positive_and_conservative`
 (a frictionless dome draining over a Gaussian bed bump), which holds positivity and
 periodic-watertight conservation to machine precision — closing the earlier
-partially-dry-topography gap. A steady partially-dry shoreline *equilibrium* over a
-slope remains the one untested sub-case.
+partially-dry-topography gap. A separate bowl-shaped, partially dry lake-at-rest
+case preserves all 320 initially dry cells, depth, and near-zero momentum, so the
+stationary shoreline/topography coupling is now covered directly.
 
 ### Check 2: 1D reduction
 
@@ -186,12 +187,7 @@ current documented method.
      are historical and have been inspected during development. A future event
      or untouched third river is still required for prospective evidence.
 
-2. **Add partially dry non-flat shoreline equilibria.**
-   - This would strengthen the coupling between well-balanced topography and
-     wet/dry reconstruction beyond the existing separate tests.
-   - Estimated effort: 2–4 focused engineering days.
-
-3. **Continue independent events and validate uncertainty distributions.**
+2. **Continue independent events and validate uncertainty distributions.**
    - The committed suite now covers six events on two rivers, and the 2-D
      ensemble propagates explicit uncertainty ranges into depth, wet-area, and
      inundation-probability bands.

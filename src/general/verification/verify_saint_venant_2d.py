@@ -290,6 +290,60 @@ def nonflat_lake_at_rest():
     }
 
 
+def partially_dry_nonflat_lake_at_rest():
+    nx, ny = 20, 31
+    x, dx = _uniform_grid(2.0, nx)
+    y = np.linspace(-1.5, 1.5, ny)
+    dy = np.full(ny, 3.0 / ny)
+    bed = np.broadcast_to(
+        (0.08 * y**2 - 0.04)[None, :],
+        (nx, ny),
+    ).copy()
+    depth = np.maximum(-bed, 0.0)
+    zero = np.zeros_like(depth)
+    initial_dry = depth == 0.0
+    result = sv2.run_model(
+        T_final=0.1,
+        record_interval=0.1,
+        h_init=depth,
+        hu_init=zero,
+        hv_init=zero,
+        x_m=x,
+        y_m=y,
+        dx_m=dx,
+        dy_m=dy,
+        slope_x=zero,
+        slope_y=zero,
+        manning_n=zero,
+        bed_elevation_m=bed,
+        rainfall=_zero_rain(depth.shape),
+        boundary_x="inflow_outflow",
+        boundary_y="wall",
+    )
+    depth_error = float(np.max(np.abs(result["h_final"] - depth)))
+    momentum = float(max(
+        np.max(np.abs(result["hu_final"])),
+        np.max(np.abs(result["hv_final"])),
+    ))
+    dry_cells_changed = int(np.count_nonzero(result["h_final"][initial_dry]))
+    return {
+        "case": "partially_dry_nonflat_lake_at_rest",
+        "initial_dry_cell_count": int(np.count_nonzero(initial_dry)),
+        "dry_cells_that_became_wet": dry_cells_changed,
+        "max_depth_error_m": depth_error,
+        "max_abs_momentum_m2_per_min": momentum,
+        "mass_floor_correction_m3": result["mass_floor_correction"],
+        "acceptance": {
+            "depth_error_below_1e_12": depth_error < 1e-12,
+            "momentum_below_1e_11": momentum < 1e-11,
+            "dry_shoreline_unchanged": dry_cells_changed == 0,
+            "floor_correction_below_1e_14": (
+                result["mass_floor_correction"] < 1e-14
+            ),
+        },
+    }
+
+
 def one_dimensional_reduction():
     nx = 80
     length = 4.0
@@ -513,6 +567,9 @@ def run_verification_suite():
         "analytic_diagonal_vortex_wave": analytic_diagonal_vortex_wave(),
         "manufactured_pressure_wave": manufactured_pressure_wave(),
         "nonflat_lake_at_rest": nonflat_lake_at_rest(),
+        "partially_dry_nonflat_lake_at_rest": (
+            partially_dry_nonflat_lake_at_rest()
+        ),
         "one_dimensional_reduction": one_dimensional_reduction(),
         "radial_dam_break": radial_dam_break_symmetry(),
         "mass_conservation": strict_periodic_mass_conservation(),

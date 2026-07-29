@@ -86,9 +86,9 @@ inflow/open-outflow or inflow/measured-stage x boundaries, wall y boundaries,
 and periodic verification domains.
 
 The Tier 3 verification matrix includes exact axial and diagonal wave
-convergence studies, a variable-depth manufactured pressure wave, non-flat lake
-at rest, quantitative 1-D reduction, wet radial dam-break symmetry, strict mass
-conservation, and a dry-bed dam break. See
+convergence studies, a variable-depth manufactured pressure wave, fully and
+partially wet non-flat lakes at rest, quantitative 1-D reduction, wet radial
+dam-break symmetry, strict mass conservation, and a dry-bed dam break. See
 [the numerical method and verification report](docs/saint_venant_2d_numerics.md)
 and the machine-readable
 [`docs/validation/saint_venant_2d_results.json`](docs/validation/saint_venant_2d_results.json).
@@ -137,6 +137,7 @@ The rationale for each transition is given alongside the change.
 | **4v — Independent-river transfer tests** | Current branch | Added two approved-USGS Truckee River events between Reno and Sparks, with a routed 5.49 km reach and assumptions held fixed between events. The six-event evidence suite now spans two rivers; the Colorado calibration remains separate. | Repeated events on one regulated reach cannot establish spatial transfer. A second river tests whether the solver structure works outside the reach used to develop and calibrate the workflow. |
 | **4w — Probabilistic 2-D outcomes** | Current branch | Added seeded Latin-hypercube ensembles over roughness, longitudinal slope, channel width, bankfull depth, floodplain slope, inflow, rainfall, and downstream-stage offset. Saved evidence includes depth, terrain, and water-surface quantiles, wet probability, wet-area bands, every sampled parameter set, and member mass residuals, plus a self-contained uncertainty report. | A single inundation map hides uncertainty in estimated terrain, geometry, forcing, and roughness. Conditional outcome bands expose where those inputs materially change the modeled flood footprint without presenting them as calibrated forecast probabilities. |
 | **4x — Stage-controlled 2-D outlet** | Current branch | Added scalar, cross-channel, constant, or time-varying downstream water-surface elevation to 2-D Saint-Venant. The boundary permits backflow, lands on forcing breakpoints, preserves non-flat still water, and classifies signed boundary volume consistently. | A transmissive outlet cannot represent tailwater, tides, reservoirs, or downstream backwater. Feeding measured stage prevents the model from forcing those effects into terrain, inflow, or roughness. |
+| **4y — Dry-shoreline equilibrium gate** | Current branch | Added a partially dry, non-flat lake-at-rest verification case with an exposed shoreline. The acceptance gate requires zero shoreline advance, zero depth error, negligible momentum, and no mass-adding floor correction. | Wet/dry dam breaks and fully wet equilibria test different pieces of the scheme. Their combination verifies that topographic balancing does not create water or motion at a stationary dry shoreline. |
 
 ---
 
