@@ -90,7 +90,7 @@ def test_multi_event_suite_observations_and_results_are_reproducible(tmp_path):
     manifest = json.loads(SUITE.read_text(encoding="utf-8"))
     tracked_suite = json.loads(SUITE_EVIDENCE.read_text(encoding="utf-8"))
 
-    assert len(manifest["cases"]) == tracked_suite["case_count"] == 4
+    assert len(manifest["cases"]) == tracked_suite["case_count"] == 6
     for relative_path in manifest["cases"]:
         config_path = SUITE.parent / relative_path
         config = json.loads(config_path.read_text(encoding="utf-8"))
@@ -98,7 +98,7 @@ def test_multi_event_suite_observations_and_results_are_reproducible(tmp_path):
         observations = load_two_gauge_observations(observation_path)
         with observation_path.open(newline="", encoding="utf-8") as handle:
             raw_rows = list(csv.DictReader(handle))
-        assert len(observations["upstream"][0]) == 433
+        assert len(observations["upstream"][0]) >= 145
         assert len(observations["downstream"][0]) == 97
         assert {row["approval_status"] for row in raw_rows} == {"Approved"}
         assert observations["upstream"][0][-1] == pytest.approx(1440.0)
@@ -116,6 +116,15 @@ def test_multi_event_suite_observations_and_results_are_reproducible(tmp_path):
             assert actual["scores"][metric] == pytest.approx(
                 tracked["scores"][metric], rel=1e-10, abs=1e-10
             )
+
+    independent = [
+        run
+        for run in tracked_suite["cases"]
+        if run["config"].startswith("truckee_")
+    ]
+    assert len(independent) == 2
+    assert min(run["scores"]["nse"] for run in independent) > 0.75
+    assert min(run["scores"]["pearson_r"] for run in independent) > 0.9
 
 
 def test_observed_warmup_boundary_maps_negative_event_time_to_spinup_clock():

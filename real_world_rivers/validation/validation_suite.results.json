@@ -1,24 +1,25 @@
 {
   "schema_version": 1,
   "suite": {
-    "name": "Glen Canyon Dam to Lees Ferry multi-event validation",
-    "river": "Colorado River",
-    "upstream_gauge": "USGS-09379910",
-    "downstream_gauge": "USGS-09380000"
+    "name": "Multi-river, multi-event observed validation",
+    "rivers": [
+      "Colorado River",
+      "Truckee River"
+    ]
   },
-  "case_count": 4,
-  "parameter_policy": "All events use the same estimated reach length, slope, Manning roughness, width, grid, warm-up duration, and numerical settings. No event-specific parameter fitting is allowed.",
+  "case_count": 6,
+  "parameter_policy": "Within each reach, all events use the same independently estimated length, slope, Manning roughness, width, grid, warm-up duration, and numerical settings. The Colorado calibration remains a separate manifest and is never transferred into the independent Truckee tests.",
   "cases": [
     {
       "config": "glen_canyon_lees_ferry.json",
       "name": "Glen Canyon Dam to Lees Ferry \u2014 2004-07-01",
       "status": "uncalibrated_baseline",
       "scores": {
-        "nse": 0.1188439984073244,
-        "rmse": 4376.912514477588,
-        "bias": -3114.940745193823,
-        "percent_bias": -12.530003222890862,
-        "pearson_r": 0.7559090459291324,
+        "nse": 0.11884399840735205,
+        "rmse": 4376.91251447752,
+        "bias": -3114.940745193751,
+        "percent_bias": -12.53000322289057,
+        "pearson_r": 0.7559090459291382,
         "n": 97
       },
       "observation_count": {
@@ -31,11 +32,11 @@
       "name": "Glen Canyon Dam to Lees Ferry \u2014 2002-01-25 winter ramp",
       "status": "out_of_sample_validation",
       "scores": {
-        "nse": -0.2717925551996643,
-        "rmse": 4752.666092040199,
-        "bias": -3774.0493571133866,
-        "percent_bias": -16.180907012986726,
-        "pearson_r": 0.7282752247390328,
+        "nse": -0.2717925551996623,
+        "rmse": 4752.6660920401955,
+        "bias": -3774.049357113336,
+        "percent_bias": -16.180907012986506,
+        "pearson_r": 0.7282752247390201,
         "n": 97
       },
       "observation_count": {
@@ -48,11 +49,11 @@
       "name": "Glen Canyon Dam to Lees Ferry \u2014 2002-07-02 summer ramp",
       "status": "out_of_sample_validation",
       "scores": {
-        "nse": -0.03203967106660044,
-        "rmse": 5173.38436535633,
-        "bias": -4051.3378324999176,
-        "percent_bias": -15.506781975838672,
-        "pearson_r": 0.7788261313541228,
+        "nse": -0.03203967106665351,
+        "rmse": 5173.384365356463,
+        "bias": -4051.3378325000335,
+        "percent_bias": -15.506781975839116,
+        "pearson_r": 0.7788261313541113,
         "n": 97
       },
       "observation_count": {
@@ -65,44 +66,78 @@
       "name": "Glen Canyon Dam to Lees Ferry \u2014 2004-01-06 winter ramp",
       "status": "out_of_sample_validation",
       "scores": {
-        "nse": 0.3838236028207589,
-        "rmse": 7946.34212666703,
-        "bias": -4843.899813119421,
-        "percent_bias": -21.47696531234101,
-        "pearson_r": 0.8117441678719638,
+        "nse": 0.383823602820771,
+        "rmse": 7946.342126666952,
+        "bias": -4843.899813119393,
+        "percent_bias": -21.476965312340887,
+        "pearson_r": 0.8117441678719728,
         "n": 97
       },
       "observation_count": {
         "upstream": 433,
         "downstream": 97
       }
+    },
+    {
+      "config": "truckee_reno_sparks_2017-01-08.json",
+      "name": "Truckee River Reno to Sparks \u2014 2017-01-08 flood rise",
+      "status": "independent_river_structural_test",
+      "scores": {
+        "nse": 0.9668349182700161,
+        "rmse": 544.4610778711926,
+        "bias": 301.16117245128095,
+        "percent_bias": 9.390600102252398,
+        "pearson_r": 0.997999075427082,
+        "n": 97
+      },
+      "observation_count": {
+        "upstream": 145,
+        "downstream": 97
+      }
+    },
+    {
+      "config": "truckee_reno_sparks_2017-02-10.json",
+      "name": "Truckee River Reno to Sparks \u2014 2017-02-10 high-flow event",
+      "status": "independent_river_transfer_test",
+      "scores": {
+        "nse": 0.7967391618651831,
+        "rmse": 798.3175630984994,
+        "bias": 100.24744060425671,
+        "percent_bias": 0.6956343170227696,
+        "pearson_r": 0.9197511891596594,
+        "n": 97
+      },
+      "observation_count": {
+        "upstream": 145,
+        "downstream": 97
+      }
     }
   ],
   "score_summary": {
     "nse": {
-      "minimum": -0.2717925551996643,
-      "median": 0.04340216367036198,
-      "maximum": 0.3838236028207589
+      "minimum": -0.2717925551996623,
+      "median": 0.2513338006140615,
+      "maximum": 0.9668349182700161
     },
     "rmse": {
-      "minimum": 4376.912514477588,
-      "median": 4963.025228698265,
-      "maximum": 7946.34212666703
+      "minimum": 544.4610778711926,
+      "median": 4564.789303258858,
+      "maximum": 7946.342126666952
     },
     "bias": {
-      "minimum": -4843.899813119421,
-      "median": -3912.693594806652,
-      "maximum": -3114.940745193823
+      "minimum": -4843.899813119393,
+      "median": -3444.4950511535435,
+      "maximum": 301.16117245128095
     },
     "percent_bias": {
-      "minimum": -21.47696531234101,
-      "median": -15.8438444944127,
-      "maximum": -12.530003222890862
+      "minimum": -21.476965312340887,
+      "median": -14.018392599364844,
+      "maximum": 9.390600102252398
     },
     "pearson_r": {
-      "minimum": 0.7282752247390328,
-      "median": 0.7673675886416276,
-      "maximum": 0.8117441678719638
+      "minimum": 0.7282752247390201,
+      "median": 0.795285149613042,
+      "maximum": 0.997999075427082
     }
   }
 }

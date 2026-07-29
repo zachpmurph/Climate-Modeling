@@ -133,6 +133,7 @@ The rationale for each transition is given alongside the change.
 | **4s — Adaptive multi-event hydraulics** | Current branch | Replaced constant-flow startup with a 12-hour observed upstream spin-up, added conservative time-varying lateral inflow with separate mass accounting, and added constrained global calibration of roughness, width, slope, and reach gain. The optimizer combines NSE, correlation, and an event-consistency penalty using explicit training/validation/test splits. | A constant startup can create a lucky initial state, while single-event tuning confounds geometry and forcing. Global parameters and held-out events test whether improvements transfer across hydrographs. |
 | **4t — Stage-dependent 1-D geometry** | Current branch | Added per-cell trapezoidal cross-sections to 1-D Saint-Venant, including depth-dependent area, top width, pressure, hydraulic radius, wave speed, rainfall capture, and conservative geometry transitions. The CLI derives side slopes from reviewed bankfull width/depth and an explicit bottom-width fraction. | A fixed rectangular width cannot represent storage, wetted perimeter, pressure, or rainfall collection changing as river stage rises. Trapezoids are a controlled first step toward measured compound cross-sections while retaining exact rectangular backward compatibility. |
 | **4u — Measured hydraulic controls** | Current branch | Added time-varying downstream-stage boundaries and spatially located point-inflow series for tributaries or return flows. Point discharges are mapped conservatively to the nearest reach cell, and summaries retain their source paths. | A free outlet and a calibrated uniform reach-gain fraction can hide backwater and missing-flow errors. Direct observations make those controls explicit and prevent roughness or geometry from absorbing their effects. |
+| **4v — Independent-river transfer tests** | Current branch | Added two approved-USGS Truckee River events between Reno and Sparks, with a routed 5.49 km reach and assumptions held fixed between events. The six-event evidence suite now spans two rivers; the Colorado calibration remains separate. | Repeated events on one regulated reach cannot establish spatial transfer. A second river tests whether the solver structure works outside the reach used to develop and calibrate the workflow. |
 
 ---
 
@@ -424,10 +425,15 @@ range, grid refinement is nearly neutral, and second-order reconstruction expose
 strong sensitivity to the simplified steady-flow initialization. Do not choose a
 variant from this matrix as a calibration.
 
-With observed pre-event spin-up, the four-event uncalibrated suite has median NSE
+With observed pre-event spin-up, the four-event uncalibrated Colorado subset has median NSE
 `0.043` (range `-0.272` to `0.384`) and percent bias from `-21.48%` to `-12.53%`.
 This is worse than constant-flow startup, showing that the old initialization was
 optimistic rather than physically transferable.
+
+Two independent Truckee River events transfer the same unfitted reach assumptions
+between events and score NSE `0.967` and `0.797`, correlation `0.998` and `0.920`,
+and percent bias `9.39%` and `0.70%`. These are historical structural tests, not
+a new calibration set; their width and roughness are still estimated.
 
 The constrained global calibration selects roughness `0.8×`, width `1.2×`, slope
 `1.2×`, and distributed reach gain `7.5%`. It produces training NSE
