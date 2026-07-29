@@ -14,6 +14,7 @@ from rivers.validation.run_case import (
     shifted_boundary,
 )
 from rivers.validation.fetch_event import collect_event_rows
+from rivers.validation.fetch_stage_control import collect_stage_rows
 from rivers.validation.run_sensitivity import build_variants
 from rivers.validation.run_suite import summarize_results
 
@@ -360,6 +361,58 @@ def test_fetch_event_normalizes_approved_usgs_rows():
         100.0 * 0.028316846592 * 60.0
     )
     assert set(urls) == {"upstream", "downstream"}
+
+
+def test_fetch_stage_control_converts_gage_height_to_model_datum():
+    config = {
+        "case": {
+            "observation_window": [
+                "2020-01-01T00:00:00Z",
+                "2020-01-01T00:15:00Z",
+            ]
+        },
+        "warmup": {"duration_min": 5.0},
+        "downstream_stage_source": {
+            "gauge": "USGS-1",
+            "parameter": "00065",
+            "gage_datum_ft": 90.0,
+            "model_vertical_datum_ft": 100.0,
+        },
+    }
+
+    def requester(url, params=None):
+        assert params["datetime"] == (
+            "2019-12-31T23:55:00Z/2020-01-01T00:15:00Z"
+        )
+        return {
+            "features": [
+                {
+                    "properties": {
+                        "parameter_code": "00065",
+                        "time": timestamp,
+                        "value": value,
+                        "unit_of_measure": "ft",
+                        "approval_status": "Approved",
+                    }
+                }
+                for timestamp, value in (
+                    ("2019-12-31T23:55:00Z", 12.0),
+                    ("2020-01-01T00:15:00Z", 13.0),
+                )
+            ]
+        }, "https://example.test/stage"
+
+    rows, url = collect_stage_rows(config, requester=requester)
+
+    assert url == "https://example.test/stage"
+    assert len(rows) == 2
+    assert float(rows[0]["downstream_stage_m"]) == pytest.approx(
+        2.0 * 0.3048
+    )
+    assert float(rows[1]["downstream_stage_m"]) == pytest.approx(
+        3.0 * 0.3048
+    )
+    assert {row["approval_status"] for row in rows} == {"Approved"}
 
 
 def test_suite_summary_uses_event_ranges_and_medians():
