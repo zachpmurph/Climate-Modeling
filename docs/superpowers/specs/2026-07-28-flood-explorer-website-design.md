@@ -145,10 +145,15 @@ from baseline. A catchment storm reaches a reach like this *as discharge*, so th
 events raise the inlet hydrograph (1.0× / 1.6× / 2.6× / 4.0×) and carry the direct rain
 as well. This walks the reach through in-bank → at-bank → spilling → inundated.
 
-**Every event starts from a spun-up steady state.** The column-wise normal-flow guess is
-not an equilibrium of the 2-D equations; the reach settles over ~60 min. Without a warm
-start, "baseline" drifts and the settling shows up as event impact. Convergence was
-checked to 480 min (unchanged to 3 decimals from t=120).
+**Every event starts from a spun-up steady state — in the playground too.** The
+column-wise normal-flow guess is not an equilibrium of the 2-D equations; the reach
+settles over a few travel times. Without a warm start, "baseline" drifts and the settling
+shows up as event impact: the sandbox at 1× inflow with no rain reported 1% of the
+floodplain flooded, which was purely the warm-up. The atlas spin-up is a fixed 180 min
+(convergence checked to 480 min, unchanged to 3 decimals from t=120); the playground
+scales its spin-up to five reach travel times, since the geometry is whatever the user
+dials in. Measured on the playground defaults: the state is converged to 2.6e-7 m by
+t=68 min and to machine precision by t=136 min, and a 1× run now reports 0% flooded.
 
 **"Flooded" means ground that is dry at baseline and wet during the event** (> 0.05 m),
 not "any bench cell" — the sloping banks are wet by construction, so the naive mask

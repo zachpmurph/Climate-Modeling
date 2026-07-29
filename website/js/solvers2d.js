@@ -500,6 +500,8 @@ export function saintVenant2D(options) {
     discharge_y_history: hvHistory,
     depth_initial: hInitial,
     depth_final: Float64Array.from(h),
+    discharge_x_final: Float64Array.from(hu),
+    discharge_y_final: Float64Array.from(hv),
     mass_inflow: massInflow,
     mass_source: massSource,
     mass_outflow: massOutflow,

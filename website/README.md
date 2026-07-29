@@ -76,6 +76,12 @@ million per second. The playground estimates the step count up front and refuses
 above 20 million cell updates rather than freezing the tab; selecting the 2-D model also
 moves the shared reach/cell/duration fields to a 2-D preset (about 2 s).
 
+A playground 2-D run is really two runs: the reach is first settled to steady state at
+normal flow (five reach travel times), and the user's event starts from that state. Both
+are charged to the work budget. Without it the warm-up reads as flood impact — a 1x-inflow
+run with no rain reported 1% of the floodplain flooded before this was added, and reports
+0% now.
+
 ## Units
 
 The models compute in meters and minutes (Manning n = SI/60, g = 35316 m/min²).

@@ -130,7 +130,7 @@ function build2dSetup(p) {
  * corrected for the fact that a larger inflow deepens the flow and speeds the
  * waves up (depth ~ q^0.6, celerity ~ sqrt(depth), so dt ~ q^-0.3).
  */
-function estimate2dSteps(p, setup) {
+function estimate2dSteps(p, setup, minutes, multiple) {
   const { ax, ay, start } = setup;
   const ny = p.cellsY;
   let maxRate = 0;
@@ -146,8 +146,24 @@ function estimate2dSteps(p, setup) {
   }
   if (!(maxRate > 0)) return 1;
   const dt = CFL_2D / maxRate;
-  const growth = Math.pow(Math.max(p.inflowMultiple, 1.0), 0.3);
-  return Math.ceil((p.minutes / dt) * growth * 1.25);
+  const growth = Math.pow(Math.max(multiple, 1.0), 0.3);
+  return Math.ceil((minutes / dt) * growth * 1.25);
+}
+
+/**
+ * How long to settle the reach before the user's event starts.
+ *
+ * A column-by-column normal-flow state is not an equilibrium of the 2-D
+ * equations — lateral momentum exchange and the open outlet move it over the
+ * first few travel times. Without this, a run at 1x inflow reports the warm-up
+ * as flooding. Scaled to the reach's own travel time so it holds for whatever
+ * geometry the user dials in.
+ */
+function spinUpMinutes(p) {
+  const manningN = p.manningSI / 60.0;
+  const velocity = (1 / manningN) * Math.pow(p.channelDepth, 2 / 3) * Math.sqrt(p.slope);
+  if (!(velocity > 0)) return 60;
+  return Math.min(Math.max((p.length / velocity) * 5, 20), 240);
 }
 
 function run(p, onStatus) {
@@ -156,33 +172,58 @@ function run(p, onStatus) {
 
   if (p.model === "saint_venant_2d") {
     const setup = build2dSetup(p);
-    const estimated = estimate2dSteps(p, setup);
-    const work = estimated * p.cells * p.cellsY;
+    const spinMinutes = spinUpMinutes(p);
+    const spinSteps = estimate2dSteps(p, setup, spinMinutes, 1.0);
+    const runSteps = estimate2dSteps(p, setup, p.minutes, p.inflowMultiple);
+    const work = (spinSteps + runSteps) * p.cells * p.cellsY;
     if (work > WORK_BUDGET_CELL_UPDATES) {
       throw new Error(
         `this 2-D run needs roughly ${(work / 1e6).toFixed(0)} million cell updates ` +
-        `(~${(work / 4.5e6).toFixed(0)} s in the browser). Reduce the cell counts or the ` +
+        `(~${(work / 4.5e6).toFixed(0)} s in the browser, including a ` +
+        `${spinMinutes.toFixed(0)}-minute settling run). Reduce the cell counts or the ` +
         `simulation length — halving either roughly halves the work.`,
       );
     }
-    onStatus(`Running Saint-Venant 2-D (~${estimated} time steps)…`);
-    const result = saintVenant2D({
+
+    const common = {
       x_m: setup.ax.centres,
       y_m: setup.ay.centres,
       dx_m: setup.ax.widths,
       dy_m: setup.ay.widths,
       bedElevationM: setup.bed,
       manningN: setup.manningN,
+    };
+    // Settle the reach at normal flow first, then start the event from that
+    // state. Otherwise the warm-up shows up as flood impact: at 1x inflow with
+    // no rain, an unsettled run reports ~1% of the floodplain "flooded".
+    onStatus(`Settling the reach (${spinMinutes.toFixed(0)} min of normal flow)…`);
+    const spun = saintVenant2D({
+      ...common,
       hInit: setup.start.h,
       huInit: setup.start.hu,
+      tFinalMin: spinMinutes,
+      recordIntervalMin: spinMinutes,
+      leftInflow: setup.start.inletDischarge,
+      rainfall: () => 0.0,
+      maxSteps: Math.ceil(spinSteps * 3),
+    });
+
+    onStatus(`Running Saint-Venant 2-D (~${runSteps} time steps)…`);
+    const result = saintVenant2D({
+      ...common,
+      hInit: spun.depth_final,
+      huInit: spun.discharge_x_final,
+      hvInit: spun.discharge_y_final,
       tFinalMin: p.minutes,
       recordIntervalMin: Math.max(p.minutes / 40, 0.25),
       leftInflow: Float64Array.from(setup.start.inletDischarge, (v) => v * p.inflowMultiple),
       rainfall: (t) => (t < p.rainMinutes ? rainRate : 0.0),
       // Backstop in case the estimate is optimistic: fail loudly rather than
       // leaving the tab wedged.
-      maxSteps: Math.ceil(estimated * 3),
+      maxSteps: Math.ceil(runSteps * 3),
     });
+    result.spin_up_min = spinMinutes;
+    result.spin_up_steps = spun.steps;
     return result;
   }
 
@@ -324,7 +365,8 @@ function renderResults2d(result, p) {
       sub: `${formatNumber(result.x_m[peakI], 0)} m downstream, ${formatNumber(result.y_m[peakJ], 0)} m across, ${formatMinutes(peakT)}` },
     { label: "Floodplain under water", value: `${formatNumber(peakFlooded / 10000, 2)} ha`,
       sub: dryArea > 0 ? `${formatNumber((peakFlooded / dryArea) * 100, 0)}% of the dry ground` : "no dry ground in this section" },
-    { label: "Time steps", value: `${result.steps}`, sub: `${nx}×${ny} cells` },
+    { label: "Time steps", value: `${result.steps}`,
+      sub: `${nx}×${ny} cells, after ${result.spin_up_steps} settling steps` },
     { label: "Mass-balance error", value: formatNumber(balanceError, 4), sub: "m³ (numerical quality)" },
   ]);
 
