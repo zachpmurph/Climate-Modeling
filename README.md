@@ -41,12 +41,13 @@ cross-sectional area $A=bh+zh^2$ and whole-channel discharge $Q$, where $b$
 is bottom width and $z$ is the horizontal-to-vertical side slope per bank.
 Setting $z=0$ recovers the rectangular section:
 
-$$\frac{\partial A}{\partial t} + \frac{\partial Q}{\partial x} = T(h) r + q_l$$
+$$\frac{\partial A}{\partial t} + \frac{\partial Q}{\partial x} = T(h) (r-i) + q_l$$
 
 $$\frac{\partial Q}{\partial t} + \frac{\partial}{\partial x}\!\left(\frac{Q^2}{A} + g I_1\right) = g A (S_0 - S_f) + S_G$$
 
 where $T=b+2zh$ is top width, $I_1=bh^2/2+zh^3/3$ is the hydrostatic
-pressure moment, $q_l$ is lateral inflow per metre of reach,
+pressure moment, $q_l$ is lateral inflow per metre of reach, $i$ is optional
+Green-Ampt infiltration,
 $S_f=n^2u|u|/R_h^{4/3}$ is the Manning friction slope, $S_G$ is the
 non-prismatic geometry source, and $g = 9.8 \times 60^2\ \text{m/min}^2$. This
 adds the momentum equation, capturing pressure-gradient
@@ -84,6 +85,14 @@ limiter for wet/dry positivity, adaptive two-dimensional CFL stepping, and
 semi-implicit Manning friction. It supports reflecting walls,
 inflow/open-outflow or inflow/measured-stage x boundaries, wall y boundaries,
 and periodic verification domains.
+
+Both Saint-Venant solvers accept spatial Green-Ampt soil properties: saturated
+hydraulic conductivity, wetting-front suction head, and initial moisture
+deficit. The model advances cumulative infiltration in every cell, caps the
+sink by available surface water, removes proportional momentum, and reports
+infiltration separately while retaining exact net-source mass balance. This is
+an event-scale wetting-front model; it does not yet recover soil moisture
+between storms or represent layered/macropore flow.
 
 The Tier 3 verification matrix includes exact axial and diagonal wave
 convergence studies, a variable-depth manufactured pressure wave, fully and
@@ -156,6 +165,7 @@ The rationale for each transition is given alongside the change.
 | **4ao — Training Pareto evidence** | Current branch | The cross-event optimizer now retains every non-dominated training candidate on mean NSE and mean correlation, using the same event- or river-balanced aggregation as selection. The archive is derived only from parameter sets visited during training and labels the weighted-objective choice when it lies on the front. | A single weighted score can hide whether improved NSE sacrifices hydrograph correlation, or vice versa. The Pareto archive exposes that tradeoff without consulting validation or test events. |
 | **4ap — Training-only structural selection** | Current branch | Calibration manifests may define named structural variants with shared case overrides. Parameters are fitted separately inside every variant; training alone selects the formulation, which is then frozen for validation and test. Leave-one-event- and leave-one-river-out folds repeat both structural and parameter selection without the held-out data. | Comparing formulations after viewing a held-out hydrograph leaks model selection just as surely as tuning a parameter. Nested selection measures whether a numerical or hydraulic structure transfers, not merely whether it can explain events already inspected. |
 | **4aq — Reconstruction transfer evidence** | Current branch | Predeclared and retained a river-balanced first- versus second-order comparison with every physical multiplier fixed at its uncalibrated value. Joint Colorado/Truckee training selects first order; Truckee-only fitting selects second order, which then gives mean held-Colorado NSE `-1.183`. | Second order slightly improves the Truckee training event but sharply degrades both Colorado events. The asymmetric leave-one-river result shows that reconstruction order is condition-dependent and cannot be chosen from one river then assumed transferable. |
+| **4ar — Spatial soil infiltration** | Current branch | Added shared Green-Ampt infiltration to 1-D and 2-D Saint-Venant. Profiles and reviewed terrain can carry per-cell conductivity, suction head, and moisture deficit; cumulative infiltration, proportional momentum removal, net source mass, and separate infiltration volume are retained in outputs. | Rainfall is not identical to runoff. Soil texture, hydraulic conductivity, and antecedent moisture control how much water ponds and moves across the surface, so treating all rainfall as immediate surface water overpredicts flooding on permeable, unsaturated ground. |
 
 ---
 
@@ -386,6 +396,14 @@ For programmatic scenarios, `Scenario.rainfall` may be any callable with the
 signature `rainfall(x_m, t_min) -> rates_m_per_min`; all solvers evaluate it
 during time stepping. A 2-D case may instead set `Scenario.rainfall_2d` with
 `rainfall_2d(x_m, y_m, t_min) -> rates_m_per_min`.
+
+To enable soil infiltration, add all three optional fields to every profile
+row: `soil_ksat_m_per_min`, `soil_suction_head_m`, and
+`soil_moisture_deficit` (a fraction from 0 to 1). Reviewed 2-D terrain CSVs may
+provide the same complete columns per grid cell; otherwise the longitudinal
+profile values are repeated across the derived 2-D domain. Use measured or
+soil-survey-derived parameters where possible rather than treating broad
+hydrologic soil groups as precise calibrated values.
 
 For a physically scaled 1-D run, pass `--hydraulic-geometry`. The solver then
 interprets initial and boundary discharge as whole-channel m³/min, uses the

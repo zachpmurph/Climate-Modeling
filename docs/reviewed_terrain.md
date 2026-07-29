@@ -19,8 +19,11 @@ x_m,y_m,dx_m,dy_m,bed_elevation_m,manning_n
 
 Required columns are `x_m`, `y_m`, `dx_m`, `dy_m`, and
 `bed_elevation_m`. `manning_n` is optional, but it must be populated for every
-cell or none. When it is absent, longitudinal roughness from the river profile
-is interpolated to terrain x coordinates and repeated across y.
+cell or none. The optional Green-Ampt columns `soil_ksat_m_per_min`,
+`soil_suction_head_m`, and `soil_moisture_deficit` must likewise appear and be
+populated as a complete set or not at all. When optional terrain properties are
+absent, longitudinal values from the river profile are interpolated to terrain
+x coordinates and repeated across y.
 
 The loader requires:
 
@@ -30,6 +33,8 @@ The loader requires:
 - one `dx_m` value across each x row and one `dy_m` value down each y column;
 - terrain x coordinates inside the river-profile reach;
 - positive finite Manning values when supplied.
+- finite non-negative soil conductivity and suction, with moisture deficit in
+  the closed interval from 0 to 1, when supplied.
 
 The artifact is a rectilinear finite-volume grid. It is not a point cloud or an
 unconditioned DEM.
@@ -63,6 +68,11 @@ convention (`n_model = n_seconds / 60`). The saved 2-D field artifact retains
 bed elevation, derived slopes, and the exact roughness grid used by the solver.
 The summary records whether terrain roughness or interpolated profile roughness
 was used.
+
+Soil conductivity is in metres per minute. Moisture deficit represents the
+event-start difference between saturated and initial volumetric water content.
+The solver advances cumulative infiltration during the event but does not
+simulate evapotranspiration, drainage, or moisture recovery between storms.
 
 ## Command
 

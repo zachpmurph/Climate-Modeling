@@ -31,6 +31,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from general.solvers.contract import Domain2D, Scenario, SimulationResult
+from general.solvers.infiltration import (
+    green_ampt_step,
+    initial_cumulative_infiltration,
+    prepare_green_ampt,
+)
 
 
 L = 10.0
@@ -447,6 +452,10 @@ def run_model(
     slope_y=None,
     manning_n=None,
     bed_elevation_m=None,
+    soil_ksat_m_per_min=None,
+    soil_suction_head_m=None,
+    soil_moisture_deficit=None,
+    initial_cumulative_infiltration_m=0.0,
     momentum_source=None,
     cfl=CFL,
     spatial_order=1,
@@ -508,6 +517,19 @@ def run_model(
         raise ValueError("x_m, y_m, dx_m, and dy_m must be supplied together")
 
     shape = (nx, ny)
+    soil = prepare_green_ampt(
+        soil_ksat_m_per_min,
+        soil_suction_head_m,
+        soil_moisture_deficit,
+        shape,
+    )
+    cumulative_infiltration = initial_cumulative_infiltration(
+        initial_cumulative_infiltration_m, shape
+    )
+    if soil is None and np.any(cumulative_infiltration != 0.0):
+        raise ValueError(
+            "initial_cumulative_infiltration_m requires Green-Ampt soil properties"
+        )
     bed_slope_x = _field(slope_x, S0x, shape, "slope_x")
     bed_slope_y = _field(slope_y, S0y, shape, "slope_y")
     roughness = _field(manning_n, n0, shape, "manning_n")
@@ -537,11 +559,13 @@ def run_model(
     h_history = [h.copy()]
     hu_history = [hu.copy()]
     hv_history = [hv.copy()]
+    cumulative_infiltration_history = [cumulative_infiltration.copy()]
     next_record = 1
 
     mass_inflow = 0.0
     mass_outflow = 0.0
     mass_source = 0.0
+    mass_infiltration = 0.0
     mass_floor_correction = 0.0
     t_current = 0.0
     area = dx[:, None] * dy[None, :]
@@ -631,6 +655,27 @@ def run_model(
         mass_floor_correction += negative_volume
         h_new = np.maximum(h_new, 0.0)
 
+        infiltration_volume = 0.0
+        if soil is not None:
+            infiltrated_depth, cumulative_infiltration = green_ampt_step(
+                h_new,
+                cumulative_infiltration,
+                *soil,
+                dt,
+            )
+            depth_before_infiltration = h_new.copy()
+            h_new = np.maximum(h_new - infiltrated_depth, 0.0)
+            retained_fraction = np.zeros_like(h_new)
+            np.divide(
+                h_new,
+                depth_before_infiltration,
+                out=retained_fraction,
+                where=depth_before_infiltration > DRY_TOL,
+            )
+            hu_star *= retained_fraction
+            hv_star *= retained_fraction
+            infiltration_volume = float(np.sum(infiltrated_depth * area))
+
         u_star = _velocity(h_new, hu_star)
         v_star = _velocity(h_new, hv_star)
         speed = np.sqrt(u_star**2 + v_star**2)
@@ -655,7 +700,8 @@ def run_model(
                 mass_outflow += right_volume
             else:
                 mass_inflow -= right_volume
-        mass_source += float(np.sum(source * area) * dt)
+        mass_source += float(np.sum(source * area) * dt) - infiltration_volume
+        mass_infiltration += infiltration_volume
 
         h, hu, hv = h_new, hu_new, hv_new
         t_current += dt
@@ -664,6 +710,9 @@ def run_model(
             h_history.append(h.copy())
             hu_history.append(hu.copy())
             hv_history.append(hv.copy())
+            cumulative_infiltration_history.append(
+                cumulative_infiltration.copy()
+            )
             next_record += 1
 
     return {
@@ -685,6 +734,14 @@ def run_model(
         "mass_inflow": mass_inflow,
         "mass_outflow": mass_outflow,
         "mass_source": mass_source,
+        "mass_infiltration": mass_infiltration,
+        "soil_ksat_m_per_min": None if soil is None else soil[0],
+        "soil_suction_head_m": None if soil is None else soil[1],
+        "soil_moisture_deficit": None if soil is None else soil[2],
+        "cumulative_infiltration_history": np.asarray(
+            cumulative_infiltration_history
+        ),
+        "cumulative_infiltration_final": cumulative_infiltration,
         "mass_floor_correction": mass_floor_correction,
         "spatial_order": spatial_order,
     }
@@ -704,6 +761,8 @@ class _SaintVenant2DSolver:
         "boundary_y",
         "downstream_stage",
         "spatial_order",
+        "initial_cumulative_infiltration",
+        "soil_infiltration",
     })
 
     def run(self, domain: Domain2D, scenario: Scenario) -> SimulationResult:
@@ -749,6 +808,12 @@ class _SaintVenant2DSolver:
             slope_y=domain.slope_y,
             manning_n=domain.manning_n,
             bed_elevation_m=domain.bed_elevation_m,
+            soil_ksat_m_per_min=domain.soil_ksat_m_per_min,
+            soil_suction_head_m=domain.soil_suction_head_m,
+            soil_moisture_deficit=domain.soil_moisture_deficit,
+            initial_cumulative_infiltration_m=(
+                scenario.initial_cumulative_infiltration_m
+            ),
             cfl=scenario.cfl,
             spatial_order=scenario.spatial_order,
             boundary_x=scenario.boundary_x,
@@ -772,6 +837,16 @@ class _SaintVenant2DSolver:
                 "discharge_x_final": raw["hu_final"],
                 "discharge_y_final": raw["hv_final"],
                 "mass_floor_correction": raw["mass_floor_correction"],
+                "mass_infiltration": raw["mass_infiltration"],
+                "soil_ksat_m_per_min": raw["soil_ksat_m_per_min"],
+                "soil_suction_head_m": raw["soil_suction_head_m"],
+                "soil_moisture_deficit": raw["soil_moisture_deficit"],
+                "cumulative_infiltration_history": raw[
+                    "cumulative_infiltration_history"
+                ],
+                "cumulative_infiltration_final": raw[
+                    "cumulative_infiltration_final"
+                ],
             },
         )
 

@@ -28,6 +28,9 @@ class Domain:
     cross_section_wetted_perimeter_m: np.ndarray | None = None  # surveyed curves, shape (nx, nlevel)
     manning_depth_m: np.ndarray | None = None  # roughness-curve depths, shape (nlevel,) or (nx, nlevel)
     manning_n_table: np.ndarray | None = None  # depth-dependent Manning n, shape (nx, nlevel)
+    soil_ksat_m_per_min: np.ndarray | None = None
+    soil_suction_head_m: np.ndarray | None = None
+    soil_moisture_deficit: np.ndarray | None = None
 
 
 @dataclass(frozen=True)
@@ -42,6 +45,9 @@ class Domain2D:
     slope_y: np.ndarray      # y bed slope, shape (nx, ny)
     manning_n: np.ndarray    # Manning roughness, shape (nx, ny)
     bed_elevation_m: np.ndarray | None = None  # z_b, shape (nx, ny)
+    soil_ksat_m_per_min: np.ndarray | None = None
+    soil_suction_head_m: np.ndarray | None = None
+    soil_moisture_deficit: np.ndarray | None = None
 
 
 @dataclass
@@ -64,6 +70,7 @@ class Scenario:
     downstream_boundary: str = "outflow"
     downstream_stage_m: float | Callable[[float], float] | None = None
     spatial_order: int = 1
+    initial_cumulative_infiltration_m: float | np.ndarray = 0.0
 
 
 @dataclass

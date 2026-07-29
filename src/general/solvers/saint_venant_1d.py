@@ -6,6 +6,11 @@ import numpy as np
 
 from general.solvers.contract import Domain, Scenario, SimulationResult
 from general.solvers import cross_section as tabulated_section
+from general.solvers.infiltration import (
+    green_ampt_step,
+    initial_cumulative_infiltration,
+    prepare_green_ampt,
+)
 
 
 # Units: meters and minutes throughout.
@@ -794,6 +799,10 @@ def run_model(
     cross_section_wetted_perimeter_m=None,
     manning_depth_m=None,
     manning_n_table=None,
+    soil_ksat_m_per_min=None,
+    soil_suction_head_m=None,
+    soil_moisture_deficit=None,
+    initial_cumulative_infiltration_m=0.0,
     downstream_boundary="outflow",
     downstream_stage_m=None,
     spatial_order=1,
@@ -812,7 +821,8 @@ def run_model(
     local momentum; extraction is capped by the water available in each step.
     ``spatial_order=2`` uses limited reconstruction with a two-stage SSP update.
     The downstream boundary may be transmissive outflow, a reflecting wall, or
-    a prescribed stage.
+    a prescribed stage. Supplying all three soil properties enables event-scale
+    Green-Ampt infiltration; cumulative infiltration is retained as model state.
     """
     x, dx, bed_slope, roughness = _prepare_grid(
         L,
@@ -822,6 +832,19 @@ def run_model(
         manning_n,
     )
     n_cells = len(x)
+    soil = prepare_green_ampt(
+        soil_ksat_m_per_min,
+        soil_suction_head_m,
+        soil_moisture_deficit,
+        (n_cells,),
+    )
+    cumulative_infiltration = initial_cumulative_infiltration(
+        initial_cumulative_infiltration_m, (n_cells,)
+    )
+    if soil is None and np.any(cumulative_infiltration != 0.0):
+        raise ValueError(
+            "initial_cumulative_infiltration_m requires Green-Ampt soil properties"
+        )
     manning_table_depth, manning_table_values = _prepare_manning_table(
         manning_depth_m, manning_n_table, n_cells
     )
@@ -976,6 +999,7 @@ def run_model(
     times = [0.0]
     h_history = [h.copy()]
     q_history = [q.copy()]
+    cumulative_infiltration_history = [cumulative_infiltration.copy()]
     initial_upstream_flux, initial_downstream_flux = boundary_fluxes(
         h, q, 0.0
     )
@@ -987,6 +1011,7 @@ def run_model(
     mass_source = 0.0
     mass_rainfall = 0.0
     mass_lateral_inflow = 0.0
+    mass_infiltration = 0.0
     mass_outflow = 0.0
     mass_floor_correction = 0.0
     t_current = 0.0
@@ -1168,6 +1193,7 @@ def run_model(
         )
         h_previous = h.copy()
         q_previous = q.copy()
+        cumulative_infiltration_previous = cumulative_infiltration.copy()
         first_flux_data = (
             flux_h,
             flux_q,
@@ -1216,6 +1242,44 @@ def run_model(
             h_new, q_new = h_stage, q_stage
             diagnostics = first_diagnostics
 
+        infiltration_volume = 0.0
+        if soil is not None:
+            infiltrated_depth, cumulative_infiltration = green_ampt_step(
+                h_new,
+                cumulative_infiltration,
+                *soil,
+                dt,
+            )
+            area_before_infiltration = _cross_section_area(
+                h_new,
+                bottom_width,
+                side_slope,
+                table_depth,
+                table_width,
+            )
+            h_new = np.maximum(h_new - infiltrated_depth, 0.0)
+            area_after_infiltration = _cross_section_area(
+                h_new,
+                bottom_width,
+                side_slope,
+                table_depth,
+                table_width,
+            )
+            retained_fraction = np.zeros_like(area_after_infiltration)
+            np.divide(
+                area_after_infiltration,
+                area_before_infiltration,
+                out=retained_fraction,
+                where=area_before_infiltration > H_FLOOR,
+            )
+            q_new *= retained_fraction
+            q_new[h_new <= H_FLOOR] = 0.0
+            infiltration_volume = float(
+                np.sum(
+                    (area_before_infiltration - area_after_infiltration) * dx
+                )
+            )
+
         mass_floor_correction += diagnostics["floor_volume"]
         mass_inflow += diagnostics["inflow_rate"] * dt
         downstream_mass = diagnostics["downstream_rate"] * dt
@@ -1224,8 +1288,10 @@ def run_model(
         else:
             mass_inflow -= downstream_mass
         mass_source += diagnostics["source_rate"] * dt
+        mass_source -= infiltration_volume
         mass_rainfall += diagnostics["rainfall_rate"] * dt
         mass_lateral_inflow += diagnostics["lateral_inflow_rate"] * dt
+        mass_infiltration += infiltration_volume
 
         h, q = h_new, q_new
         t_next = t_current + dt
@@ -1238,12 +1304,23 @@ def run_model(
             fraction = min(max(fraction, 0.0), 1.0)
             record_h = h_previous + fraction * (h_new - h_previous)
             record_q = q_previous + fraction * (q_new - q_previous)
+            record_cumulative_infiltration = (
+                cumulative_infiltration_previous
+                + fraction
+                * (
+                    cumulative_infiltration
+                    - cumulative_infiltration_previous
+                )
+            )
             upstream_flux, downstream_flux = boundary_fluxes(
                 record_h, record_q, record_time
             )
             times.append(record_time)
             h_history.append(record_h)
             q_history.append(record_q)
+            cumulative_infiltration_history.append(
+                record_cumulative_infiltration
+            )
             upstream_flux_history.append(upstream_flux)
             downstream_flux_history.append(downstream_flux)
             next_record_idx += 1
@@ -1256,6 +1333,13 @@ def run_model(
         "manning_n": roughness,
         "manning_depth_m": manning_table_depth,
         "manning_n_table": manning_table_values,
+        "soil_ksat_m_per_min": None if soil is None else soil[0],
+        "soil_suction_head_m": None if soil is None else soil[1],
+        "soil_moisture_deficit": None if soil is None else soil[2],
+        "cumulative_infiltration_history": np.asarray(
+            cumulative_infiltration_history
+        ),
+        "cumulative_infiltration_final": cumulative_infiltration,
         "manning_n_history": np.asarray(
             [
                 _manning_at_depth(
@@ -1305,6 +1389,7 @@ def run_model(
         "mass_source": mass_source,
         "mass_rainfall": mass_rainfall,
         "mass_lateral_inflow": mass_lateral_inflow,
+        "mass_infiltration": mass_infiltration,
         "mass_outflow": mass_outflow,
         "mass_floor_correction": mass_floor_correction,
     }
@@ -1334,6 +1419,8 @@ class _SaintVenantSolver:
             "downstream_boundary",
             "downstream_stage",
             "spatial_order",
+            "initial_cumulative_infiltration",
+            "soil_infiltration",
         }
     )
 
@@ -1382,6 +1469,18 @@ class _SaintVenantSolver:
             ),
             manning_depth_m=getattr(domain, "manning_depth_m", None),
             manning_n_table=getattr(domain, "manning_n_table", None),
+            soil_ksat_m_per_min=getattr(
+                domain, "soil_ksat_m_per_min", None
+            ),
+            soil_suction_head_m=getattr(
+                domain, "soil_suction_head_m", None
+            ),
+            soil_moisture_deficit=getattr(
+                domain, "soil_moisture_deficit", None
+            ),
+            initial_cumulative_infiltration_m=(
+                scenario.initial_cumulative_infiltration_m
+            ),
             downstream_boundary=scenario.downstream_boundary,
             downstream_stage_m=scenario.downstream_stage_m,
             spatial_order=scenario.spatial_order,
@@ -1426,6 +1525,16 @@ class _SaintVenantSolver:
                 "discharge_final": raw["q_final"],
                 "mass_rainfall": raw["mass_rainfall"],
                 "mass_lateral_inflow": raw["mass_lateral_inflow"],
+                "mass_infiltration": raw["mass_infiltration"],
+                "soil_ksat_m_per_min": raw["soil_ksat_m_per_min"],
+                "soil_suction_head_m": raw["soil_suction_head_m"],
+                "soil_moisture_deficit": raw["soil_moisture_deficit"],
+                "cumulative_infiltration_history": raw[
+                    "cumulative_infiltration_history"
+                ],
+                "cumulative_infiltration_final": raw[
+                    "cumulative_infiltration_final"
+                ],
             },
         )
 

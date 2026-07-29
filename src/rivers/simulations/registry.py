@@ -17,6 +17,14 @@ def dispatch(name: str, domain, scenario):
         raise KeyError(f"Unknown solver '{name}'. Available: {sorted(SOLVERS)}")
     solver = SOLVERS[name]
     _check_scenario(solver, scenario)
+    if (
+        getattr(domain, "soil_ksat_m_per_min", None) is not None
+        and "soil_infiltration" not in solver.supports
+    ):
+        raise UnsupportedScenario(
+            f"Solver '{solver.name}' does not support soil infiltration. "
+            f"Use saint_venant or saint_venant_2d for a soil-enabled domain."
+        )
     return solver.run(domain, scenario)
 
 
@@ -39,6 +47,10 @@ def _check_scenario(solver, scenario) -> None:
         "downstream_boundary": lambda s: s.downstream_boundary != "outflow",
         "downstream_stage": lambda s: s.downstream_stage_m is not None,
         "spatial_order": lambda s: s.spatial_order != 1,
+        "initial_cumulative_infiltration": lambda s: (
+            isinstance(s.initial_cumulative_infiltration_m, np.ndarray)
+            or float(s.initial_cumulative_infiltration_m) != 0.0
+        ),
     }
     for knob, is_active in checks.items():
         if knob not in solver.supports and is_active(scenario):

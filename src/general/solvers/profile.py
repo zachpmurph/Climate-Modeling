@@ -21,6 +21,9 @@ class RiverProfile:
     manning_n: np.ndarray
     initial_depth_m: np.ndarray | None = None
     rainfall_rate_m_per_min: np.ndarray | None = None
+    soil_ksat_m_per_min: np.ndarray | None = None
+    soil_suction_head_m: np.ndarray | None = None
+    soil_moisture_deficit: np.ndarray | None = None
     labels: tuple[str, ...] = ()
 
     @property
@@ -64,7 +67,17 @@ def _optional_array(values, expected_len, name, *, minimum=None):
     return arr
 
 
-def make_profile(station_m, slope, manning_n, initial_depth_m=None, rainfall_rate_m_per_min=None, labels=None):
+def make_profile(
+    station_m,
+    slope,
+    manning_n,
+    initial_depth_m=None,
+    rainfall_rate_m_per_min=None,
+    soil_ksat_m_per_min=None,
+    soil_suction_head_m=None,
+    soil_moisture_deficit=None,
+    labels=None,
+):
     station_m = np.asarray(station_m, dtype=float)
     slope = np.asarray(slope, dtype=float)
     manning_n = np.asarray(manning_n, dtype=float)
@@ -81,6 +94,38 @@ def make_profile(station_m, slope, manning_n, initial_depth_m=None, rainfall_rat
         initial = np.maximum(initial, 0.0)
 
     rainfall = _optional_array(rainfall_rate_m_per_min, len(station_m), "rainfall_rate_m_per_min", minimum=0.0)
+    soil_values = (
+        soil_ksat_m_per_min,
+        soil_suction_head_m,
+        soil_moisture_deficit,
+    )
+    if any(value is not None for value in soil_values) and any(
+        value is None for value in soil_values
+    ):
+        raise ValueError(
+            "Soil profiles require soil_ksat_m_per_min, "
+            "soil_suction_head_m, and soil_moisture_deficit together"
+        )
+    soil_ksat = _optional_array(
+        soil_ksat_m_per_min,
+        len(station_m),
+        "soil_ksat_m_per_min",
+        minimum=0.0,
+    )
+    soil_suction = _optional_array(
+        soil_suction_head_m,
+        len(station_m),
+        "soil_suction_head_m",
+        minimum=0.0,
+    )
+    soil_deficit = _optional_array(
+        soil_moisture_deficit,
+        len(station_m),
+        "soil_moisture_deficit",
+        minimum=0.0,
+    )
+    if soil_deficit is not None and np.any(soil_deficit > 1.0):
+        raise ValueError("soil_moisture_deficit values must be <= 1")
 
     if labels is None:
         labels = tuple("" for _ in station_m)
@@ -96,6 +141,9 @@ def make_profile(station_m, slope, manning_n, initial_depth_m=None, rainfall_rat
         manning_n=manning_n,
         initial_depth_m=initial,
         rainfall_rate_m_per_min=rainfall,
+        soil_ksat_m_per_min=soil_ksat,
+        soil_suction_head_m=soil_suction,
+        soil_moisture_deficit=soil_deficit,
         labels=labels,
     )
 
@@ -104,7 +152,8 @@ def load_profile_csv(path):
     """Load a river profile CSV.
 
     Required columns: station_m, slope, manning_n.
-    Optional columns: initial_depth_m, rainfall_rate_m_per_min, label.
+    Optional columns: initial_depth_m, rainfall_rate_m_per_min,
+    soil_ksat_m_per_min, soil_suction_head_m, soil_moisture_deficit, label.
     """
     with open(path, newline="") as f:
         rows = list(csv.DictReader(f))
@@ -116,6 +165,20 @@ def load_profile_csv(path):
     has_initial = any(value not in (None, "") for value in initial_values)
     rainfall_values = [row.get("rainfall_rate_m_per_min", "") for row in rows]
     has_rainfall = any(value not in (None, "") for value in rainfall_values)
+    soil_fields = (
+        "soil_ksat_m_per_min",
+        "soil_suction_head_m",
+        "soil_moisture_deficit",
+    )
+    soil_presence = {
+        field: any(row.get(field, "") not in (None, "") for row in rows)
+        for field in soil_fields
+    }
+    if any(soil_presence.values()) and not all(soil_presence.values()):
+        raise ValueError(
+            "Soil profile columns must provide conductivity, suction head, "
+            "and moisture deficit together"
+        )
 
     return make_profile(
         station_m=[_as_float(row, "station_m") for row in rows],
@@ -126,6 +189,21 @@ def load_profile_csv(path):
         else None,
         rainfall_rate_m_per_min=[_as_float(row, "rainfall_rate_m_per_min", required=False, default=0.0) for row in rows]
         if has_rainfall
+        else None,
+        soil_ksat_m_per_min=[
+            _as_float(row, "soil_ksat_m_per_min") for row in rows
+        ]
+        if all(soil_presence.values())
+        else None,
+        soil_suction_head_m=[
+            _as_float(row, "soil_suction_head_m") for row in rows
+        ]
+        if all(soil_presence.values())
+        else None,
+        soil_moisture_deficit=[
+            _as_float(row, "soil_moisture_deficit") for row in rows
+        ]
+        if all(soil_presence.values())
         else None,
         labels=[row.get("label", "") for row in rows],
     )
@@ -144,6 +222,20 @@ def load_profile_json(path):
 
     has_initial = any(row.get("initial_depth_m") is not None for row in rows)
     has_rainfall = any(row.get("rainfall_rate_m_per_min") is not None for row in rows)
+    soil_fields = (
+        "soil_ksat_m_per_min",
+        "soil_suction_head_m",
+        "soil_moisture_deficit",
+    )
+    soil_presence = {
+        field: any(row.get(field) is not None for row in rows)
+        for field in soil_fields
+    }
+    if any(soil_presence.values()) and not all(soil_presence.values()):
+        raise ValueError(
+            "Soil profile fields must provide conductivity, suction head, "
+            "and moisture deficit together"
+        )
     return make_profile(
         station_m=[_as_float(row, "station_m") for row in rows],
         slope=[_as_float(row, "slope") for row in rows],
@@ -153,6 +245,21 @@ def load_profile_json(path):
         else None,
         rainfall_rate_m_per_min=[_as_float(row, "rainfall_rate_m_per_min", required=False, default=0.0) for row in rows]
         if has_rainfall
+        else None,
+        soil_ksat_m_per_min=[
+            _as_float(row, "soil_ksat_m_per_min") for row in rows
+        ]
+        if all(soil_presence.values())
+        else None,
+        soil_suction_head_m=[
+            _as_float(row, "soil_suction_head_m") for row in rows
+        ]
+        if all(soil_presence.values())
+        else None,
+        soil_moisture_deficit=[
+            _as_float(row, "soil_moisture_deficit") for row in rows
+        ]
+        if all(soil_presence.values())
         else None,
         labels=[str(row.get("label", "")) for row in rows],
     )
@@ -211,6 +318,9 @@ def resample_profile(profile: RiverProfile, cells: int) -> RiverProfile:
         rainfall_rate_m_per_min=interpolate(
             profile.rainfall_rate_m_per_min
         ),
+        soil_ksat_m_per_min=interpolate(profile.soil_ksat_m_per_min),
+        soil_suction_head_m=interpolate(profile.soil_suction_head_m),
+        soil_moisture_deficit=interpolate(profile.soil_moisture_deficit),
         labels=tuple(labels),
     )
 
@@ -362,6 +472,9 @@ def domain_from_profile(
         cross_section_wetted_perimeter_m=section_perimeter,
         manning_depth_m=roughness_depth,
         manning_n_table=roughness_table,
+        soil_ksat_m_per_min=profile.soil_ksat_m_per_min,
+        soil_suction_head_m=profile.soil_suction_head_m,
+        soil_moisture_deficit=profile.soil_moisture_deficit,
     )
 
 
@@ -638,8 +751,9 @@ def load_surveyed_cross_sections(path, station_m):
 def load_reviewed_terrain(path, profile):
     """Load a complete Cartesian terrain grid from a reviewable long CSV.
 
-    Required columns are ``x_m,y_m,dx_m,dy_m,bed_elevation_m``. An optional
-    complete ``manning_n`` column overrides longitudinal profile roughness.
+    Required columns are ``x_m,y_m,dx_m,dy_m,bed_elevation_m``. Optional
+    complete ``manning_n`` and Green-Ampt soil columns override longitudinal
+    profile properties.
     """
     with Path(path).open(newline="", encoding="utf-8-sig") as handle:
         reader = csv.DictReader(handle)
@@ -655,10 +769,22 @@ def load_reviewed_terrain(path, profile):
         raise ValueError("Terrain CSV is empty")
 
     has_roughness_column = "manning_n" in fieldnames
+    soil_fields = (
+        "soil_ksat_m_per_min",
+        "soil_suction_head_m",
+        "soil_moisture_deficit",
+    )
+    soil_columns = [field in fieldnames for field in soil_fields]
+    if any(soil_columns) and not all(soil_columns):
+        raise ValueError(
+            "Terrain soil properties require soil_ksat_m_per_min, "
+            "soil_suction_head_m, and soil_moisture_deficit columns together"
+        )
     parsed = []
     try:
         for row in rows:
             roughness_text = row.get("manning_n", "")
+            soil_text = [row.get(field, "") for field in soil_fields]
             parsed.append(
                 (
                     float(row["x_m"]),
@@ -671,6 +797,16 @@ def load_reviewed_terrain(path, profile):
                         if roughness_text is None
                         or not roughness_text.strip()
                         else float(roughness_text)
+                    ),
+                    *(
+                        [
+                            None
+                            if value is None or not value.strip()
+                            else float(value)
+                            for value in soil_text
+                        ]
+                        if all(soil_columns)
+                        else [None, None, None]
                     ),
                 )
             )
@@ -705,11 +841,25 @@ def load_reviewed_terrain(path, profile):
     y_index = {value: index for index, value in enumerate(y_m)}
     bed = np.full((len(x_m), len(y_m)), np.nan)
     roughness_grid = np.full_like(bed, np.nan)
+    soil_ksat_grid = np.full_like(bed, np.nan)
+    soil_suction_grid = np.full_like(bed, np.nan)
+    soil_deficit_grid = np.full_like(bed, np.nan)
     dx_grid = np.full_like(bed, np.nan)
     dy_grid = np.full_like(bed, np.nan)
     seen = set()
     roughness_presence = []
-    for x, y, dx, dy, elevation, roughness in parsed:
+    soil_presence = []
+    for (
+        x,
+        y,
+        dx,
+        dy,
+        elevation,
+        roughness,
+        soil_ksat,
+        soil_suction,
+        soil_deficit,
+    ) in parsed:
         key = (x, y)
         if key in seen:
             raise ValueError(f"Terrain CSV contains duplicate cell {key}")
@@ -721,6 +871,20 @@ def load_reviewed_terrain(path, profile):
         roughness_presence.append(roughness is not None)
         if roughness is not None:
             roughness_grid[i, j] = roughness
+        present = (
+            soil_ksat is not None,
+            soil_suction is not None,
+            soil_deficit is not None,
+        )
+        if any(present) and not all(present):
+            raise ValueError(
+                "Terrain soil properties must be supplied together in every cell"
+            )
+        soil_presence.append(all(present))
+        if all(present):
+            soil_ksat_grid[i, j] = soil_ksat
+            soil_suction_grid[i, j] = soil_suction
+            soil_deficit_grid[i, j] = soil_deficit
     if np.any(~np.isfinite(bed)):
         raise ValueError(
             "Terrain CSV must contain every x/y coordinate combination"
@@ -759,6 +923,48 @@ def load_reviewed_terrain(path, profile):
         ).copy()
         roughness_source = "river_profile_interpolated_across_y"
 
+    if any(soil_presence) and not all(soil_presence):
+        raise ValueError(
+            "Terrain soil properties must be supplied for every cell or none"
+        )
+    if all(soil_presence):
+        if (
+            np.any(~np.isfinite(soil_ksat_grid))
+            or np.any(soil_ksat_grid < 0.0)
+            or np.any(~np.isfinite(soil_suction_grid))
+            or np.any(soil_suction_grid < 0.0)
+            or np.any(~np.isfinite(soil_deficit_grid))
+            or np.any((soil_deficit_grid < 0.0) | (soil_deficit_grid > 1.0))
+        ):
+            raise ValueError(
+                "Terrain soil conductivity/suction must be finite and "
+                "non-negative, and moisture deficit must be in [0, 1]"
+            )
+        soil_ksat = soil_ksat_grid
+        soil_suction = soil_suction_grid
+        soil_deficit = soil_deficit_grid
+    elif profile.soil_ksat_m_per_min is not None:
+        soil_ksat = np.broadcast_to(
+            np.interp(
+                x_m, profile.station_m, profile.soil_ksat_m_per_min
+            )[:, None],
+            bed.shape,
+        ).copy()
+        soil_suction = np.broadcast_to(
+            np.interp(
+                x_m, profile.station_m, profile.soil_suction_head_m
+            )[:, None],
+            bed.shape,
+        ).copy()
+        soil_deficit = np.broadcast_to(
+            np.interp(
+                x_m, profile.station_m, profile.soil_moisture_deficit
+            )[:, None],
+            bed.shape,
+        ).copy()
+    else:
+        soil_ksat = soil_suction = soil_deficit = None
+
     slope_x = -np.gradient(bed, x_m, axis=0, edge_order=1)
     slope_y = -np.gradient(bed, y_m, axis=1, edge_order=1)
     domain = Domain2D(
@@ -770,6 +976,9 @@ def load_reviewed_terrain(path, profile):
         slope_y=slope_y,
         manning_n=manning_n,
         bed_elevation_m=bed,
+        soil_ksat_m_per_min=soil_ksat,
+        soil_suction_head_m=soil_suction,
+        soil_moisture_deficit=soil_deficit,
     )
     return domain, roughness_source
 
@@ -863,4 +1072,25 @@ def domain2d_from_profile(
         slope_y=slope_y,
         manning_n=np.broadcast_to(np.asarray(profile.manning_n)[:, None], shape).copy(),
         bed_elevation_m=bed,
+        soil_ksat_m_per_min=(
+            None
+            if profile.soil_ksat_m_per_min is None
+            else np.broadcast_to(
+                np.asarray(profile.soil_ksat_m_per_min)[:, None], shape
+            ).copy()
+        ),
+        soil_suction_head_m=(
+            None
+            if profile.soil_suction_head_m is None
+            else np.broadcast_to(
+                np.asarray(profile.soil_suction_head_m)[:, None], shape
+            ).copy()
+        ),
+        soil_moisture_deficit=(
+            None
+            if profile.soil_moisture_deficit is None
+            else np.broadcast_to(
+                np.asarray(profile.soil_moisture_deficit)[:, None], shape
+            ).copy()
+        ),
     )

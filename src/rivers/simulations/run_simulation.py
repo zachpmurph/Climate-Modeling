@@ -813,6 +813,9 @@ def main(argv=None):
             discharge_y_m2_per_min=result.extra["discharge_y_history"],
             discharge_x_final=result.extra["discharge_x_final"],
             discharge_y_final=result.extra["discharge_y_final"],
+            cumulative_infiltration_m=result.extra[
+                "cumulative_infiltration_history"
+            ],
         )
 
     # Mass balance error
@@ -879,6 +882,7 @@ def main(argv=None):
         "mass_source": result.mass_source,
         "mass_rainfall": result.extra.get("mass_rainfall"),
         "mass_lateral_inflow": result.extra.get("mass_lateral_inflow"),
+        "mass_infiltration": result.extra.get("mass_infiltration"),
         "mass_outflow": result.mass_outflow,
         "mass_correction": result.mass_correction,
         "mass_balance_error": mass_balance_error,
@@ -921,6 +925,23 @@ def main(argv=None):
         },
         "spatial_order": args.spatial_order,
     }
+    if result.extra.get("soil_ksat_m_per_min") is not None:
+        summary["soil_infiltration"] = {
+            "method": "green_ampt",
+            "soil_ksat_m_per_min": result.extra[
+                "soil_ksat_m_per_min"
+            ].tolist(),
+            "soil_suction_head_m": result.extra[
+                "soil_suction_head_m"
+            ].tolist(),
+            "soil_moisture_deficit": result.extra[
+                "soil_moisture_deficit"
+            ].tolist(),
+            "cumulative_infiltration_final_m": result.extra[
+                "cumulative_infiltration_final"
+            ].tolist(),
+            "recovery_between_storms": False,
+        }
     if args.stage_manning is not None:
         summary["stage_dependent_manning"] = {
             "source": _portable_path(args.stage_manning),
