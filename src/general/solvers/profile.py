@@ -7,7 +7,7 @@ import numpy as np
 
 from general.solvers.contract import Domain, Domain2D
 
-MIN_DEPTH = 1e-10
+MIN_DEPTH = 0.0
 
 
 @dataclass(frozen=True)
@@ -77,7 +77,7 @@ def make_profile(station_m, slope, manning_n, initial_depth_m=None, rainfall_rat
 
     initial = _optional_array(initial_depth_m, len(station_m), "initial_depth_m", minimum=0.0)
     if initial is not None:
-        initial = np.maximum(initial, MIN_DEPTH)
+        initial = np.maximum(initial, 0.0)
 
     rainfall = _optional_array(rainfall_rate_m_per_min, len(station_m), "rainfall_rate_m_per_min", minimum=0.0)
 

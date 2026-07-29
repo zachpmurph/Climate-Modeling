@@ -80,7 +80,12 @@ def test_upstream_inflow_mass_balance():
     storage_initial = np.sum(result["depth_initial"] * result["dx_m"])
     storage_final = np.sum(result["depth_final"] * result["dx_m"])
     delta_storage = storage_final - storage_initial
-    expected_delta = result["mass_inflow"] + result["mass_source"] - result["mass_outflow"]
+    expected_delta = (
+        result["mass_inflow"]
+        + result["mass_source"]
+        - result["mass_outflow"]
+        + result["mass_floor_correction"]
+    )
 
     assert delta_storage == pytest.approx(expected_delta, rel=1e-3, abs=1e-8)
     assert result["mass_source"] == pytest.approx(0.0)
@@ -105,11 +110,37 @@ def test_rainfall_source_mass_balance():
     storage_initial = np.sum(result["depth_initial"] * result["dx_m"])
     storage_final = np.sum(result["depth_final"] * result["dx_m"])
     delta_storage = storage_final - storage_initial
-    expected_delta = result["mass_inflow"] + result["mass_source"] - result["mass_outflow"]
+    expected_delta = (
+        result["mass_inflow"]
+        + result["mass_source"]
+        - result["mass_outflow"]
+        + result["mass_floor_correction"]
+    )
     expected_source = 0.00001 * np.sum(profile.dx_m) * 10.0
 
     assert result["mass_source"] == pytest.approx(expected_source, rel=1e-10)
     assert delta_storage == pytest.approx(expected_delta, rel=1e-3, abs=1e-8)
+
+
+def test_exactly_dry_domain_stays_dry_without_artificial_mass():
+    profile = la.make_profile(
+        station_m=[0.0, 100.0, 200.0],
+        slope=[0.001, 0.001, 0.001],
+        manning_n=[0.04, 0.04, 0.04],
+        initial_depth_m=[0.0, 0.0, 0.0],
+    )
+    result = la.run_model(
+        profile,
+        t_final_min=10.0,
+        left_inflow_flux=0.0,
+    )
+
+    assert np.array_equal(result["depth_initial"], np.zeros(3))
+    assert np.array_equal(result["depth_final"], np.zeros(3))
+    assert result["mass_inflow"] == 0.0
+    assert result["mass_source"] == 0.0
+    assert result["mass_outflow"] == 0.0
+    assert result["mass_floor_correction"] == 0.0
 
 
 def test_rectangular_width_uses_hydraulic_radius_and_conserves_volume():
@@ -131,7 +162,10 @@ def test_rectangular_width_uses_hydraulic_radius_and_conserves_volume():
         * profile.dx_m
     )
     expected_delta = (
-        result["mass_inflow"] + result["mass_source"] - result["mass_outflow"]
+        result["mass_inflow"]
+        + result["mass_source"]
+        - result["mass_outflow"]
+        + result["mass_floor_correction"]
     )
     assert storage_delta == pytest.approx(expected_delta, rel=1e-9, abs=1e-10)
     assert result["mass_source"] == pytest.approx(

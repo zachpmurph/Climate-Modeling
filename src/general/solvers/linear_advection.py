@@ -39,7 +39,7 @@ from general.solvers.profile import (
     make_profile,
 )
 
-MIN_DEPTH = 1e-10
+MIN_DEPTH = 0.0
 
 
 def q(depth_m, slope, manning_n):
@@ -100,7 +100,7 @@ def _initial_depth(profile, base_depth_m, wave_center_m, wave_amplitude_m, wave_
             wave_width_m = max(float(profile.length_m) / 20.0, float(np.min(profile.dx_m)))
         depth += wave_amplitude_m * np.exp(-((profile.station_m - wave_center_m) ** 2) / (2.0 * wave_width_m ** 2))
 
-    return np.maximum(depth, MIN_DEPTH)
+    return np.maximum(depth, 0.0)
 
 
 def _evaluate_rainfall(rainfall, stations_m, t_current):
@@ -224,6 +224,7 @@ def run_model(
     mass_inflow = 0.0
     mass_source = 0.0
     mass_outflow = 0.0
+    mass_floor_correction = 0.0
 
     while t_current < t_final_min - 1e-12:
         # Adaptive time step from the CFL condition against the current max wave
@@ -278,18 +279,34 @@ def run_model(
             t_current,
         )
         area = channel_width * depth
+        area_source = channel_width * source
+        outgoing = interface_flux[1:]
+        available = (area + dt * area_source) * profile.dx_m
+        theta = np.ones_like(area)
+        draining = dt * outgoing > available
+        np.divide(
+            available,
+            dt * outgoing,
+            out=theta,
+            where=draining,
+        )
+        interface_flux[1:] *= np.clip(theta, 0.0, 1.0)
         area = (
             area
             - (dt / profile.dx_m) * (interface_flux[1:] - interface_flux[:-1])
-            + dt * channel_width * source
+            + dt * area_source
         )
-        depth = np.maximum(area / channel_width, MIN_DEPTH)
+        floor_addition = np.maximum(-area, 0.0)
+        mass_floor_correction += float(
+            np.sum(floor_addition * profile.dx_m)
+        )
+        depth = np.maximum(area, 0.0) / channel_width
 
         mass_inflow += inflow * dt
         mass_source += float(
             np.sum(source * channel_width * profile.dx_m) * dt
         )
-        mass_outflow += cell_flux[-1] * dt
+        mass_outflow += interface_flux[-1] * dt
         t_current += dt
 
         if next_record_idx < len(record_times) and t_current >= record_times[next_record_idx] - 1e-9:
@@ -311,6 +328,7 @@ def run_model(
         "mass_inflow": mass_inflow,
         "mass_source": mass_source,
         "mass_outflow": mass_outflow,
+        "mass_floor_correction": mass_floor_correction,
         "left_inflow_flux": left_inflow_flux,
         "rainfall_rate_m_per_min": rainfall_rate_m_per_min,
         "rainfall_start_min": rainfall_start_min,
@@ -336,7 +354,12 @@ def save_summary_json(result, path):
     cell_plan_area = result["channel_width_m"] * result["dx_m"]
     storage_initial = float(np.sum(result["depth_initial"] * cell_plan_area))
     storage_final = float(np.sum(result["depth_final"] * cell_plan_area))
-    expected_delta = result["mass_inflow"] + result["mass_source"] - result["mass_outflow"]
+    expected_delta = (
+        result["mass_inflow"]
+        + result["mass_source"]
+        - result["mass_outflow"]
+        + result["mass_floor_correction"]
+    )
     summary = {
         "t_start_min": float(result["times"][0]),
         "t_final_min": float(result["times"][-1]),
@@ -357,6 +380,7 @@ def save_summary_json(result, path):
         f"mass_inflow_{'m3' if result['uses_cross_section'] else 'm2'}": float(result["mass_inflow"]),
         f"mass_source_{'m3' if result['uses_cross_section'] else 'm2'}": float(result["mass_source"]),
         f"mass_outflow_{'m3' if result['uses_cross_section'] else 'm2'}": float(result["mass_outflow"]),
+        f"mass_floor_correction_{'m3' if result['uses_cross_section'] else 'm2'}": float(result["mass_floor_correction"]),
         f"storage_initial_{'m3' if result['uses_cross_section'] else 'm2'}": storage_initial,
         f"storage_final_{'m3' if result['uses_cross_section'] else 'm2'}": storage_final,
         f"storage_delta_{'m3' if result['uses_cross_section'] else 'm2'}": storage_final - storage_initial,
@@ -405,6 +429,7 @@ class _KinematicWaveSolver:
             mass_inflow=result["mass_inflow"],
             mass_source=result["mass_source"],
             mass_outflow=result["mass_outflow"],
+            mass_correction=result["mass_floor_correction"],
             extra={
                 "channel_width_m": result["channel_width_m"],
                 "cross_section_area_history": (
