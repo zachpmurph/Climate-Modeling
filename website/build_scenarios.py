@@ -1,0 +1,495 @@
+"""Generate the Flood Explorer website's data artifacts using the real solvers.
+
+Two modes:
+
+    python website/build_scenarios.py               # atlas: data/index.json + data/scenarios/*.json
+    python website/build_scenarios.py --references  # parity references for the JS solver ports
+
+The atlas runs the repository's actual Python solvers (kinematic wave and 1-D
+Saint-Venant) over a region x event matrix and writes the site's browsable
+scenario JSONs. The references mode runs small fixed cases whose outputs the
+Node test (website/test/solver_parity.test.mjs) compares against the JS ports.
+
+All quantities are meters and minutes internally (Manning n = SI / 60).
+"""
+
+import argparse
+import json
+import math
+import sys
+from pathlib import Path
+
+import numpy as np
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SRC_ROOT = REPO_ROOT / "src"
+if str(SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(SRC_ROOT))
+
+from general.solvers import linear_advection as la  # noqa: E402
+from general.solvers import saint_venant_1d as sv1  # noqa: E402
+from general.solvers.profile import load_profile, make_profile  # noqa: E402
+
+WEBSITE_DIR = Path(__file__).resolve().parent
+DATA_DIR = WEBSITE_DIR / "data"
+SCENARIO_DIR = DATA_DIR / "scenarios"
+REFERENCE_DIR = WEBSITE_DIR / "test" / "reference"
+
+MAX_FRAMES = 145
+MM_PER_HOUR_TO_M_PER_MIN = 1.0 / 1000.0 / 60.0
+
+
+# ── regions ────────────────────────────────────────────────────────────────
+
+def _columbia_region():
+    raw = load_profile(REPO_ROOT / "data" / "real_world_rivers" / "columbia_hanford_profile.csv")
+    # The source profile's first cell carries the ingestion slope floor (1e-6):
+    # the dam pool upstream of Priest Rapids is nearly flat in the DEM. A
+    # kinematic-wave cell with a near-zero slope cannot convey flow and becomes a
+    # bottomless reservoir (tens of meters of ponded depth), which is a model
+    # artifact rather than river behavior. For this screening atlas we replace the
+    # floored value with the adjacent cell's slope, and say so in the region text.
+    slope = raw.slope.copy()
+    slope[0] = slope[1]
+    profile = make_profile(
+        station_m=raw.station_m,
+        slope=slope,
+        manning_n=raw.manning_n,
+        initial_depth_m=raw.initial_depth_m,
+        rainfall_rate_m_per_min=raw.rainfall_rate_m_per_min,
+        labels=raw.labels,
+    )
+    return {
+        "id": "columbia_hanford",
+        "name": "Columbia River — Hanford Reach",
+        "kind": "real",
+        "solver": "kinematic_wave",
+        "description": (
+            "A 90 km reach of the Columbia River in Washington State, from Priest "
+            "Rapids Dam to Pasco. Built from ingested real-world data: DEM-derived "
+            "slopes, USGS gauge context, and reviewed channel roughness. The flat "
+            "dam-pool slope in the first cell of the source profile is replaced "
+            "with the adjacent cell's slope for kinematic screening."
+        ),
+        "source": "data/real_world_rivers/columbia_hanford_profile.csv (ingested pipeline output; first-cell slope adjusted)",
+        "profile": profile,
+        "sim_minutes": 2880.0,   # 48 h
+        "rain_scale": 1.0,
+    }
+
+
+def _steep_creek_region():
+    n_cells = 61
+    stations = np.linspace(0.0, 3000.0, n_cells)
+    slope = np.linspace(0.03, 0.015, n_cells)
+    manning_si = 0.045
+    profile = make_profile(
+        station_m=stations,
+        slope=slope,
+        manning_n=np.full(n_cells, manning_si / 60.0),
+        initial_depth_m=np.full(n_cells, 0.15),
+    )
+    return {
+        "id": "steep_creek",
+        "name": "Steep Mountain Creek (synthetic)",
+        "kind": "synthetic",
+        "solver": "saint_venant",
+        "description": (
+            "A synthetic 3 km mountain creek: steep (3% easing to 1.5%), rough "
+            "(SI Manning n 0.045), shallow baseflow. Responds fast and hard to "
+            "storms — the flash-flood archetype. Run with the 1-D Saint-Venant "
+            "(full dynamic wave) solver."
+        ),
+        "source": "synthetic reach defined in website/build_scenarios.py",
+        "profile": profile,
+        "sim_minutes": 360.0,    # 6 h
+        "rain_scale": 1.0,
+    }
+
+
+def _lowland_region():
+    n_cells = 81
+    stations = np.linspace(0.0, 20000.0, n_cells)
+    slope = np.linspace(6e-4, 2e-4, n_cells)
+    manning_si = 0.03
+    profile = make_profile(
+        station_m=stations,
+        slope=slope,
+        manning_n=np.full(n_cells, manning_si / 60.0),
+        initial_depth_m=np.full(n_cells, 1.2),
+    )
+    return {
+        "id": "lowland_meander",
+        "name": "Lowland Meander (synthetic)",
+        "kind": "synthetic",
+        "solver": "kinematic_wave",
+        "description": (
+            "A synthetic 20 km lowland river: gentle slopes (0.06% easing to "
+            "0.02%), moderate roughness (SI Manning n 0.03), 1.2 m baseflow depth. "
+            "Slow to rise and slow to drain — floods arrive late and linger."
+        ),
+        "source": "synthetic reach defined in website/build_scenarios.py",
+        "profile": profile,
+        "sim_minutes": 1440.0,   # 24 h
+        "rain_scale": 1.0,
+    }
+
+
+def _baseline_inflow(profile):
+    """Manning-equilibrium inflow at the mid-reach initial depth: keeps the reach
+    near steady state under the baseline event."""
+    mid = len(profile.station_m) // 2
+    depth = 0.01 if profile.initial_depth_m is None else float(profile.initial_depth_m[mid])
+    return float(la.q(np.array([depth]), profile.slope[mid], profile.manning_n[mid])[0])
+
+
+def _events(q0, sim_minutes, rain_scale):
+    rain = lambda mm_per_hour: mm_per_hour * MM_PER_HOUR_TO_M_PER_MIN * rain_scale
+    third = sim_minutes / 3.0
+    return [
+        {
+            "id": "baseline",
+            "name": "Baseline flow",
+            "narrative": "Normal conditions: steady upstream inflow, no storm. The reference the other events are compared against.",
+            "left_inflow": q0,
+            "rain_rate": 0.0,
+            "rain_start": 0.0,
+            "rain_end": None,
+        },
+        {
+            "id": "moderate_storm",
+            "name": "Moderate storm",
+            "narrative": "A 10 mm/h storm over the whole reach for a third of the simulation, on top of normal inflow.",
+            "left_inflow": q0,
+            "rain_rate": rain(10.0),
+            "rain_start": 0.0,
+            "rain_end": third,
+        },
+        {
+            "id": "severe_storm",
+            "name": "Severe storm",
+            "narrative": "A 30 mm/h downpour for half the simulation while upstream inflow runs 50% above normal.",
+            "left_inflow": 1.5 * q0,
+            "rain_rate": rain(30.0),
+            "rain_start": 0.0,
+            "rain_end": sim_minutes / 2.0,
+        },
+        {
+            "id": "flash_flood",
+            "name": "Upstream flood surge",
+            "narrative": "No rain, but upstream inflow jumps to four times normal — a sustained release or upstream flood wave moving through.",
+            "left_inflow": 4.0 * q0,
+            "rain_rate": 0.0,
+            "rain_start": 0.0,
+            "rain_end": None,
+        },
+        {
+            "id": "prolonged_rain",
+            "name": "Prolonged rain",
+            "narrative": "A long soaking rain: 8 mm/h for two thirds of the simulation at normal inflow.",
+            "left_inflow": q0,
+            "rain_rate": rain(8.0),
+            "rain_start": 0.0,
+            "rain_end": 2.0 * third,
+        },
+    ]
+
+
+def _record_interval(sim_minutes):
+    interval = sim_minutes / (MAX_FRAMES - 1)
+    # Round up to a tidy number of minutes.
+    return max(1.0, math.ceil(interval))
+
+
+def _run_scenario(region, event):
+    profile = region["profile"]
+    interval = _record_interval(region["sim_minutes"])
+    if region["solver"] == "kinematic_wave":
+        result = la.run_model(
+            profile,
+            t_final_min=region["sim_minutes"],
+            left_inflow_flux=event["left_inflow"],
+            record_interval_min=interval,
+            rainfall_rate_m_per_min=event["rain_rate"],
+            rainfall_start_min=event["rain_start"],
+            rainfall_end_min=event["rain_end"],
+        )
+        discharge_history = None
+    elif region["solver"] == "saint_venant":
+        rate = event["rain_rate"]
+        rain_end = event["rain_end"]
+
+        def rainfall(x, t):
+            active = rate > 0 and t >= event["rain_start"] and (rain_end is None or t < rain_end)
+            return np.full_like(x, rate if active else 0.0)
+
+        raw = sv1.run_model(
+            None,
+            region["sim_minutes"],
+            record_interval=interval,
+            h_init=profile.initial_depth_m,
+            left_inflow=event["left_inflow"],
+            rainfall=rainfall,
+            x_m=profile.station_m,
+            dx_m=profile.dx_m,
+            slope=profile.slope,
+            manning_n=profile.manning_n,
+        )
+        result = {
+            "station_m": raw["x"],
+            "dx_m": raw["dx_m"],
+            "times": raw["times"],
+            "depth_history": raw["h_history"],
+            "depth_initial": raw["h_initial"],
+            "depth_final": raw["h_final"],
+            "mass_inflow": raw["mass_inflow"],
+            "mass_source": raw["mass_source"],
+            "mass_outflow": raw["mass_outflow"],
+        }
+        discharge_history = raw["q_history"]
+    else:
+        raise ValueError(f"Unknown solver {region['solver']}")
+    return result, discharge_history
+
+
+def _metrics(result, discharge_history, profile, solver):
+    depth = np.asarray(result["depth_history"])
+    times = np.asarray(result["times"])
+    stations = np.asarray(result["station_m"])
+    flat_peak = int(np.argmax(depth))
+    ti, si = np.unravel_index(flat_peak, depth.shape)
+    if discharge_history is not None:
+        downstream_q = np.asarray(discharge_history)[:, -1]
+    else:
+        downstream_q = la.q(depth[:, -1], profile.slope[-1], profile.manning_n[-1])
+    storage_initial = float(np.sum(np.asarray(result["depth_initial"]) * np.asarray(result["dx_m"])))
+    storage_final = float(np.sum(np.asarray(result["depth_final"]) * np.asarray(result["dx_m"])))
+    balance_error = (storage_final - storage_initial) - (
+        result["mass_inflow"] + result["mass_source"] - result["mass_outflow"]
+    )
+    return {
+        "peak_depth_m": float(depth[ti, si]),
+        "peak_time_min": float(times[ti]),
+        "peak_station_m": float(stations[si]),
+        "initial_max_depth_m": float(np.max(result["depth_initial"])),
+        "final_max_depth_m": float(np.max(result["depth_final"])),
+        "downstream_hydrograph_m2_per_min": [float(v) for v in downstream_q],
+        "mass_inflow": float(result["mass_inflow"]),
+        "mass_source": float(result["mass_source"]),
+        "mass_outflow": float(result["mass_outflow"]),
+        "mass_balance_error": float(balance_error),
+        "solver": solver,
+    }
+
+
+def _validate(depth_history):
+    depth = np.asarray(depth_history)
+    if not np.all(np.isfinite(depth)):
+        raise ValueError("scenario produced non-finite depths")
+    if np.any(depth < 0):
+        raise ValueError("scenario produced negative depths")
+    if depth.shape[0] > MAX_FRAMES + 1:
+        raise ValueError(f"scenario produced {depth.shape[0]} frames (budget {MAX_FRAMES})")
+
+
+def build_atlas():
+    SCENARIO_DIR.mkdir(parents=True, exist_ok=True)
+    regions = [_columbia_region(), _steep_creek_region(), _lowland_region()]
+    index = {"generated_by": "website/build_scenarios.py", "regions": []}
+
+    for region in regions:
+        profile = region["profile"]
+        q0 = _baseline_inflow(profile)
+        entry = {
+            "id": region["id"],
+            "name": region["name"],
+            "kind": region["kind"],
+            "solver": region["solver"],
+            "description": region["description"],
+            "source": region["source"],
+            "length_m": float(np.sum(profile.dx_m)),
+            "cells": int(len(profile.station_m)),
+            "baseline_inflow_m2_per_min": q0,
+            "events": [],
+        }
+        for event in _events(q0, region["sim_minutes"], region["rain_scale"]):
+            result, discharge_history = _run_scenario(region, event)
+            _validate(result["depth_history"])
+            payload = {
+                "region": {k: entry[k] for k in ("id", "name", "kind", "solver", "description", "source")},
+                "event": {
+                    "id": event["id"],
+                    "name": event["name"],
+                    "narrative": event["narrative"],
+                    "left_inflow_m2_per_min": event["left_inflow"],
+                    "rain_rate_m_per_min": event["rain_rate"],
+                    "rain_start_min": event["rain_start"],
+                    "rain_end_min": event["rain_end"],
+                    "sim_minutes": region["sim_minutes"],
+                },
+                "station_m": [float(v) for v in result["station_m"]],
+                "times_min": [float(v) for v in result["times"]],
+                "depth_history": [[float(v) for v in row] for row in result["depth_history"]],
+                "metrics": _metrics(result, discharge_history, profile, region["solver"]),
+                "limitations": [
+                    "Screening output from a 1-D model: depths are cross-section averages, not a 2-D inundation boundary.",
+                    "Roughness and geometry are literature/ingested estimates; the model is verified numerically but not calibrated to observed floods.",
+                ],
+            }
+            filename = f"{region['id']}__{event['id']}.json"
+            (SCENARIO_DIR / filename).write_text(json.dumps(payload), encoding="utf-8")
+            entry["events"].append({
+                "id": event["id"],
+                "name": event["name"],
+                "file": f"data/scenarios/{filename}",
+                "peak_depth_m": payload["metrics"]["peak_depth_m"],
+            })
+            print(f"  {region['id']} / {event['id']}: peak {payload['metrics']['peak_depth_m']:.3f} m "
+                  f"at t={payload['metrics']['peak_time_min']:.0f} min "
+                  f"({len(payload['times_min'])} frames)")
+        index["regions"].append(entry)
+
+    (DATA_DIR / "index.json").write_text(json.dumps(index, indent=2), encoding="utf-8")
+    print(f"Wrote {DATA_DIR / 'index.json'}")
+
+
+# ── parity references for the JS ports ─────────────────────────────────────
+
+def build_references():
+    REFERENCE_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Kinematic wave, uniform reach with inflow.
+    n_cells = 11
+    profile = make_profile(
+        station_m=np.linspace(0.0, 1000.0, n_cells),
+        slope=np.full(n_cells, 0.001),
+        manning_n=np.full(n_cells, 0.0006),
+    )
+    result = la.run_model(profile, t_final_min=30.0, left_inflow_flux=0.05,
+                          record_interval_min=5.0, base_depth_m=0.05)
+    _write_reference("kinematic_uniform.json", {
+        "solver": "kinematic_wave",
+        "profile": _profile_dict(profile),
+        "options": {"tFinalMin": 30.0, "leftInflowFlux": 0.05,
+                    "recordIntervalMin": 5.0, "baseDepthM": 0.05},
+        "expected": _kw_expected(result),
+    })
+
+    # Kinematic wave, varying profile + profile rain column + windowed uniform rain.
+    stations = np.array([0.0, 500.0, 1200.0, 2000.0, 3000.0])
+    profile = make_profile(
+        station_m=stations,
+        slope=np.array([0.0012, 0.001, 0.0008, 0.0007, 0.0006]),
+        manning_n=np.array([5.8e-4, 6.3e-4, 6.7e-4, 7.0e-4, 7.5e-4]),
+        initial_depth_m=np.full(5, 0.04),
+        rainfall_rate_m_per_min=np.array([0.0, 1e-6, 1e-6, 1e-6, 0.0]),
+    )
+    result = la.run_model(profile, t_final_min=40.0, left_inflow_flux=0.02,
+                          record_interval_min=2.0, rainfall_rate_m_per_min=2e-5,
+                          rainfall_start_min=5.0, rainfall_end_min=20.0)
+    _write_reference("kinematic_varying.json", {
+        "solver": "kinematic_wave",
+        "profile": _profile_dict(profile),
+        "options": {"tFinalMin": 40.0, "leftInflowFlux": 0.02, "recordIntervalMin": 2.0,
+                    "rainfallRateMPerMin": 2e-5, "rainfallStartMin": 5.0, "rainfallEndMin": 20.0},
+        "expected": _kw_expected(result),
+    })
+
+    # Saint-Venant, uniform grid, constant inflow, windowed uniform rain.
+    n_cells = 100
+    x = np.linspace(0.05, 9.95, n_cells)
+    dx = np.full(n_cells, 0.1)
+    slope = np.full(n_cells, 0.05)
+    manning = np.full(n_cells, 0.05 / 60.0)
+    h0 = np.full(n_cells, 0.02)
+    rain_rate = 1e-5
+
+    def rain(x_arr, t):
+        return np.full_like(x_arr, rain_rate if t < 5.0 else 0.0)
+
+    raw = sv1.run_model(None, 10.0, record_interval=1.0, h_init=h0, left_inflow=0.02,
+                        rainfall=rain, x_m=x, dx_m=dx, slope=slope, manning_n=manning)
+    _write_reference("saint_venant_uniform.json", {
+        "solver": "saint_venant",
+        "grid": {"x_m": x.tolist(), "dx_m": dx.tolist(),
+                 "slope": slope.tolist(), "manning_n": manning.tolist()},
+        "options": {"tFinalMin": 10.0, "recordIntervalMin": 1.0, "leftInflow": 0.02,
+                    "hInit": h0.tolist(), "rain": {"rate": rain_rate, "endMin": 5.0}},
+        "expected": _sv_expected(raw),
+    })
+
+    # Saint-Venant, non-uniform coarse grid.
+    x = np.array([0.0, 50.0, 120.0, 200.0, 300.0])
+    dx = np.array([50.0, 60.0, 75.0, 90.0, 100.0])
+    slope = np.array([0.01, 0.008, 0.006, 0.005, 0.004])
+    manning = np.full(5, 8e-4)
+    h0 = np.array([0.3, 0.28, 0.26, 0.25, 0.24])
+
+    def rain2(x_arr, t):
+        return np.full_like(x_arr, 1e-5 if t < 8.0 else 0.0)
+
+    raw = sv1.run_model(None, 20.0, record_interval=2.0, h_init=h0, left_inflow=0.5,
+                        rainfall=rain2, x_m=x, dx_m=dx, slope=slope, manning_n=manning)
+    _write_reference("saint_venant_nonuniform.json", {
+        "solver": "saint_venant",
+        "grid": {"x_m": x.tolist(), "dx_m": dx.tolist(),
+                 "slope": slope.tolist(), "manning_n": manning.tolist()},
+        "options": {"tFinalMin": 20.0, "recordIntervalMin": 2.0, "leftInflow": 0.5,
+                    "hInit": h0.tolist(), "rain": {"rate": 1e-5, "endMin": 8.0}},
+        "expected": _sv_expected(raw),
+    })
+
+
+def _profile_dict(profile):
+    return {
+        "station_m": profile.station_m.tolist(),
+        "dx_m": profile.dx_m.tolist(),
+        "slope": profile.slope.tolist(),
+        "manning_n": profile.manning_n.tolist(),
+        "initial_depth_m": None if profile.initial_depth_m is None else profile.initial_depth_m.tolist(),
+        "rainfall_rate_m_per_min": None if profile.rainfall_rate_m_per_min is None else profile.rainfall_rate_m_per_min.tolist(),
+    }
+
+
+def _kw_expected(result):
+    return {
+        "times": [float(v) for v in result["times"]],
+        "depth_history": [[float(v) for v in row] for row in result["depth_history"]],
+        "mass_inflow": float(result["mass_inflow"]),
+        "mass_source": float(result["mass_source"]),
+        "mass_outflow": float(result["mass_outflow"]),
+    }
+
+
+def _sv_expected(raw):
+    return {
+        "times": [float(v) for v in raw["times"]],
+        "depth_history": [[float(v) for v in row] for row in raw["h_history"]],
+        "discharge_history": [[float(v) for v in row] for row in raw["q_history"]],
+        "mass_inflow": float(raw["mass_inflow"]),
+        "mass_source": float(raw["mass_source"]),
+        "mass_outflow": float(raw["mass_outflow"]),
+        "mass_floor_correction": float(raw["mass_floor_correction"]),
+    }
+
+
+def _write_reference(name, payload):
+    path = REFERENCE_DIR / name
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    print(f"  reference: {path.name}")
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="Build Flood Explorer data artifacts")
+    parser.add_argument("--references", action="store_true",
+                        help="Write JS-parity reference cases instead of the atlas")
+    args = parser.parse_args(argv)
+    if args.references:
+        build_references()
+    else:
+        build_atlas()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
