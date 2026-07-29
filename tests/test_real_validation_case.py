@@ -1,5 +1,6 @@
 import csv
 import json
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -90,7 +91,7 @@ def test_multi_event_suite_observations_and_results_are_reproducible(tmp_path):
     manifest = json.loads(SUITE.read_text(encoding="utf-8"))
     tracked_suite = json.loads(SUITE_EVIDENCE.read_text(encoding="utf-8"))
 
-    assert len(manifest["cases"]) == tracked_suite["case_count"] == 6
+    assert len(manifest["cases"]) == tracked_suite["case_count"] == 7
     for relative_path in manifest["cases"]:
         config_path = SUITE.parent / relative_path
         config = json.loads(config_path.read_text(encoding="utf-8"))
@@ -99,10 +100,15 @@ def test_multi_event_suite_observations_and_results_are_reproducible(tmp_path):
         with observation_path.open(newline="", encoding="utf-8") as handle:
             raw_rows = list(csv.DictReader(handle))
         assert len(observations["upstream"][0]) >= 145
-        assert len(observations["downstream"][0]) == 97
+        assert len(observations["downstream"][0]) >= 97
         assert {row["approval_status"] for row in raw_rows} == {"Approved"}
-        assert observations["upstream"][0][-1] == pytest.approx(1440.0)
-        assert observations["downstream"][0][-1] == pytest.approx(1440.0)
+        start, end = config["case"]["observation_window"]
+        duration_min = (
+            datetime.fromisoformat(end.replace("Z", "+00:00"))
+            - datetime.fromisoformat(start.replace("Z", "+00:00"))
+        ).total_seconds() / 60.0
+        assert observations["upstream"][0][-1] == pytest.approx(duration_min)
+        assert observations["downstream"][0][-1] == pytest.approx(duration_min)
 
         tracked = json.loads(
             config_path.with_suffix(".results.json").read_text(encoding="utf-8")
@@ -125,6 +131,25 @@ def test_multi_event_suite_observations_and_results_are_reproducible(tmp_path):
     assert len(independent) == 2
     assert min(run["scores"]["nse"] for run in independent) > 0.75
     assert min(run["scores"]["pearson_r"] for run in independent) > 0.9
+
+    rio_grande = [
+        run
+        for run in tracked_suite["cases"]
+        if run["config"].startswith("rio_grande_")
+    ]
+    assert len(rio_grande) == 1
+    assert rio_grande[0]["status"] == "predeclared_third_river_transfer_test"
+
+
+def test_third_river_event_retains_predeclared_first_run_protocol():
+    config_path = SUITE.parent / "rio_grande_alameda_albuquerque_2023-05-12.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    protocol = config["case"]["selection_protocol"]
+
+    assert config["retrieved_at"] == "2026-07-29"
+    assert protocol["declared_before_observation_fetch"] is True
+    assert "first completed run" in protocol["first_run_policy"]
+    assert "No Rio Grande observation" in protocol["calibration_policy"]
 
 
 def test_observed_warmup_boundary_maps_negative_event_time_to_spinup_clock():

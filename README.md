@@ -144,6 +144,7 @@ The rationale for each transition is given alongside the change.
 | **4ac — Terrain-aware 2-D ensembles** | Current branch | Extended probabilistic 2-D runs to reviewed terrain. Ensembles can scale the reviewed roughness grid, perturb cross-channel relief, apply a vertical-datum offset, and vary forcing/stage while rejecting synthetic width, bankfull, floodplain-slope, and longitudinal-slope parameters. Bed and roughness quantiles are retained. | Applying synthetic-domain parameters to a reviewed DEM would change the meaning of the observations. Terrain-specific perturbations keep uncertainty explicit without silently rebuilding the supplied surface. |
 | **4ad — Raw asymmetric 1-D surveys** | Current branch | Added `station_m,offset_m,elevation_m` cross-section polylines. They are reduced to conservative stage–width curves while retaining the exact asymmetric polyline wetted perimeter for Manning friction. The second-order SSP step now averages conserved area rather than depth, eliminating nonlinear-geometry volume drift. | Symmetric banks can bias hydraulic radius even when stage–area storage is correct. Raw survey geometry removes that assumption, and conservative SSP averaging is required once area is nonlinear in depth. |
 | **4ae — Cross-event calibration robustness** | Current branch | Decomposed the NSE/correlation objective into mean skill, NSE spread, correlation spread, and worst-event penalties. Added leave-one-training-event-out refits that select global parameters without the omitted event and score it once. | A good mean score can hide one weak event, and score spread at one fitted parameter set does not prove transfer. Omitted-event refits make event dependence and parameter stability explicit while preserving validation/test isolation. |
+| **4af — Predeclared third-river transfer** | Current branch | Added a 48-hour Rio Grande event from Alameda to Albuquerque with the event window, routed reach, gauge-datum slope, estimated width, generic roughness, and no-calibration protocol committed before fetching either hydrograph. The untouched first run is retained in the seven-event, three-river suite. | Historical cases inspected during development cannot provide prospective evidence. The poor first-run NSE despite small volume bias exposes non-transferable hydrograph dynamics and gives future geometry, boundary, and reach-exchange improvements an honest out-of-sample target. |
 
 ---
 
@@ -556,6 +557,12 @@ between events and score NSE `0.967` and `0.797`, correlation `0.998` and `0.920
 and percent bias `9.39%` and `0.70%`. These are historical structural tests, not
 a new calibration set; their width and roughness are still estimated.
 
+The predeclared Rio Grande transfer case was committed before its observations
+were fetched or scored. Its retained first run has NSE `-2.848`, correlation
+`0.570`, and percent bias `+4.55%`. The near-zero aggregate bias does not rescue
+the weak dynamics: the model attenuates the observed range and misses the peak
+timing. No Rio Grande parameter was adjusted after seeing this result.
+
 The constrained global calibration selects roughness `0.8×`, width `1.2×`, slope
 `1.2×`, and distributed reach gain `7.5%`. It produces training NSE
 `0.725–0.762`, validation NSE `0.760`, and historical-test NSE `0.722`, with
@@ -636,5 +643,6 @@ channel/floodplain terrain.
 
 - Estimate basin-specific uncertainty distributions from reviewed evidence and
   evaluate coverage on future or untouched-river events.
-- Estimate basin-specific joint uncertainty distributions and test ensemble
-  coverage on a future event or untouched third river.
+- Replace estimated constant geometry and zero reach exchange on the Rio Grande
+  with reviewed cross-sections, downstream stage, and measured tributary,
+  diversion, or return-flow series before using it for parameter optimization.

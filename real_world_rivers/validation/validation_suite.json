@@ -4,16 +4,18 @@
     "name": "Multi-river, multi-event observed validation",
     "rivers": [
       "Colorado River",
-      "Truckee River"
+      "Truckee River",
+      "Rio Grande"
     ]
   },
-  "parameter_policy": "Within each reach, all events use the same independently estimated length, slope, Manning roughness, width, grid, warm-up duration, and numerical settings. The Colorado calibration remains a separate manifest and is never transferred into the independent Truckee tests.",
+  "parameter_policy": "Within each reach, all events use independently estimated length, slope, Manning roughness, width, grid, warm-up duration, and numerical settings fixed before scoring. The Colorado calibration remains a separate manifest and is never transferred into the independent Truckee or predeclared Rio Grande tests.",
   "cases": [
     "glen_canyon_lees_ferry.json",
     "glen_canyon_lees_ferry_2002-01-25.json",
     "glen_canyon_lees_ferry_2002-07-02.json",
     "glen_canyon_lees_ferry_2004-01-06.json",
     "truckee_reno_sparks_2017-01-08.json",
-    "truckee_reno_sparks_2017-02-10.json"
+    "truckee_reno_sparks_2017-02-10.json",
+    "rio_grande_alameda_albuquerque_2023-05-12.json"
   ]
 }

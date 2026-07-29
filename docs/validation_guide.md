@@ -12,19 +12,25 @@ to the data providers.
 
 ## Committed observed-data suite
 
-The repository includes six reproducible, offline two-gauge events on two rivers.
+The repository includes seven reproducible, offline two-gauge events on three rivers.
 Four cover the Colorado River from below Glen Canyon Dam (USGS 09379910) to
 Lees Ferry (USGS 09380000): 2002-01-25, 2002-07-02, 2004-01-06, and
 2004-07-01. Two independent structural tests cover the Truckee River from Reno
 (USGS 10348000) to near Sparks (USGS 10348200): 2017-01-08 and 2017-02-10.
+The third-river transfer test covers the Rio Grande from Alameda
+(USGS 08329918) to Albuquerque (USGS 08330000): 2023-05-12 through
+2023-05-14. Its event window and all hydraulic assumptions were committed and
+pushed before the hydrographs were fetched or scored.
 All approved USGS observations and exact query URLs are committed.
 
 - Upstream observations cover a 12-hour pre-event spin-up plus the event
-  (433 samples for Colorado; 145 for Truckee).
-- 97 downstream observations are held out and used only for scoring.
+  (433 samples for Colorado; 145 for Truckee; 241 for Rio Grande).
+- Downstream observations are held out and used only for scoring (97 samples
+  for each 24-hour event; 193 for the 48-hour Rio Grande event).
 - Geometry, roughness, grid, warm-up, and numerical settings are fixed within
   each reach and explicitly marked estimated. The Colorado calibration manifest
-  remains separate and none of its fitted multipliers are transferred to Truckee.
+  remains separate and none of its fitted multipliers are transferred to Truckee
+  or the Rio Grande.
 
 Run it with:
 
@@ -57,6 +63,16 @@ Percent bias is `9.39%` and `0.70%`. This is encouraging transfer evidence,
 not calibration: width and roughness remain estimates, both events have now
 been inspected during development, and a third river or future event is still
 needed for a pristine prospective test.
+
+That prospective-style test is now recorded for the Rio Grande. Its untouched
+first run scores NSE `-2.8482`, Pearson correlation `0.5701`, and percent bias
+`+4.55%`. The small volume bias but poor NSE is diagnostically important: the
+observed hydrograph spans about `1,155 m³/min`, while the model spans only about
+`691 m³/min`, and the modeled maximum occurs at the end of the window rather
+than near the observed peak. The result is retained rather than tuned away.
+It shows that a constant estimated rectangular width, generic roughness, free
+outlet, and zero unmeasured reach exchange do not transfer reliably to this
+sand-bed reach.
 
 The observed spin-up scores are worse than the former constant-flow warm-up.
 That is useful evidence: repeating the first event flow created an optimistic

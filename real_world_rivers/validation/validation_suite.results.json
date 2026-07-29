@@ -4,11 +4,12 @@
     "name": "Multi-river, multi-event observed validation",
     "rivers": [
       "Colorado River",
-      "Truckee River"
+      "Truckee River",
+      "Rio Grande"
     ]
   },
-  "case_count": 6,
-  "parameter_policy": "Within each reach, all events use the same independently estimated length, slope, Manning roughness, width, grid, warm-up duration, and numerical settings. The Colorado calibration remains a separate manifest and is never transferred into the independent Truckee tests.",
+  "case_count": 7,
+  "parameter_policy": "Within each reach, all events use independently estimated length, slope, Manning roughness, width, grid, warm-up duration, and numerical settings fixed before scoring. The Colorado calibration remains a separate manifest and is never transferred into the independent Truckee or predeclared Rio Grande tests.",
   "cases": [
     {
       "config": "glen_canyon_lees_ferry.json",
@@ -111,32 +112,49 @@
         "upstream": 145,
         "downstream": 97
       }
+    },
+    {
+      "config": "rio_grande_alameda_albuquerque_2023-05-12.json",
+      "name": "Rio Grande Alameda to Albuquerque \u2014 2023-05-12 event",
+      "status": "predeclared_third_river_transfer_test",
+      "scores": {
+        "nse": -2.848221673886378,
+        "rmse": 425.0135922028981,
+        "bias": 382.3060972165449,
+        "percent_bias": 4.552275870986581,
+        "pearson_r": 0.5701059690819273,
+        "n": 193
+      },
+      "observation_count": {
+        "upstream": 241,
+        "downstream": 193
+      }
     }
   ],
   "score_summary": {
     "nse": {
-      "minimum": -0.2717925551996623,
-      "median": 0.2513338006140615,
+      "minimum": -2.848221673886378,
+      "median": 0.11884399840735205,
       "maximum": 0.9668349182700161
     },
     "rmse": {
-      "minimum": 544.4610778711926,
-      "median": 4564.789303258858,
+      "minimum": 425.0135922028981,
+      "median": 4376.91251447752,
       "maximum": 7946.342126666952
     },
     "bias": {
       "minimum": -4843.899813119393,
-      "median": -3444.4950511535435,
-      "maximum": 301.16117245128095
+      "median": -3114.940745193751,
+      "maximum": 382.3060972165449
     },
     "percent_bias": {
       "minimum": -21.476965312340887,
-      "median": -14.018392599364844,
+      "median": -12.53000322289057,
       "maximum": 9.390600102252398
     },
     "pearson_r": {
-      "minimum": 0.7282752247390201,
-      "median": 0.795285149613042,
+      "minimum": 0.5701059690819273,
+      "median": 0.7788261313541113,
       "maximum": 0.997999075427082
     }
   }
