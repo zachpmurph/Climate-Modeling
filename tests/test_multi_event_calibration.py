@@ -13,6 +13,12 @@ TRACKED_CALIBRATION = (
     / "validation"
     / "calibration_suite.results.json"
 )
+TRACKED_MULTI_RIVER_CALIBRATION = (
+    REPO_ROOT
+    / "real_world_rivers"
+    / "validation"
+    / "multi_river_calibration_suite.results.json"
+)
 
 
 def test_composite_objective_rewards_skill_and_penalizes_event_spread():
@@ -501,3 +507,55 @@ def test_tracked_calibration_preserves_holdouts_and_identifiability_warning():
         tuple(sorted(fold["selected_parameters"].items()))
         for fold in transfer["folds"]
     } == {tuple(sorted(evidence["selected_parameters"].items()))}
+
+
+def test_tracked_multi_river_fit_preserves_river_and_test_isolation():
+    evidence = json.loads(
+        TRACKED_MULTI_RIVER_CALIBRATION.read_text(encoding="utf-8")
+    )
+
+    components = evidence["training_objective_components"]
+    assert components["aggregation"] == "equal_weight_per_group"
+    assert {item["group"] for item in components["group_summary"]} == {
+        "Colorado River",
+        "Truckee River",
+    }
+    assert evidence["selected_parameters"] == {
+        "manning_scale": 0.8,
+        "width_scale": 1.2,
+        "slope_scale": 1.2,
+        "lateral_inflow_fraction": 0.075,
+    }
+    training_configs = {
+        event["config"]
+        for entry in evidence["trace"]
+        for event in entry["training_events"]
+    }
+    assert all("rio_grande" not in path for path in training_configs)
+    rio = next(
+        event
+        for event in evidence["splits"]["test"]["events"]
+        if event["config"].startswith("rio_grande_")
+    )
+    assert rio["scores"]["nse"] == pytest.approx(-23.41943682307234)
+
+    folds = evidence["leave_one_group_out"]["folds"]
+    assert {fold["held_out_group"] for fold in folds} == {
+        "Colorado River",
+        "Truckee River",
+    }
+    for fold in folds:
+        held_prefix = (
+            "truckee_"
+            if fold["held_out_group"] == "Truckee River"
+            else "glen_canyon_"
+        )
+        assert all(
+            not path.startswith(held_prefix) for path in fold["fit_events"]
+        )
+    assert set(evidence["parameter_diagnostics"]["boundary_hits"]) == {
+        "manning_scale",
+        "width_scale",
+        "slope_scale",
+        "lateral_inflow_fraction",
+    }

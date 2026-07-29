@@ -1,0 +1,1620 @@
+{
+  "schema_version": 2,
+  "suite": {
+    "name": "Historical river-balanced global-parameter calibration",
+    "rivers": [
+      "Colorado River",
+      "Truckee River",
+      "Rio Grande"
+    ]
+  },
+  "method": {
+    "optimizer": "deterministic coordinate search",
+    "passes_requested": 1,
+    "global_parameters_only": true,
+    "event_specific_fitting": false,
+    "objective": {
+      "nse_weight": 0.7,
+      "correlation_weight": 0.3,
+      "robustness_penalty": 0.1,
+      "correlation_robustness_penalty": 0.05,
+      "worst_event_weight": 0.15,
+      "balance_by": "river"
+    },
+    "parameter_grid": {
+      "manning_scale": [
+        0.8,
+        1.0,
+        1.2
+      ],
+      "width_scale": [
+        0.8,
+        1.0,
+        1.2
+      ],
+      "slope_scale": [
+        0.8,
+        1.0,
+        1.2
+      ],
+      "lateral_inflow_fraction": [
+        0.0,
+        0.075
+      ]
+    },
+    "parameter_interpretation": {
+      "manning_scale": "One global multiplier on each reach's independently estimated minutes-based Manning roughness.",
+      "width_scale": "One global multiplier on each reach's independently estimated rectangular channel width.",
+      "slope_scale": "One global multiplier on each reach's independently estimated longitudinal bed slope.",
+      "lateral_inflow_fraction": "One effective distributed reach-gain fraction applied only where measured point flows are absent; it is not a measured tributary hydrograph."
+    },
+    "split_policy": "Parameters are selected only from two 2002 Colorado River events and the January 2017 Truckee River event. January 2004 Colorado and February 2017 Truckee are validation. July 2004 Colorado and the predeclared Rio Grande event are test-only. All events are historical and have now been inspected; this diagnoses spatial transfer but is not prospective validation."
+  },
+  "selected_parameters": {
+    "manning_scale": 0.8,
+    "width_scale": 1.2,
+    "slope_scale": 1.2,
+    "lateral_inflow_fraction": 0.075
+  },
+  "parameter_diagnostics": {
+    "boundary_hits": {
+      "manning_scale": [
+        "minimum"
+      ],
+      "width_scale": [
+        "maximum"
+      ],
+      "slope_scale": [
+        "maximum"
+      ],
+      "lateral_inflow_fraction": [
+        "maximum"
+      ]
+    },
+    "identifiability_warning": true,
+    "interpretation": "A boundary hit means the tested range did not bracket an optimum. Geometry, slope, roughness, and lateral gain may compensate for one another; selected values are effective model parameters until supported by independent measurements."
+  },
+  "training_objective": 0.8331716947129914,
+  "training_objective_components": {
+    "objective": 0.8331716947129914,
+    "finite": true,
+    "mean_nse": 0.8203001124079559,
+    "minimum_nse": 0.7437285007288423,
+    "mean_correlation": 0.9371437476587592,
+    "nse_standard_deviation": 0.07657161167911353,
+    "correlation_standard_deviation": 0.0607721070085393,
+    "worst_event_nse_gap": 0.07657161167911353,
+    "weighted_mean_skill": 0.8553532029831967,
+    "nse_spread_penalty": 0.007657161167911353,
+    "correlation_spread_penalty": 0.003038605350426965,
+    "worst_event_penalty": 0.01148574175186703,
+    "aggregation": "equal_weight_per_group",
+    "group_count": 2,
+    "group_summary": [
+      {
+        "group": "Colorado River",
+        "event_count": 2,
+        "mean_nse": 0.7437285007288423,
+        "mean_correlation": 0.8763716406502199
+      },
+      {
+        "group": "Truckee River",
+        "event_count": 1,
+        "mean_nse": 0.8968717240870694,
+        "mean_correlation": 0.9979158546672985
+      }
+    ]
+  },
+  "leave_one_training_event_out": {
+    "enabled": false,
+    "interpretation": "Leave-one-training-event-out refits were not requested.",
+    "folds": []
+  },
+  "baseline_splits": {
+    "training": {
+      "events": [
+        {
+          "config": "glen_canyon_lees_ferry_2002-01-25.json",
+          "scores": {
+            "nse": -0.2717925551996623,
+            "rmse": 4752.6660920401955,
+            "bias": -3774.049357113336,
+            "percent_bias": -16.180907012986506,
+            "pearson_r": 0.7282752247390201,
+            "n": 97
+          }
+        },
+        {
+          "config": "glen_canyon_lees_ferry_2002-07-02.json",
+          "scores": {
+            "nse": -0.03203967106665351,
+            "rmse": 5173.384365356463,
+            "bias": -4051.3378325000335,
+            "percent_bias": -15.506781975839116,
+            "pearson_r": 0.7788261313541113,
+            "n": 97
+          }
+        },
+        {
+          "config": "truckee_reno_sparks_2017-01-08.json",
+          "scores": {
+            "nse": 0.9668349182700161,
+            "rmse": 544.4610778711926,
+            "bias": 301.16117245128095,
+            "percent_bias": 9.390600102252398,
+            "pearson_r": 0.997999075427082,
+            "n": 97
+          }
+        }
+      ],
+      "summary": {
+        "nse": {
+          "minimum": -0.2717925551996623,
+          "mean": 0.22100089733456676,
+          "maximum": 0.9668349182700161
+        },
+        "rmse": {
+          "minimum": 544.4610778711926,
+          "mean": 3490.17051175595,
+          "maximum": 5173.384365356463
+        },
+        "bias": {
+          "minimum": -4051.3378325000335,
+          "mean": -2508.0753390540294,
+          "maximum": 301.16117245128095
+        },
+        "percent_bias": {
+          "minimum": -16.180907012986506,
+          "mean": -7.432362962191074,
+          "maximum": 9.390600102252398
+        },
+        "pearson_r": {
+          "minimum": 0.7282752247390201,
+          "mean": 0.8350334771734045,
+          "maximum": 0.997999075427082
+        }
+      }
+    },
+    "validation": {
+      "events": [
+        {
+          "config": "glen_canyon_lees_ferry_2004-01-06.json",
+          "scores": {
+            "nse": 0.383823602820771,
+            "rmse": 7946.342126666952,
+            "bias": -4843.899813119393,
+            "percent_bias": -21.476965312340887,
+            "pearson_r": 0.8117441678719728,
+            "n": 97
+          }
+        },
+        {
+          "config": "truckee_reno_sparks_2017-02-10.json",
+          "scores": {
+            "nse": 0.7967391618651831,
+            "rmse": 798.3175630984994,
+            "bias": 100.24744060425671,
+            "percent_bias": 0.6956343170227696,
+            "pearson_r": 0.9197511891596594,
+            "n": 97
+          }
+        }
+      ],
+      "summary": {
+        "nse": {
+          "minimum": 0.383823602820771,
+          "mean": 0.5902813823429771,
+          "maximum": 0.7967391618651831
+        },
+        "rmse": {
+          "minimum": 798.3175630984994,
+          "mean": 4372.329844882725,
+          "maximum": 7946.342126666952
+        },
+        "bias": {
+          "minimum": -4843.899813119393,
+          "mean": -2371.826186257568,
+          "maximum": 100.24744060425671
+        },
+        "percent_bias": {
+          "minimum": -21.476965312340887,
+          "mean": -10.39066549765906,
+          "maximum": 0.6956343170227696
+        },
+        "pearson_r": {
+          "minimum": 0.8117441678719728,
+          "mean": 0.865747678515816,
+          "maximum": 0.9197511891596594
+        }
+      }
+    },
+    "test": {
+      "events": [
+        {
+          "config": "glen_canyon_lees_ferry.json",
+          "scores": {
+            "nse": 0.11884399840735205,
+            "rmse": 4376.91251447752,
+            "bias": -3114.940745193751,
+            "percent_bias": -12.53000322289057,
+            "pearson_r": 0.7559090459291382,
+            "n": 97
+          }
+        },
+        {
+          "config": "rio_grande_alameda_albuquerque_2023-05-12.json",
+          "scores": {
+            "nse": -2.848221673886378,
+            "rmse": 425.0135922028981,
+            "bias": 382.3060972165449,
+            "percent_bias": 4.552275870986581,
+            "pearson_r": 0.5701059690819273,
+            "n": 193
+          }
+        }
+      ],
+      "summary": {
+        "nse": {
+          "minimum": -2.848221673886378,
+          "mean": -1.364688837739513,
+          "maximum": 0.11884399840735205
+        },
+        "rmse": {
+          "minimum": 425.0135922028981,
+          "mean": 2400.963053340209,
+          "maximum": 4376.91251447752
+        },
+        "bias": {
+          "minimum": -3114.940745193751,
+          "mean": -1366.317323988603,
+          "maximum": 382.3060972165449
+        },
+        "percent_bias": {
+          "minimum": -12.53000322289057,
+          "mean": -3.9888636759519946,
+          "maximum": 4.552275870986581
+        },
+        "pearson_r": {
+          "minimum": 0.5701059690819273,
+          "mean": 0.6630075075055328,
+          "maximum": 0.7559090459291382
+        }
+      }
+    }
+  },
+  "splits": {
+    "training": {
+      "events": [
+        {
+          "config": "glen_canyon_lees_ferry_2002-01-25.json",
+          "scores": {
+            "nse": 0.7252859496881681,
+            "rmse": 2208.867167916132,
+            "bias": -447.3172090457308,
+            "percent_bias": -1.9178334674493387,
+            "pearson_r": 0.8646468772741757,
+            "n": 97
+          }
+        },
+        {
+          "config": "glen_canyon_lees_ferry_2002-07-02.json",
+          "scores": {
+            "nse": 0.7621710517695166,
+            "rmse": 2483.469942291519,
+            "bias": -439.02278368312426,
+            "percent_bias": -1.6803907426301088,
+            "pearson_r": 0.8880964040262641,
+            "n": 97
+          }
+        },
+        {
+          "config": "truckee_reno_sparks_2017-01-08.json",
+          "scores": {
+            "nse": 0.8968717240870694,
+            "rmse": 960.0971517851212,
+            "bias": 613.8151189294846,
+            "percent_bias": 19.13955996274967,
+            "pearson_r": 0.9979158546672985,
+            "n": 97
+          }
+        }
+      ],
+      "summary": {
+        "nse": {
+          "minimum": 0.7252859496881681,
+          "mean": 0.7947762418482514,
+          "maximum": 0.8968717240870694
+        },
+        "rmse": {
+          "minimum": 960.0971517851212,
+          "mean": 1884.1447539975907,
+          "maximum": 2483.469942291519
+        },
+        "bias": {
+          "minimum": -447.3172090457308,
+          "mean": -90.84162459979018,
+          "maximum": 613.8151189294846
+        },
+        "percent_bias": {
+          "minimum": -1.9178334674493387,
+          "mean": 5.180445250890074,
+          "maximum": 19.13955996274967
+        },
+        "pearson_r": {
+          "minimum": 0.8646468772741757,
+          "mean": 0.9168863786559127,
+          "maximum": 0.9979158546672985
+        }
+      }
+    },
+    "validation": {
+      "events": [
+        {
+          "config": "glen_canyon_lees_ferry_2004-01-06.json",
+          "scores": {
+            "nse": 0.7599937820056698,
+            "rmse": 4959.36390617086,
+            "bias": -1470.1449507446273,
+            "percent_bias": -6.518353667377393,
+            "pearson_r": 0.9183751499347645,
+            "n": 97
+          }
+        },
+        {
+          "config": "truckee_reno_sparks_2017-02-10.json",
+          "scores": {
+            "nse": 0.2762922590578202,
+            "rmse": 1506.36576471934,
+            "bias": 1189.2133708126275,
+            "percent_bias": 8.252157122547633,
+            "pearson_r": 0.9087708740101321,
+            "n": 97
+          }
+        }
+      ],
+      "summary": {
+        "nse": {
+          "minimum": 0.2762922590578202,
+          "mean": 0.518143020531745,
+          "maximum": 0.7599937820056698
+        },
+        "rmse": {
+          "minimum": 1506.36576471934,
+          "mean": 3232.8648354450997,
+          "maximum": 4959.36390617086
+        },
+        "bias": {
+          "minimum": -1470.1449507446273,
+          "mean": -140.46578996599987,
+          "maximum": 1189.2133708126275
+        },
+        "percent_bias": {
+          "minimum": -6.518353667377393,
+          "mean": 0.8669017275851201,
+          "maximum": 8.252157122547633
+        },
+        "pearson_r": {
+          "minimum": 0.9087708740101321,
+          "mean": 0.9135730119724483,
+          "maximum": 0.9183751499347645
+        }
+      }
+    },
+    "test": {
+      "events": [
+        {
+          "config": "glen_canyon_lees_ferry.json",
+          "scores": {
+            "nse": 0.7220183082604311,
+            "rmse": 2458.383096264977,
+            "bias": 464.46607167188614,
+            "percent_bias": 1.868337747339738,
+            "pearson_r": 0.8711682573511375,
+            "n": 97
+          }
+        },
+        {
+          "config": "rio_grande_alameda_albuquerque_2023-05-12.json",
+          "scores": {
+            "nse": -23.41943682307234,
+            "rmse": 1070.6329384848807,
+            "bias": 1051.5469520509812,
+            "percent_bias": 12.521201863855607,
+            "pearson_r": 0.5219024035838586,
+            "n": 193
+          }
+        }
+      ],
+      "summary": {
+        "nse": {
+          "minimum": -23.41943682307234,
+          "mean": -11.348709257405954,
+          "maximum": 0.7220183082604311
+        },
+        "rmse": {
+          "minimum": 1070.6329384848807,
+          "mean": 1764.5080173749288,
+          "maximum": 2458.383096264977
+        },
+        "bias": {
+          "minimum": 464.46607167188614,
+          "mean": 758.0065118614336,
+          "maximum": 1051.5469520509812
+        },
+        "percent_bias": {
+          "minimum": 1.868337747339738,
+          "mean": 7.194769805597673,
+          "maximum": 12.521201863855607
+        },
+        "pearson_r": {
+          "minimum": 0.5219024035838586,
+          "mean": 0.696535330467498,
+          "maximum": 0.8711682573511375
+        }
+      }
+    }
+  },
+  "improvement": {
+    "training": {
+      "mean_nse_delta": 0.5737753445136846,
+      "mean_pearson_r_delta": 0.08185290148250823,
+      "mean_absolute_percent_bias_before": 13.69276303035934,
+      "mean_absolute_percent_bias_after": 7.579261390943039
+    },
+    "validation": {
+      "mean_nse_delta": -0.07213836181123212,
+      "mean_pearson_r_delta": 0.04782533345663231,
+      "mean_absolute_percent_bias_before": 11.086299814681828,
+      "mean_absolute_percent_bias_after": 7.385255394962513
+    },
+    "test": {
+      "mean_nse_delta": -9.984020419666441,
+      "mean_pearson_r_delta": 0.033527822961965215,
+      "mean_absolute_percent_bias_before": 8.541139546938576,
+      "mean_absolute_percent_bias_after": 7.194769805597673
+    }
+  },
+  "trace": [
+    {
+      "step": "initial",
+      "parameters": {
+        "manning_scale": 1.0,
+        "width_scale": 1.0,
+        "slope_scale": 1.0,
+        "lateral_inflow_fraction": 0.0
+      },
+      "objective": 0.4019989559590379,
+      "objective_components": {
+        "objective": 0.4019989559590379,
+        "finite": true,
+        "mean_nse": 0.4074594025684291,
+        "minimum_nse": -0.1519161131331579,
+        "mean_correlation": 0.8757748767368239,
+        "nse_standard_deviation": 0.559375515701587,
+        "correlation_standard_deviation": 0.12222419869025813,
+        "worst_event_nse_gap": 0.559375515701587,
+        "weighted_mean_skill": 0.5479540448189475,
+        "nse_spread_penalty": 0.0559375515701587,
+        "correlation_spread_penalty": 0.006111209934512907,
+        "worst_event_penalty": 0.08390632735523804,
+        "aggregation": "equal_weight_per_group",
+        "group_count": 2,
+        "group_summary": [
+          {
+            "group": "Colorado River",
+            "event_count": 2,
+            "mean_nse": -0.1519161131331579,
+            "mean_correlation": 0.7535506780465657
+          },
+          {
+            "group": "Truckee River",
+            "event_count": 1,
+            "mean_nse": 0.9668349182700161,
+            "mean_correlation": 0.997999075427082
+          }
+        ]
+      },
+      "training_events": [
+        {
+          "config": "glen_canyon_lees_ferry_2002-01-25.json",
+          "scores": {
+            "nse": -0.2717925551996623,
+            "rmse": 4752.6660920401955,
+            "bias": -3774.049357113336,
+            "percent_bias": -16.180907012986506,
+            "pearson_r": 0.7282752247390201,
+            "n": 97
+          }
+        },
+        {
+          "config": "glen_canyon_lees_ferry_2002-07-02.json",
+          "scores": {
+            "nse": -0.03203967106665351,
+            "rmse": 5173.384365356463,
+            "bias": -4051.3378325000335,
+            "percent_bias": -15.506781975839116,
+            "pearson_r": 0.7788261313541113,
+            "n": 97
+          }
+        },
+        {
+          "config": "truckee_reno_sparks_2017-01-08.json",
+          "scores": {
+            "nse": 0.9668349182700161,
+            "rmse": 544.4610778711926,
+            "bias": 301.16117245128095,
+            "percent_bias": 9.390600102252398,
+            "pearson_r": 0.997999075427082,
+            "n": 97
+          }
+        }
+      ]
+    },
+    {
+      "step": "coordinate",
+      "pass": 1,
+      "parameter": "manning_scale",
+      "parameters": {
+        "manning_scale": 0.8,
+        "width_scale": 1.0,
+        "slope_scale": 1.0,
+        "lateral_inflow_fraction": 0.0
+      },
+      "objective": 0.6392323205404359,
+      "objective_components": {
+        "objective": 0.6392323205404359,
+        "finite": true,
+        "mean_nse": 0.6454914727796885,
+        "minimum_nse": 0.3299892763060015,
+        "mean_correlation": 0.9033169852460055,
+        "nse_standard_deviation": 0.3155021964736871,
+        "correlation_standard_deviation": 0.0946251372145201,
+        "worst_event_nse_gap": 0.31550219647368705,
+        "weighted_mean_skill": 0.7228391265195836,
+        "nse_spread_penalty": 0.03155021964736871,
+        "correlation_spread_penalty": 0.004731256860726005,
+        "worst_event_penalty": 0.04732532947105306,
+        "aggregation": "equal_weight_per_group",
+        "group_count": 2,
+        "group_summary": [
+          {
+            "group": "Colorado River",
+            "event_count": 2,
+            "mean_nse": 0.3299892763060015,
+            "mean_correlation": 0.8086918480314853
+          },
+          {
+            "group": "Truckee River",
+            "event_count": 1,
+            "mean_nse": 0.9609936692533757,
+            "mean_correlation": 0.9979421224605255
+          }
+        ]
+      },
+      "training_events": [
+        {
+          "config": "glen_canyon_lees_ferry_2002-01-25.json",
+          "scores": {
+            "nse": 0.2581749686476307,
+            "rmse": 3629.77667689414,
+            "bias": -2513.7540012551167,
+            "percent_bias": -10.777500742317487,
+            "pearson_r": 0.7852270589300934,
+            "n": 97
+          }
+        },
+        {
+          "config": "glen_canyon_lees_ferry_2002-07-02.json",
+          "scores": {
+            "nse": 0.4018035839643723,
+            "rmse": 3938.659648955698,
+            "bias": -2688.59115235333,
+            "percent_bias": -10.290772713957024,
+            "pearson_r": 0.8321566371328771,
+            "n": 97
+          }
+        },
+        {
+          "config": "truckee_reno_sparks_2017-01-08.json",
+          "scores": {
+            "nse": 0.9609936692533757,
+            "rmse": 590.4645817427391,
+            "bias": 337.57813981452614,
+            "percent_bias": 10.526128877962469,
+            "pearson_r": 0.9979421224605255,
+            "n": 97
+          }
+        }
+      ]
+    },
+    {
+      "step": "coordinate",
+      "pass": 1,
+      "parameter": "width_scale",
+      "parameters": {
+        "manning_scale": 0.8,
+        "width_scale": 1.2,
+        "slope_scale": 1.0,
+        "lateral_inflow_fraction": 0.0
+      },
+      "objective": 0.6782576230865859,
+      "objective_components": {
+        "objective": 0.6782576230865859,
+        "finite": true,
+        "mean_nse": 0.6805084258589896,
+        "minimum_nse": 0.3982985266230556,
+        "mean_correlation": 0.9210061960221427,
+        "nse_standard_deviation": 0.282209899235934,
+        "correlation_standard_deviation": 0.0769531802473234,
+        "worst_event_nse_gap": 0.28220989923593404,
+        "weighted_mean_skill": 0.7526577569079356,
+        "nse_spread_penalty": 0.028220989923593398,
+        "correlation_spread_penalty": 0.00384765901236617,
+        "worst_event_penalty": 0.042331484885390104,
+        "aggregation": "equal_weight_per_group",
+        "group_count": 2,
+        "group_summary": [
+          {
+            "group": "Colorado River",
+            "event_count": 2,
+            "mean_nse": 0.3982985266230556,
+            "mean_correlation": 0.8440530157748194
+          },
+          {
+            "group": "Truckee River",
+            "event_count": 1,
+            "mean_nse": 0.9627183250949236,
+            "mean_correlation": 0.9979593762694662
+          }
+        ]
+      },
+      "training_events": [
+        {
+          "config": "glen_canyon_lees_ferry_2002-01-25.json",
+          "scores": {
+            "nse": 0.34212004904771776,
+            "rmse": 3418.239509546728,
+            "bias": -2423.71204764019,
+            "percent_bias": -10.391453729984516,
+            "pearson_r": 0.8281548027065978,
+            "n": 97
+          }
+        },
+        {
+          "config": "glen_canyon_lees_ferry_2002-07-02.json",
+          "scores": {
+            "nse": 0.45447700419839343,
+            "rmse": 3761.2576289696144,
+            "bias": -2600.3193710166197,
+            "percent_bias": -9.952906230242277,
+            "pearson_r": 0.859951228843041,
+            "n": 97
+          }
+        },
+        {
+          "config": "truckee_reno_sparks_2017-01-08.json",
+          "scores": {
+            "nse": 0.9627183250949236,
+            "rmse": 577.2633830345418,
+            "bias": 325.51911086832627,
+            "percent_bias": 10.150112549119253,
+            "pearson_r": 0.9979593762694662,
+            "n": 97
+          }
+        }
+      ]
+    },
+    {
+      "step": "coordinate",
+      "pass": 1,
+      "parameter": "slope_scale",
+      "parameters": {
+        "manning_scale": 0.8,
+        "width_scale": 1.2,
+        "slope_scale": 1.2,
+        "lateral_inflow_fraction": 0.0
+      },
+      "objective": 0.8032642006829328,
+      "objective_components": {
+        "objective": 0.8032642006829328,
+        "finite": true,
+        "mean_nse": 0.7997997482587313,
+        "minimum_nse": 0.6389899957598563,
+        "mean_correlation": 0.952866269737985,
+        "nse_standard_deviation": 0.16080975249887514,
+        "correlation_standard_deviation": 0.04506131789711565,
+        "worst_event_nse_gap": 0.16080975249887508,
+        "weighted_mean_skill": 0.8457197047025073,
+        "nse_spread_penalty": 0.016080975249887514,
+        "correlation_spread_penalty": 0.0022530658948557826,
+        "worst_event_penalty": 0.024121462874831263,
+        "aggregation": "equal_weight_per_group",
+        "group_count": 2,
+        "group_summary": [
+          {
+            "group": "Colorado River",
+            "event_count": 2,
+            "mean_nse": 0.6389899957598563,
+            "mean_correlation": 0.9078049518408694
+          },
+          {
+            "group": "Truckee River",
+            "event_count": 1,
+            "mean_nse": 0.9606095007576065,
+            "mean_correlation": 0.9979275876351007
+          }
+        ]
+      },
+      "training_events": [
+        {
+          "config": "glen_canyon_lees_ferry_2002-01-25.json",
+          "scores": {
+            "nse": 0.6125393656454783,
+            "rmse": 2623.2697819185123,
+            "bias": -1666.5385725596045,
+            "percent_bias": -7.145138583128611,
+            "pearson_r": 0.89889010224173,
+            "n": 97
+          }
+        },
+        {
+          "config": "glen_canyon_lees_ferry_2002-07-02.json",
+          "scores": {
+            "nse": 0.6654406258742342,
+            "rmse": 2945.527976011424,
+            "bias": -1798.0542904509769,
+            "percent_bias": -6.882179915748897,
+            "pearson_r": 0.9167198014400088,
+            "n": 97
+          }
+        },
+        {
+          "config": "truckee_reno_sparks_2017-01-08.json",
+          "scores": {
+            "nse": 0.9606095007576065,
+            "rmse": 593.3651634548753,
+            "bias": 338.0743096349803,
+            "percent_bias": 10.541600103315881,
+            "pearson_r": 0.9979275876351007,
+            "n": 97
+          }
+        }
+      ]
+    },
+    {
+      "step": "coordinate",
+      "pass": 1,
+      "parameter": "lateral_inflow_fraction",
+      "parameters": {
+        "manning_scale": 0.8,
+        "width_scale": 1.2,
+        "slope_scale": 1.2,
+        "lateral_inflow_fraction": 0.075
+      },
+      "objective": 0.8331716947129914,
+      "objective_components": {
+        "objective": 0.8331716947129914,
+        "finite": true,
+        "mean_nse": 0.8203001124079559,
+        "minimum_nse": 0.7437285007288423,
+        "mean_correlation": 0.9371437476587592,
+        "nse_standard_deviation": 0.07657161167911353,
+        "correlation_standard_deviation": 0.0607721070085393,
+        "worst_event_nse_gap": 0.07657161167911353,
+        "weighted_mean_skill": 0.8553532029831967,
+        "nse_spread_penalty": 0.007657161167911353,
+        "correlation_spread_penalty": 0.003038605350426965,
+        "worst_event_penalty": 0.01148574175186703,
+        "aggregation": "equal_weight_per_group",
+        "group_count": 2,
+        "group_summary": [
+          {
+            "group": "Colorado River",
+            "event_count": 2,
+            "mean_nse": 0.7437285007288423,
+            "mean_correlation": 0.8763716406502199
+          },
+          {
+            "group": "Truckee River",
+            "event_count": 1,
+            "mean_nse": 0.8968717240870694,
+            "mean_correlation": 0.9979158546672985
+          }
+        ]
+      },
+      "training_events": [
+        {
+          "config": "glen_canyon_lees_ferry_2002-01-25.json",
+          "scores": {
+            "nse": 0.7252859496881681,
+            "rmse": 2208.867167916132,
+            "bias": -447.3172090457308,
+            "percent_bias": -1.9178334674493387,
+            "pearson_r": 0.8646468772741757,
+            "n": 97
+          }
+        },
+        {
+          "config": "glen_canyon_lees_ferry_2002-07-02.json",
+          "scores": {
+            "nse": 0.7621710517695166,
+            "rmse": 2483.469942291519,
+            "bias": -439.02278368312426,
+            "percent_bias": -1.6803907426301088,
+            "pearson_r": 0.8880964040262641,
+            "n": 97
+          }
+        },
+        {
+          "config": "truckee_reno_sparks_2017-01-08.json",
+          "scores": {
+            "nse": 0.8968717240870694,
+            "rmse": 960.0971517851212,
+            "bias": 613.8151189294846,
+            "percent_bias": 19.13955996274967,
+            "pearson_r": 0.9979158546672985,
+            "n": 97
+          }
+        }
+      ]
+    }
+  ],
+  "leave_one_group_out": {
+    "enabled": true,
+    "balance_by": "river",
+    "passes": 1,
+    "fold_count": 2,
+    "interpretation": "Each fold selected global parameters without any event from the reported group, then scored every held-out event once.",
+    "folds": [
+      {
+        "held_out_group": "Colorado River",
+        "held_out_events": [
+          {
+            "config": "glen_canyon_lees_ferry_2002-01-25.json",
+            "scores": {
+              "nse": -1.2759451962828328,
+              "rmse": 6357.846876389706,
+              "bias": -5552.86247586149,
+              "percent_bias": -23.807412907429697,
+              "pearson_r": 0.6783636268424725,
+              "n": 97
+            }
+          },
+          {
+            "config": "glen_canyon_lees_ferry_2002-07-02.json",
+            "scores": {
+              "nse": -0.8442905547370667,
+              "rmse": 6915.780829898712,
+              "bias": -5957.161984123439,
+              "percent_bias": -22.80145865435145,
+              "pearson_r": 0.7258033127318444,
+              "n": 97
+            }
+          }
+        ],
+        "fit_events": [
+          "truckee_reno_sparks_2017-01-08.json"
+        ],
+        "selected_parameters": {
+          "manning_scale": 1.2,
+          "width_scale": 1.2,
+          "slope_scale": 0.8,
+          "lateral_inflow_fraction": 0.0
+        },
+        "fit_objective": 0.9836978909961236,
+        "fit_objective_components": {
+          "objective": 0.9836978909961236,
+          "finite": true,
+          "mean_nse": 0.9775752675474713,
+          "minimum_nse": 0.9775752675474713,
+          "mean_correlation": 0.9979840123763127,
+          "nse_standard_deviation": 0.0,
+          "correlation_standard_deviation": 0.0,
+          "worst_event_nse_gap": 0.0,
+          "weighted_mean_skill": 0.9836978909961236,
+          "nse_spread_penalty": 0.0,
+          "correlation_spread_penalty": 0.0,
+          "worst_event_penalty": 0.0,
+          "aggregation": "equal_weight_per_group",
+          "group_count": 1,
+          "group_summary": [
+            {
+              "group": "Truckee River",
+              "event_count": 1,
+              "mean_nse": 0.9775752675474713,
+              "mean_correlation": 0.9979840123763127
+            }
+          ]
+        },
+        "held_out_summary": {
+          "nse": {
+            "minimum": -1.2759451962828328,
+            "mean": -1.0601178755099498,
+            "maximum": -0.8442905547370667
+          },
+          "rmse": {
+            "minimum": 6357.846876389706,
+            "mean": 6636.813853144209,
+            "maximum": 6915.780829898712
+          },
+          "bias": {
+            "minimum": -5957.161984123439,
+            "mean": -5755.012229992464,
+            "maximum": -5552.86247586149
+          },
+          "percent_bias": {
+            "minimum": -23.807412907429697,
+            "mean": -23.30443578089057,
+            "maximum": -22.80145865435145
+          },
+          "pearson_r": {
+            "minimum": 0.6783636268424725,
+            "mean": 0.7020834697871585,
+            "maximum": 0.7258033127318444
+          }
+        },
+        "parameter_diagnostics": {
+          "boundary_hits": {
+            "manning_scale": [
+              "maximum"
+            ],
+            "width_scale": [
+              "maximum"
+            ],
+            "slope_scale": [
+              "minimum"
+            ],
+            "lateral_inflow_fraction": [
+              "minimum"
+            ]
+          },
+          "identifiability_warning": true,
+          "interpretation": "A boundary hit means the tested range did not bracket an optimum. Geometry, slope, roughness, and lateral gain may compensate for one another; selected values are effective model parameters until supported by independent measurements."
+        },
+        "unique_parameter_sets_evaluated": 8,
+        "trace": [
+          {
+            "step": "initial",
+            "parameters": {
+              "manning_scale": 1.0,
+              "width_scale": 1.0,
+              "slope_scale": 1.0,
+              "lateral_inflow_fraction": 0.0
+            },
+            "objective": 0.9761841654171359,
+            "objective_components": {
+              "objective": 0.9761841654171359,
+              "finite": true,
+              "mean_nse": 0.9668349182700161,
+              "minimum_nse": 0.9668349182700161,
+              "mean_correlation": 0.997999075427082,
+              "nse_standard_deviation": 0.0,
+              "correlation_standard_deviation": 0.0,
+              "worst_event_nse_gap": 0.0,
+              "weighted_mean_skill": 0.9761841654171359,
+              "nse_spread_penalty": 0.0,
+              "correlation_spread_penalty": 0.0,
+              "worst_event_penalty": 0.0,
+              "aggregation": "equal_weight_per_group",
+              "group_count": 1,
+              "group_summary": [
+                {
+                  "group": "Truckee River",
+                  "event_count": 1,
+                  "mean_nse": 0.9668349182700161,
+                  "mean_correlation": 0.997999075427082
+                }
+              ]
+            },
+            "training_events": [
+              {
+                "config": "truckee_reno_sparks_2017-01-08.json",
+                "scores": {
+                  "nse": 0.9668349182700161,
+                  "rmse": 544.4610778711926,
+                  "bias": 301.16117245128095,
+                  "percent_bias": 9.390600102252398,
+                  "pearson_r": 0.997999075427082,
+                  "n": 97
+                }
+              }
+            ]
+          },
+          {
+            "step": "coordinate",
+            "pass": 1,
+            "parameter": "manning_scale",
+            "parameters": {
+              "manning_scale": 1.2,
+              "width_scale": 1.0,
+              "slope_scale": 1.0,
+              "lateral_inflow_fraction": 0.0
+            },
+            "objective": 0.9800628950363379,
+            "objective_components": {
+              "objective": 0.9800628950363379,
+              "finite": true,
+              "mean_nse": 0.9723678013173455,
+              "minimum_nse": 0.9723678013173455,
+              "mean_correlation": 0.9980181137139873,
+              "nse_standard_deviation": 0.0,
+              "correlation_standard_deviation": 0.0,
+              "worst_event_nse_gap": 0.0,
+              "weighted_mean_skill": 0.9800628950363379,
+              "nse_spread_penalty": 0.0,
+              "correlation_spread_penalty": 0.0,
+              "worst_event_penalty": 0.0,
+              "aggregation": "equal_weight_per_group",
+              "group_count": 1,
+              "group_summary": [
+                {
+                  "group": "Truckee River",
+                  "event_count": 1,
+                  "mean_nse": 0.9723678013173455,
+                  "mean_correlation": 0.9980181137139873
+                }
+              ]
+            },
+            "training_events": [
+              {
+                "config": "truckee_reno_sparks_2017-01-08.json",
+                "scores": {
+                  "nse": 0.9723678013173455,
+                  "rmse": 496.9744069363033,
+                  "bias": 263.5011399479269,
+                  "percent_bias": 8.21631092613347,
+                  "pearson_r": 0.9980181137139873,
+                  "n": 97
+                }
+              }
+            ]
+          },
+          {
+            "step": "coordinate",
+            "pass": 1,
+            "parameter": "width_scale",
+            "parameters": {
+              "manning_scale": 1.2,
+              "width_scale": 1.2,
+              "slope_scale": 1.0,
+              "lateral_inflow_fraction": 0.0
+            },
+            "objective": 0.9808985799412994,
+            "objective_components": {
+              "objective": 0.9808985799412994,
+              "finite": true,
+              "mean_nse": 0.9735719461316514,
+              "minimum_nse": 0.9735719461316514,
+              "mean_correlation": 0.9979940588304781,
+              "nse_standard_deviation": 0.0,
+              "correlation_standard_deviation": 0.0,
+              "worst_event_nse_gap": 0.0,
+              "weighted_mean_skill": 0.9808985799412994,
+              "nse_spread_penalty": 0.0,
+              "correlation_spread_penalty": 0.0,
+              "worst_event_penalty": 0.0,
+              "aggregation": "equal_weight_per_group",
+              "group_count": 1,
+              "group_summary": [
+                {
+                  "group": "Truckee River",
+                  "event_count": 1,
+                  "mean_nse": 0.9735719461316514,
+                  "mean_correlation": 0.9979940588304781
+                }
+              ]
+            },
+            "training_events": [
+              {
+                "config": "truckee_reno_sparks_2017-01-08.json",
+                "scores": {
+                  "nse": 0.9735719461316514,
+                  "rmse": 486.0253193950157,
+                  "bias": 250.59873043105307,
+                  "percent_bias": 7.813996885640558,
+                  "pearson_r": 0.9979940588304781,
+                  "n": 97
+                }
+              }
+            ]
+          },
+          {
+            "step": "coordinate",
+            "pass": 1,
+            "parameter": "slope_scale",
+            "parameters": {
+              "manning_scale": 1.2,
+              "width_scale": 1.2,
+              "slope_scale": 0.8,
+              "lateral_inflow_fraction": 0.0
+            },
+            "objective": 0.9836978909961236,
+            "objective_components": {
+              "objective": 0.9836978909961236,
+              "finite": true,
+              "mean_nse": 0.9775752675474713,
+              "minimum_nse": 0.9775752675474713,
+              "mean_correlation": 0.9979840123763127,
+              "nse_standard_deviation": 0.0,
+              "correlation_standard_deviation": 0.0,
+              "worst_event_nse_gap": 0.0,
+              "weighted_mean_skill": 0.9836978909961236,
+              "nse_spread_penalty": 0.0,
+              "correlation_spread_penalty": 0.0,
+              "worst_event_penalty": 0.0,
+              "aggregation": "equal_weight_per_group",
+              "group_count": 1,
+              "group_summary": [
+                {
+                  "group": "Truckee River",
+                  "event_count": 1,
+                  "mean_nse": 0.9775752675474713,
+                  "mean_correlation": 0.9979840123763127
+                }
+              ]
+            },
+            "training_events": [
+              {
+                "config": "truckee_reno_sparks_2017-01-08.json",
+                "scores": {
+                  "nse": 0.9775752675474713,
+                  "rmse": 447.70293116161537,
+                  "bias": 220.4248148066392,
+                  "percent_bias": 6.873134646190304,
+                  "pearson_r": 0.9979840123763127,
+                  "n": 97
+                }
+              }
+            ]
+          },
+          {
+            "step": "coordinate",
+            "pass": 1,
+            "parameter": "lateral_inflow_fraction",
+            "parameters": {
+              "manning_scale": 1.2,
+              "width_scale": 1.2,
+              "slope_scale": 0.8,
+              "lateral_inflow_fraction": 0.0
+            },
+            "objective": 0.9836978909961236,
+            "objective_components": {
+              "objective": 0.9836978909961236,
+              "finite": true,
+              "mean_nse": 0.9775752675474713,
+              "minimum_nse": 0.9775752675474713,
+              "mean_correlation": 0.9979840123763127,
+              "nse_standard_deviation": 0.0,
+              "correlation_standard_deviation": 0.0,
+              "worst_event_nse_gap": 0.0,
+              "weighted_mean_skill": 0.9836978909961236,
+              "nse_spread_penalty": 0.0,
+              "correlation_spread_penalty": 0.0,
+              "worst_event_penalty": 0.0,
+              "aggregation": "equal_weight_per_group",
+              "group_count": 1,
+              "group_summary": [
+                {
+                  "group": "Truckee River",
+                  "event_count": 1,
+                  "mean_nse": 0.9775752675474713,
+                  "mean_correlation": 0.9979840123763127
+                }
+              ]
+            },
+            "training_events": [
+              {
+                "config": "truckee_reno_sparks_2017-01-08.json",
+                "scores": {
+                  "nse": 0.9775752675474713,
+                  "rmse": 447.70293116161537,
+                  "bias": 220.4248148066392,
+                  "percent_bias": 6.873134646190304,
+                  "pearson_r": 0.9979840123763127,
+                  "n": 97
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "held_out_group": "Truckee River",
+        "held_out_events": [
+          {
+            "config": "truckee_reno_sparks_2017-01-08.json",
+            "scores": {
+              "nse": 0.8968717240870694,
+              "rmse": 960.0971517851212,
+              "bias": 613.8151189294846,
+              "percent_bias": 19.13955996274967,
+              "pearson_r": 0.9979158546672985,
+              "n": 97
+            }
+          }
+        ],
+        "fit_events": [
+          "glen_canyon_lees_ferry_2002-01-25.json",
+          "glen_canyon_lees_ferry_2002-07-02.json"
+        ],
+        "selected_parameters": {
+          "manning_scale": 0.8,
+          "width_scale": 1.2,
+          "slope_scale": 1.2,
+          "lateral_inflow_fraction": 0.075
+        },
+        "fit_objective": 0.7835214427052556,
+        "fit_objective_components": {
+          "objective": 0.7835214427052556,
+          "finite": true,
+          "mean_nse": 0.7437285007288423,
+          "minimum_nse": 0.7437285007288423,
+          "mean_correlation": 0.8763716406502199,
+          "nse_standard_deviation": 0.0,
+          "correlation_standard_deviation": 0.0,
+          "worst_event_nse_gap": 0.0,
+          "weighted_mean_skill": 0.7835214427052556,
+          "nse_spread_penalty": 0.0,
+          "correlation_spread_penalty": 0.0,
+          "worst_event_penalty": 0.0,
+          "aggregation": "equal_weight_per_group",
+          "group_count": 1,
+          "group_summary": [
+            {
+              "group": "Colorado River",
+              "event_count": 2,
+              "mean_nse": 0.7437285007288423,
+              "mean_correlation": 0.8763716406502199
+            }
+          ]
+        },
+        "held_out_summary": {
+          "nse": {
+            "minimum": 0.8968717240870694,
+            "mean": 0.8968717240870694,
+            "maximum": 0.8968717240870694
+          },
+          "rmse": {
+            "minimum": 960.0971517851212,
+            "mean": 960.0971517851212,
+            "maximum": 960.0971517851212
+          },
+          "bias": {
+            "minimum": 613.8151189294846,
+            "mean": 613.8151189294846,
+            "maximum": 613.8151189294846
+          },
+          "percent_bias": {
+            "minimum": 19.13955996274967,
+            "mean": 19.13955996274967,
+            "maximum": 19.13955996274967
+          },
+          "pearson_r": {
+            "minimum": 0.9979158546672985,
+            "mean": 0.9979158546672985,
+            "maximum": 0.9979158546672985
+          }
+        },
+        "parameter_diagnostics": {
+          "boundary_hits": {
+            "manning_scale": [
+              "minimum"
+            ],
+            "width_scale": [
+              "maximum"
+            ],
+            "slope_scale": [
+              "maximum"
+            ],
+            "lateral_inflow_fraction": [
+              "maximum"
+            ]
+          },
+          "identifiability_warning": true,
+          "interpretation": "A boundary hit means the tested range did not bracket an optimum. Geometry, slope, roughness, and lateral gain may compensate for one another; selected values are effective model parameters until supported by independent measurements."
+        },
+        "unique_parameter_sets_evaluated": 8,
+        "trace": [
+          {
+            "step": "initial",
+            "parameters": {
+              "manning_scale": 1.0,
+              "width_scale": 1.0,
+              "slope_scale": 1.0,
+              "lateral_inflow_fraction": 0.0
+            },
+            "objective": 0.1197239242207592,
+            "objective_components": {
+              "objective": 0.1197239242207592,
+              "finite": true,
+              "mean_nse": -0.1519161131331579,
+              "minimum_nse": -0.1519161131331579,
+              "mean_correlation": 0.7535506780465657,
+              "nse_standard_deviation": 0.0,
+              "correlation_standard_deviation": 0.0,
+              "worst_event_nse_gap": 0.0,
+              "weighted_mean_skill": 0.1197239242207592,
+              "nse_spread_penalty": 0.0,
+              "correlation_spread_penalty": 0.0,
+              "worst_event_penalty": 0.0,
+              "aggregation": "equal_weight_per_group",
+              "group_count": 1,
+              "group_summary": [
+                {
+                  "group": "Colorado River",
+                  "event_count": 2,
+                  "mean_nse": -0.1519161131331579,
+                  "mean_correlation": 0.7535506780465657
+                }
+              ]
+            },
+            "training_events": [
+              {
+                "config": "glen_canyon_lees_ferry_2002-01-25.json",
+                "scores": {
+                  "nse": -0.2717925551996623,
+                  "rmse": 4752.6660920401955,
+                  "bias": -3774.049357113336,
+                  "percent_bias": -16.180907012986506,
+                  "pearson_r": 0.7282752247390201,
+                  "n": 97
+                }
+              },
+              {
+                "config": "glen_canyon_lees_ferry_2002-07-02.json",
+                "scores": {
+                  "nse": -0.03203967106665351,
+                  "rmse": 5173.384365356463,
+                  "bias": -4051.3378325000335,
+                  "percent_bias": -15.506781975839116,
+                  "pearson_r": 0.7788261313541113,
+                  "n": 97
+                }
+              }
+            ]
+          },
+          {
+            "step": "coordinate",
+            "pass": 1,
+            "parameter": "manning_scale",
+            "parameters": {
+              "manning_scale": 0.8,
+              "width_scale": 1.0,
+              "slope_scale": 1.0,
+              "lateral_inflow_fraction": 0.0
+            },
+            "objective": 0.4736000478236466,
+            "objective_components": {
+              "objective": 0.4736000478236466,
+              "finite": true,
+              "mean_nse": 0.3299892763060015,
+              "minimum_nse": 0.3299892763060015,
+              "mean_correlation": 0.8086918480314853,
+              "nse_standard_deviation": 0.0,
+              "correlation_standard_deviation": 0.0,
+              "worst_event_nse_gap": 0.0,
+              "weighted_mean_skill": 0.4736000478236466,
+              "nse_spread_penalty": 0.0,
+              "correlation_spread_penalty": 0.0,
+              "worst_event_penalty": 0.0,
+              "aggregation": "equal_weight_per_group",
+              "group_count": 1,
+              "group_summary": [
+                {
+                  "group": "Colorado River",
+                  "event_count": 2,
+                  "mean_nse": 0.3299892763060015,
+                  "mean_correlation": 0.8086918480314853
+                }
+              ]
+            },
+            "training_events": [
+              {
+                "config": "glen_canyon_lees_ferry_2002-01-25.json",
+                "scores": {
+                  "nse": 0.2581749686476307,
+                  "rmse": 3629.77667689414,
+                  "bias": -2513.7540012551167,
+                  "percent_bias": -10.777500742317487,
+                  "pearson_r": 0.7852270589300934,
+                  "n": 97
+                }
+              },
+              {
+                "config": "glen_canyon_lees_ferry_2002-07-02.json",
+                "scores": {
+                  "nse": 0.4018035839643723,
+                  "rmse": 3938.659648955698,
+                  "bias": -2688.59115235333,
+                  "percent_bias": -10.290772713957024,
+                  "pearson_r": 0.8321566371328771,
+                  "n": 97
+                }
+              }
+            ]
+          },
+          {
+            "step": "coordinate",
+            "pass": 1,
+            "parameter": "width_scale",
+            "parameters": {
+              "manning_scale": 0.8,
+              "width_scale": 1.2,
+              "slope_scale": 1.0,
+              "lateral_inflow_fraction": 0.0
+            },
+            "objective": 0.5320248733685847,
+            "objective_components": {
+              "objective": 0.5320248733685847,
+              "finite": true,
+              "mean_nse": 0.3982985266230556,
+              "minimum_nse": 0.3982985266230556,
+              "mean_correlation": 0.8440530157748194,
+              "nse_standard_deviation": 0.0,
+              "correlation_standard_deviation": 0.0,
+              "worst_event_nse_gap": 0.0,
+              "weighted_mean_skill": 0.5320248733685847,
+              "nse_spread_penalty": 0.0,
+              "correlation_spread_penalty": 0.0,
+              "worst_event_penalty": 0.0,
+              "aggregation": "equal_weight_per_group",
+              "group_count": 1,
+              "group_summary": [
+                {
+                  "group": "Colorado River",
+                  "event_count": 2,
+                  "mean_nse": 0.3982985266230556,
+                  "mean_correlation": 0.8440530157748194
+                }
+              ]
+            },
+            "training_events": [
+              {
+                "config": "glen_canyon_lees_ferry_2002-01-25.json",
+                "scores": {
+                  "nse": 0.34212004904771776,
+                  "rmse": 3418.239509546728,
+                  "bias": -2423.71204764019,
+                  "percent_bias": -10.391453729984516,
+                  "pearson_r": 0.8281548027065978,
+                  "n": 97
+                }
+              },
+              {
+                "config": "glen_canyon_lees_ferry_2002-07-02.json",
+                "scores": {
+                  "nse": 0.45447700419839343,
+                  "rmse": 3761.2576289696144,
+                  "bias": -2600.3193710166197,
+                  "percent_bias": -9.952906230242277,
+                  "pearson_r": 0.859951228843041,
+                  "n": 97
+                }
+              }
+            ]
+          },
+          {
+            "step": "coordinate",
+            "pass": 1,
+            "parameter": "slope_scale",
+            "parameters": {
+              "manning_scale": 0.8,
+              "width_scale": 1.2,
+              "slope_scale": 1.2,
+              "lateral_inflow_fraction": 0.0
+            },
+            "objective": 0.7196344825841601,
+            "objective_components": {
+              "objective": 0.7196344825841601,
+              "finite": true,
+              "mean_nse": 0.6389899957598563,
+              "minimum_nse": 0.6389899957598563,
+              "mean_correlation": 0.9078049518408694,
+              "nse_standard_deviation": 0.0,
+              "correlation_standard_deviation": 0.0,
+              "worst_event_nse_gap": 0.0,
+              "weighted_mean_skill": 0.7196344825841601,
+              "nse_spread_penalty": 0.0,
+              "correlation_spread_penalty": 0.0,
+              "worst_event_penalty": 0.0,
+              "aggregation": "equal_weight_per_group",
+              "group_count": 1,
+              "group_summary": [
+                {
+                  "group": "Colorado River",
+                  "event_count": 2,
+                  "mean_nse": 0.6389899957598563,
+                  "mean_correlation": 0.9078049518408694
+                }
+              ]
+            },
+            "training_events": [
+              {
+                "config": "glen_canyon_lees_ferry_2002-01-25.json",
+                "scores": {
+                  "nse": 0.6125393656454783,
+                  "rmse": 2623.2697819185123,
+                  "bias": -1666.5385725596045,
+                  "percent_bias": -7.145138583128611,
+                  "pearson_r": 0.89889010224173,
+                  "n": 97
+                }
+              },
+              {
+                "config": "glen_canyon_lees_ferry_2002-07-02.json",
+                "scores": {
+                  "nse": 0.6654406258742342,
+                  "rmse": 2945.527976011424,
+                  "bias": -1798.0542904509769,
+                  "percent_bias": -6.882179915748897,
+                  "pearson_r": 0.9167198014400088,
+                  "n": 97
+                }
+              }
+            ]
+          },
+          {
+            "step": "coordinate",
+            "pass": 1,
+            "parameter": "lateral_inflow_fraction",
+            "parameters": {
+              "manning_scale": 0.8,
+              "width_scale": 1.2,
+              "slope_scale": 1.2,
+              "lateral_inflow_fraction": 0.075
+            },
+            "objective": 0.7835214427052556,
+            "objective_components": {
+              "objective": 0.7835214427052556,
+              "finite": true,
+              "mean_nse": 0.7437285007288423,
+              "minimum_nse": 0.7437285007288423,
+              "mean_correlation": 0.8763716406502199,
+              "nse_standard_deviation": 0.0,
+              "correlation_standard_deviation": 0.0,
+              "worst_event_nse_gap": 0.0,
+              "weighted_mean_skill": 0.7835214427052556,
+              "nse_spread_penalty": 0.0,
+              "correlation_spread_penalty": 0.0,
+              "worst_event_penalty": 0.0,
+              "aggregation": "equal_weight_per_group",
+              "group_count": 1,
+              "group_summary": [
+                {
+                  "group": "Colorado River",
+                  "event_count": 2,
+                  "mean_nse": 0.7437285007288423,
+                  "mean_correlation": 0.8763716406502199
+                }
+              ]
+            },
+            "training_events": [
+              {
+                "config": "glen_canyon_lees_ferry_2002-01-25.json",
+                "scores": {
+                  "nse": 0.7252859496881681,
+                  "rmse": 2208.867167916132,
+                  "bias": -447.3172090457308,
+                  "percent_bias": -1.9178334674493387,
+                  "pearson_r": 0.8646468772741757,
+                  "n": 97
+                }
+              },
+              {
+                "config": "glen_canyon_lees_ferry_2002-07-02.json",
+                "scores": {
+                  "nse": 0.7621710517695166,
+                  "rmse": 2483.469942291519,
+                  "bias": -439.02278368312426,
+                  "percent_bias": -1.6803907426301088,
+                  "pearson_r": 0.8880964040262641,
+                  "n": 97
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

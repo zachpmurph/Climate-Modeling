@@ -191,6 +191,34 @@ replaced by tributary, groundwater, or local-runoff observations. All four
 events were inspected during development, so a future event remains necessary
 for a genuinely prospective test.
 
+## Historical multi-river stress test
+
+The separately committed
+`real_world_rivers/validation/multi_river_calibration_suite.json` fixes its
+split before fitting:
+
+- training: two 2002 Colorado events and January 2017 Truckee;
+- validation: January 2004 Colorado and February 2017 Truckee;
+- test: July 2004 Colorado and the predeclared Rio Grande event.
+
+The objective weights Colorado and Truckee equally regardless of event count.
+It selects the same effective boundary values as the Colorado-only fit:
+roughness `0.8×`, width `1.2×`, slope `1.2×`, and reach gain `7.5%`.
+Training group means are NSE `0.744` for Colorado and `0.897` for Truckee.
+However, transfer is not robust:
+
+- the second Truckee event falls from baseline NSE `0.797` to `0.276`;
+- the test-only Rio Grande event falls from `-2.848` to `-23.419`;
+- fitting Truckee alone and holding out Colorado produces mean held-Colorado
+  NSE `-1.060`;
+- fitting Colorado while holding out Truckee gives January Truckee NSE `0.897`.
+
+All four selected parameters hit search bounds. The result therefore rejects a
+single transferable correction factor across these reaches; it does not justify
+widening the search until reviewed geometry and measured controls replace the
+compensating estimates. The failure is retained as evidence that higher
+training NSE and correlation do not guarantee spatial transfer.
+
 ## What you need
 
 A reach with **two gauges**:
