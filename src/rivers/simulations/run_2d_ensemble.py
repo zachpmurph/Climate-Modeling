@@ -24,6 +24,7 @@ from general.solvers.profile import (
     domain2d_from_profile,
     load_channel_geometry,
     load_profile,
+    load_reviewed_terrain,
     resample_profile,
 )
 from rivers.simulations.ingest_to_simulate import scenario_from_profile
@@ -44,11 +45,16 @@ PARAMETER_NAMES = (
     "inflow_scale",
     "rainfall_scale",
     "downstream_stage_offset_m",
+    "terrain_elevation_offset_m",
+    "terrain_relief_scale",
+)
+OFFSET_PARAMETER_NAMES = frozenset(
+    {"downstream_stage_offset_m", "terrain_elevation_offset_m"}
 )
 DEFAULT_BOUNDS = {
     name: (
         (0.0, 0.0)
-        if name == "downstream_stage_offset_m"
+        if name in OFFSET_PARAMETER_NAMES
         else (1.0, 1.0)
     )
     for name in PARAMETER_NAMES
@@ -83,7 +89,7 @@ def load_ensemble_config(path):
             lower, upper = (float(value) for value in values)
         except (TypeError, ValueError) as exc:
             raise ValueError(f"{name} bounds must be numeric") from exc
-        requires_positive = name != "downstream_stage_offset_m"
+        requires_positive = name not in OFFSET_PARAMETER_NAMES
         if (
             not np.isfinite(lower)
             or not np.isfinite(upper)
@@ -115,7 +121,7 @@ def load_ensemble_config(path):
             for name in PARAMETER_NAMES:
                 default = (
                     0.0
-                    if name == "downstream_stage_offset_m"
+                    if name in OFFSET_PARAMETER_NAMES
                     else 1.0
                 )
                 try:
@@ -125,14 +131,14 @@ def load_ensemble_config(path):
                         f"{name} in sample {index} must be numeric"
                     ) from exc
                 if not np.isfinite(value) or (
-                    name != "downstream_stage_offset_m"
+                    name not in OFFSET_PARAMETER_NAMES
                     and value <= 0.0
                 ):
                     raise ValueError(
                         f"{name} in sample {index} must be finite"
                         + (
                             " and positive"
-                            if name != "downstream_stage_offset_m"
+                            if name not in OFFSET_PARAMETER_NAMES
                             else ""
                         )
                     )
@@ -292,6 +298,29 @@ def _initialize_2d_scenario(scenario, domain, inflow):
     scenario.left_inflow = distributed_inflow
 
 
+def _perturb_terrain(domain, parameters):
+    """Apply explicit datum, relief, and roughness uncertainty to a domain."""
+    base_bed = np.asarray(domain.bed_elevation_m, dtype=float)
+    thalweg = np.min(base_bed, axis=1, keepdims=True)
+    bed = (
+        thalweg
+        + parameters["terrain_relief_scale"] * (base_bed - thalweg)
+        + parameters["terrain_elevation_offset_m"]
+    )
+    slope_x = -np.gradient(bed, domain.x_m, axis=0, edge_order=1)
+    slope_y = -np.gradient(bed, domain.y_m, axis=1, edge_order=1)
+    return replace(
+        domain,
+        bed_elevation_m=bed,
+        slope_x=slope_x,
+        slope_y=slope_y,
+        manning_n=(
+            np.asarray(domain.manning_n)
+            * parameters["manning_scale"]
+        ),
+    )
+
+
 def summarize_member_fields(
     member_depth,
     dx_m,
@@ -330,8 +359,9 @@ def run_ensemble(
     bankfull_depth_m,
     config,
     *,
-    domain_width_m,
-    cross_cells,
+    domain_width_m=None,
+    cross_cells=None,
+    base_domain=None,
     t_final_min,
     record_interval_min=1.0,
     left_inflow=0.0,
@@ -344,8 +374,38 @@ def run_ensemble(
 ):
     """Run every sampled 2-D member and return fields plus diagnostics."""
     scales = sample_parameter_scales(config)
+    terrain_mode = base_domain is not None
+    if terrain_mode:
+        invalid_parameters = (
+            "longitudinal_slope_scale",
+            "channel_width_scale",
+            "bankfull_depth_scale",
+            "floodplain_slope_scale",
+        )
+        for name in invalid_parameters:
+            column = PARAMETER_NAMES.index(name)
+            if not np.allclose(scales[:, column], 1.0):
+                raise ValueError(
+                    f"{name} is synthetic-terrain uncertainty and must be "
+                    "fixed at 1 when a reviewed terrain grid is used"
+                )
+        if channel_width_m is not None or bankfull_depth_m is not None:
+            raise ValueError(
+                "Reviewed terrain ensembles cannot also use channel geometry"
+            )
+    elif (
+        channel_width_m is None
+        or bankfull_depth_m is None
+        or domain_width_m is None
+        or cross_cells is None
+    ):
+        raise ValueError(
+            "Synthetic ensembles require channel geometry, domain width, "
+            "and cross-cell count"
+        )
     member_depth = []
     member_bed = []
+    member_roughness = []
     member_mass_error = []
     member_times = None
     reference_domain = None
@@ -371,40 +431,50 @@ def run_ensemble(
 
         combined_rainfall.breakpoints_min = temporal_rainfall.breakpoints_min
         base_scenario.rainfall = combined_rainfall
+    if terrain_mode and np.ndim(base_scenario.initial_depth_m) != 0:
+        base_scenario.initial_depth_m = np.interp(
+            base_domain.x_m,
+            profile.station_m,
+            np.asarray(base_scenario.initial_depth_m, dtype=float),
+        )
 
     for row in scales:
         parameters = dict(zip(PARAMETER_NAMES, row))
-        member_profile = replace(
-            profile,
-            manning_n=profile.manning_n * parameters["manning_scale"],
-            slope=(
-                profile.slope
-                * parameters["longitudinal_slope_scale"]
-            ),
-        )
-        scaled_channel_width = (
-            np.asarray(channel_width_m)
-            * parameters["channel_width_scale"]
-        )
-        if np.any(scaled_channel_width >= domain_width_m):
-            raise ValueError(
-                "Sampled channel width reaches the 2-D domain boundary; "
-                "increase domain_width_m or narrow channel_width_scale bounds"
+        if terrain_mode:
+            domain = _perturb_terrain(base_domain, parameters)
+        else:
+            member_profile = replace(
+                profile,
+                slope=(
+                    profile.slope
+                    * parameters["longitudinal_slope_scale"]
+                ),
             )
-        domain = domain2d_from_profile(
-            member_profile,
-            domain_width_m,
-            cross_cells,
-            channel_width_m=scaled_channel_width,
-            bankfull_depth_m=(
-                np.asarray(bankfull_depth_m)
-                * parameters["bankfull_depth_scale"]
-            ),
-            floodplain_slope=(
-                floodplain_slope
-                * parameters["floodplain_slope_scale"]
-            ),
-        )
+            scaled_channel_width = (
+                np.asarray(channel_width_m)
+                * parameters["channel_width_scale"]
+            )
+            if np.any(scaled_channel_width >= domain_width_m):
+                raise ValueError(
+                    "Sampled channel width reaches the 2-D domain boundary; "
+                    "increase domain_width_m or narrow "
+                    "channel_width_scale bounds"
+                )
+            domain = domain2d_from_profile(
+                member_profile,
+                domain_width_m,
+                cross_cells,
+                channel_width_m=scaled_channel_width,
+                bankfull_depth_m=(
+                    np.asarray(bankfull_depth_m)
+                    * parameters["bankfull_depth_scale"]
+                ),
+                floodplain_slope=(
+                    floodplain_slope
+                    * parameters["floodplain_slope_scale"]
+                ),
+            )
+            domain = _perturb_terrain(domain, parameters)
         scenario = replace(
             base_scenario,
             rainfall=_scaled_rainfall(
@@ -433,6 +503,7 @@ def run_ensemble(
             raise RuntimeError("Ensemble members produced inconsistent record times")
         member_depth.append(result.depth_history)
         member_bed.append(domain.bed_elevation_m)
+        member_roughness.append(domain.manning_n)
         cell_area = domain.dx_m[:, None] * domain.dy_m[None, :]
         storage_change = float(
             np.sum(
@@ -449,6 +520,7 @@ def run_ensemble(
 
     member_depth = np.asarray(member_depth)
     member_bed = np.asarray(member_bed)
+    member_roughness = np.asarray(member_roughness)
     aggregate = summarize_member_fields(
         member_depth,
         reference_domain.dx_m,
@@ -470,6 +542,9 @@ def run_ensemble(
         ),
         "bed_elevation_quantiles_m": np.quantile(
             member_bed, config["quantiles"], axis=0
+        ),
+        "manning_n_quantiles": np.quantile(
+            member_roughness, config["quantiles"], axis=0
         ),
         "water_surface_elevation_quantiles_m": np.quantile(
             member_depth + member_bed[:, None, :, :],
@@ -540,9 +615,10 @@ def parse_args(argv=None):
         description="Run a reproducible 2-D hydraulic uncertainty ensemble."
     )
     parser.add_argument("profile", type=Path)
-    parser.add_argument("--hydraulic-geometry", type=Path, required=True)
+    parser.add_argument("--hydraulic-geometry", type=Path)
+    parser.add_argument("--terrain-grid", type=Path)
     parser.add_argument("--ensemble-config", type=Path, required=True)
-    parser.add_argument("--width", type=float, required=True)
+    parser.add_argument("--width", type=float)
     parser.add_argument("--cross-cells", type=int, default=20)
     parser.add_argument("--longitudinal-cells", type=int)
     parser.add_argument("--t-final", type=float, required=True)
@@ -563,6 +639,19 @@ def parse_args(argv=None):
 
 def main(argv=None):
     args = parse_args(argv)
+    using_reviewed_terrain = args.terrain_grid is not None
+    if using_reviewed_terrain and (
+        args.hydraulic_geometry is not None or args.width is not None
+    ):
+        raise SystemExit(
+            "error: reviewed terrain replaces --hydraulic-geometry and --width"
+        )
+    if not using_reviewed_terrain and (
+        args.hydraulic_geometry is None or args.width is None
+    ):
+        raise SystemExit(
+            "error: use --terrain-grid or both --hydraulic-geometry and --width"
+        )
     if args.inflow_series is not None and args.left_inflow != 0.0:
         raise SystemExit(
             "error: use either --left-inflow or --inflow-series, not both"
@@ -578,6 +667,7 @@ def main(argv=None):
     for path in (
         args.profile,
         args.hydraulic_geometry,
+        args.terrain_grid,
         args.ensemble_config,
         args.inflow_series,
         args.rainfall_series,
@@ -590,9 +680,20 @@ def main(argv=None):
         profile = load_profile(args.profile)
         if args.longitudinal_cells is not None:
             profile = resample_profile(profile, args.longitudinal_cells)
-        channel_width, bankfull_depth = load_channel_geometry(
-            args.hydraulic_geometry, profile.station_m
-        )
+        if using_reviewed_terrain:
+            base_domain, terrain_roughness_source = load_reviewed_terrain(
+                args.terrain_grid, profile
+            )
+            channel_width = None
+            bankfull_depth = None
+        else:
+            base_domain = None
+            terrain_roughness_source = (
+                "river_profile_repeated_across_y"
+            )
+            channel_width, bankfull_depth = load_channel_geometry(
+                args.hydraulic_geometry, profile.station_m
+            )
         inflow = (
             args.left_inflow
             if args.inflow_series is None
@@ -621,6 +722,7 @@ def main(argv=None):
             config,
             domain_width_m=args.width,
             cross_cells=args.cross_cells,
+            base_domain=base_domain,
             t_final_min=args.t_final,
             record_interval_min=args.record_interval,
             left_inflow=inflow,
@@ -636,7 +738,22 @@ def main(argv=None):
 
     context = {
         "profile": _portable_path(args.profile),
-        "hydraulic_geometry": _portable_path(args.hydraulic_geometry),
+        "hydraulic_geometry": (
+            None
+            if args.hydraulic_geometry is None
+            else _portable_path(args.hydraulic_geometry)
+        ),
+        "terrain_grid": (
+            None
+            if args.terrain_grid is None
+            else _portable_path(args.terrain_grid)
+        ),
+        "terrain_source": (
+            "reviewed_grid"
+            if using_reviewed_terrain
+            else "parameterized_channel_and_floodplain"
+        ),
+        "roughness_source": terrain_roughness_source,
         "ensemble_config": _portable_path(args.ensemble_config),
         "domain_width_m": args.width,
         "cross_cells": args.cross_cells,

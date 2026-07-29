@@ -76,3 +76,27 @@ python src/rivers/simulations/run_simulation.py PROFILE \
 `--terrain-grid` replaces `--width` and `--hydraulic-geometry`; mixing those
 inputs is rejected so a run cannot silently combine reviewed and synthetic
 terrain.
+
+## Uncertainty ensembles
+
+The ensemble runner accepts the same `--terrain-grid` input. Reviewed-terrain
+members may vary:
+
+- `manning_scale`;
+- `terrain_elevation_offset_m`, a uniform vertical-datum offset;
+- `terrain_relief_scale`, which scales elevation above each x row's lowest bed
+  while retaining that row's thalweg;
+- inflow, rainfall, and downstream-stage uncertainty.
+
+Synthetic geometry parameters (`longitudinal_slope_scale`,
+`channel_width_scale`, `bankfull_depth_scale`, and
+`floodplain_slope_scale`) must remain exactly `1` for reviewed terrain. The
+runner rejects other values rather than applying a parameter with a changed
+physical meaning. Saved ensemble evidence includes bed-elevation and Manning
+roughness quantiles in addition to the outcome fields.
+
+A global datum offset has no interior hydraulic effect when every boundary is
+relative or open; it matters when compared with an absolute downstream stage.
+Relief scaling is only defensible when its bounds come from survey/DEM vertical
+error analysis. Neither range should be selected by inspecting the held-out
+flood outcome.

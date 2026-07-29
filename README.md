@@ -141,6 +141,7 @@ The rationale for each transition is given alongside the change.
 | **4z — Saved 1-D flow histories** | Current branch | The unified runner now writes every recorded 1-D Saint-Venant discharge field to `<run>_discharge.csv`, records its path and units in the run summary, and keeps its time/station grid aligned with depth. | Event calibration and validation target observed gauge flow. Persisting modeled flow makes NSE and correlation scoring reproducible without rerunning the solver or reaching into internal result objects. |
 | **4aa — Compound stage–width sections** | Current branch | Added reviewed, per-cell piecewise-linear stage–width curves to 1-D Saint-Venant. Area, pressure, top width, symmetric-bank wetted perimeter, hydraulic radius, rainfall capture, and depth-from-area are evaluated from the full curve; longitudinal interpolation, provenance, mass balance, and lake-at-rest gates are included. | One trapezoid cannot represent benches or rapid floodplain widening. Stage–width curves let storage and conveyance change at multiple surveyed elevations without fitting those changes into Manning roughness. |
 | **4ab — Reviewed 2-D terrain grids** | Current branch | Added a reviewable Cartesian terrain CSV path for 2-D Saint-Venant. The runner validates a complete grid, cell dimensions, elevation, optional per-cell roughness, reach alignment, initial water surface, and provenance; saved fields now retain terrain slopes and roughness. | Parameterized parabolic channels cannot reproduce real banks, floodplain relief, or spatial land-cover resistance. A reviewed grid lets those controls enter explicitly rather than being absorbed by synthetic terrain parameters. |
+| **4ac — Terrain-aware 2-D ensembles** | Current branch | Extended probabilistic 2-D runs to reviewed terrain. Ensembles can scale the reviewed roughness grid, perturb cross-channel relief, apply a vertical-datum offset, and vary forcing/stage while rejecting synthetic width, bankfull, floodplain-slope, and longitudinal-slope parameters. Bed and roughness quantiles are retained. | Applying synthetic-domain parameters to a reviewed DEM would change the meaning of the observations. Terrain-specific perturbations keep uncertainty explicit without silently rebuilding the supplied surface. |
 
 ---
 
@@ -306,6 +307,21 @@ python src/rivers/simulations/run_2d_ensemble.py \
 
 python src/rivers/reporting/generate_uncertainty_report.py \
     data/ensembles/example_uncertainty_ensemble.npz
+```
+
+For reviewed terrain, replace synthetic width and geometry with
+`--terrain-grid`. In the ensemble config, keep
+`longitudinal_slope_scale`, `channel_width_scale`, `bankfull_depth_scale`, and
+`floodplain_slope_scale` fixed at `1`. The supported terrain-specific terms are
+`terrain_elevation_offset_m` for vertical-datum uncertainty and
+`terrain_relief_scale` for cross-channel relief uncertainty:
+
+```bash
+python src/rivers/simulations/run_2d_ensemble.py \
+    real_world_rivers/tools/example_river_profile.csv \
+    --terrain-grid reviewed_terrain.csv \
+    --ensemble-config terrain_uncertainty.json \
+    --t-final 60
 ```
 
 The configuration controls sample count, random seed, quantiles, wet-depth
@@ -596,7 +612,7 @@ channel/floodplain terrain.
 
 ## Next steps
 
-- Retain raw asymmetric cross-section coordinates in 1-D and add
-  terrain-aware uncertainty ensembles for reviewed 2-D grids.
+- Retain raw asymmetric cross-section coordinates in 1-D and estimate
+  basin-specific uncertainty distributions from reviewed evidence.
 - Estimate basin-specific joint uncertainty distributions and test ensemble
   coverage on a future event or untouched third river.

@@ -111,7 +111,7 @@ def test_explicit_joint_samples_preserve_parameter_dependence(tmp_path):
         expected = (
             0.0
             if ensemble.PARAMETER_NAMES[index]
-            == "downstream_stage_offset_m"
+            in ensemble.OFFSET_PARAMETER_NAMES
             else 1.0
         )
         assert np.all(samples[:, index] == expected)
@@ -254,3 +254,109 @@ def test_cli_writes_reproducible_2d_uncertainty_artifacts(tmp_path):
     ensemble.main(args)
     with np.load(fields_path) as repeated:
         assert np.array_equal(repeated["parameter_scales"], saved_scales)
+
+
+def test_cli_runs_uncertainty_on_reviewed_terrain(tmp_path):
+    terrain_path = tmp_path / "terrain.csv"
+    rows = [
+        "x_m,y_m,dx_m,dy_m,bed_elevation_m,manning_n",
+    ]
+    for x, base in ((0, 0.0), (2000, -2.0), (4000, -3.4)):
+        for y, relief, roughness in (
+            (0, 1.0, 0.0012),
+            (10, 0.0, 0.0007),
+            (20, 1.2, 0.0015),
+        ):
+            rows.append(
+                f"{x},{y},1000,10,{base + relief},{roughness}"
+            )
+    terrain_path.write_text("\n".join(rows) + "\n", encoding="utf-8")
+    config_path = tmp_path / "terrain_ensemble.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "sample_count": 3,
+                "seed": 9,
+                "quantiles": [0.1, 0.5, 0.9],
+                "parameter_scales": {
+                    "manning_scale": [0.9, 1.1],
+                    "terrain_elevation_offset_m": [-0.05, 0.05],
+                    "terrain_relief_scale": [0.8, 1.2],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    output_dir = tmp_path / "runs"
+
+    ensemble.main(
+        [
+            PROFILE_PATH,
+            "--terrain-grid",
+            str(terrain_path),
+            "--ensemble-config",
+            str(config_path),
+            "--t-final",
+            "0.01",
+            "--record-interval",
+            "0.01",
+            "--output-dir",
+            str(output_dir),
+            "--run-name",
+            "terrain",
+        ]
+    )
+
+    with np.load(output_dir / "terrain_ensemble.npz") as fields:
+        assert fields["depth_quantiles_m"].shape == (3, 2, 3, 3)
+        assert fields["bed_elevation_quantiles_m"].shape == (3, 3, 3)
+        assert fields["manning_n_quantiles"].shape == (3, 3, 3)
+        assert np.any(
+            fields["bed_elevation_quantiles_m"][0]
+            != fields["bed_elevation_quantiles_m"][-1]
+        )
+        assert np.max(
+            np.abs(fields["member_mass_balance_error_m3"])
+        ) < 1e-10
+
+    summary = json.loads(
+        (
+            output_dir / "terrain_ensemble_summary.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert summary["context"]["terrain_grid"] == str(terrain_path)
+    assert summary["context"]["terrain_source"] == "reviewed_grid"
+    assert summary["context"]["roughness_source"] == "terrain_grid"
+
+
+def test_reviewed_terrain_rejects_synthetic_geometry_uncertainty(tmp_path):
+    from general.solvers.profile import load_profile, load_reviewed_terrain
+
+    terrain_path = tmp_path / "terrain.csv"
+    terrain_path.write_text(
+        "x_m,y_m,dx_m,dy_m,bed_elevation_m\n"
+        "0,0,1,1,0\n0,1,1,1,1\n"
+        "1,0,1,1,-1\n1,1,1,1,0\n",
+        encoding="utf-8",
+    )
+    profile = load_profile(PROFILE_PATH)
+    domain, _ = load_reviewed_terrain(terrain_path, profile)
+    config = _config()
+    width_index = ensemble.PARAMETER_NAMES.index("channel_width_scale")
+    samples = np.ones((2, len(ensemble.PARAMETER_NAMES)))
+    for name in ensemble.OFFSET_PARAMETER_NAMES:
+        samples[:, ensemble.PARAMETER_NAMES.index(name)] = 0.0
+    samples[:, width_index] = [0.9, 1.1]
+    config["samples"] = samples
+    config["sample_count"] = 2
+
+    with pytest.raises(ValueError, match="synthetic-terrain uncertainty"):
+        ensemble.run_ensemble(
+            profile,
+            None,
+            None,
+            config,
+            base_domain=domain,
+            t_final_min=0.0,
+        )
