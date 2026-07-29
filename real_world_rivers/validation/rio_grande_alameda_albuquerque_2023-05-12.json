@@ -1,0 +1,65 @@
+{
+  "case": {
+    "name": "Rio Grande Alameda to Albuquerque — 2023-05-12 event",
+    "river": "Rio Grande",
+    "upstream_gauge": "USGS-08329918",
+    "downstream_gauge": "USGS-08330000",
+    "observation_window": [
+      "2023-05-12T00:00:00Z",
+      "2023-05-14T00:00:00Z"
+    ],
+    "purpose": "One-time predeclared third-river structural transfer test; downstream observations are held out and no parameter will be adjusted after scoring.",
+    "selection_protocol": {
+      "declared_before_observation_fetch": true,
+      "event_basis": "The window brackets the 2023 spring high-flow period identified from USGS station metadata, before either event hydrograph was downloaded.",
+      "first_run_policy": "The first completed run and its score will be retained regardless of performance.",
+      "calibration_policy": "No Rio Grande observation may be used to select or adjust reach geometry, roughness, lateral inflow, initial conditions, or numerical settings."
+    }
+  },
+  "validation_status": "predeclared_third_river_transfer_test",
+  "observations": "rio_grande_alameda_albuquerque_2023-05-12.csv",
+  "sources": [
+    {
+      "role": "upstream",
+      "provider": "U.S. Geological Survey Water Data APIs",
+      "parameter": "00060 continuous discharge",
+      "gauge": "USGS-08329918",
+      "url": "https://api.waterdata.usgs.gov/ogcapi/v0/collections/continuous/items?f=json&monitoring_location_id=USGS-08329918&parameter_code=00060&datetime=2023-05-11T12%3A00%3A00Z%2F2023-05-14T00%3A00%3A00Z&limit=50000",
+      "approval_status": "Approved"
+    },
+    {
+      "role": "downstream",
+      "provider": "U.S. Geological Survey Water Data APIs",
+      "parameter": "00060 continuous discharge",
+      "gauge": "USGS-08330000",
+      "url": "https://api.waterdata.usgs.gov/ogcapi/v0/collections/continuous/items?f=json&monitoring_location_id=USGS-08330000&parameter_code=00060&datetime=2023-05-12T00%3A00%3A00Z%2F2023-05-14T00%3A00%3A00Z&limit=50000",
+      "approval_status": "Approved"
+    }
+  ],
+  "retrieved_at": null,
+  "reach": {
+    "length_m": 14645.571,
+    "cells": 101,
+    "slope": 0.0007338224,
+    "manning_n": 0.0005833333333333334,
+    "upstream_width_m": 100.0,
+    "downstream_width_m": 100.0,
+    "geometry_classification": "estimated",
+    "roughness_origin": "Generic SI Manning n 0.035 divided by 60; fixed before observing the event",
+    "width_source": "Predeclared constant active-channel estimate; no event discharge was used",
+    "length_source": "USGS NLDI NHDPlusV2 routed centerline from USGS-08329918 to USGS-08330000",
+    "slope_source": "Difference between published NAVD88 gage datums divided by routed length",
+    "gage_datum_upstream_ft_navd88": 4984.18,
+    "gage_datum_downstream_ft_navd88": 4948.92,
+    "drainage_area_upstream_mi2": 17129.0,
+    "drainage_area_downstream_mi2": 17440.0
+  },
+  "warmup": {
+    "duration_min": 720.0,
+    "upstream_forcing": "observed"
+  },
+  "lateral_inflow_fraction": 0.0,
+  "record_interval_min": 5.0,
+  "spatial_order": 1,
+  "cfl": 0.4
+}
