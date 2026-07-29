@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "suite": {
+    "name": "Historical river-balanced reconstruction transfer",
+    "rivers": [
+      "Colorado River",
+      "Truckee River",
+      "Rio Grande"
+    ]
+  },
+  "experiment_protocol": {
+    "declared_before_suite_run": true,
+    "declared_at": "2026-07-29",
+    "candidate_history": "Both reconstruction orders have prior analytic and single-event evidence; this is a predeclared suite-level transfer comparison, not a pristine prospective experiment.",
+    "retention_policy": "Retain the complete result regardless of which structure is selected or how held-out events score.",
+    "parameter_policy": "All physical multipliers remain at their uncalibrated defaults so the experiment isolates reconstruction structure rather than refitting compensating reach parameters."
+  },
+  "split_policy": "Structure is selected only from two 2002 Colorado River events and the January 2017 Truckee River event. January 2004 Colorado and February 2017 Truckee are validation. July 2004 Colorado and the predeclared Rio Grande event are test-only. Leave-one-river-out folds repeat structural selection without the held river.",
+  "split": {
+    "training": [
+      "glen_canyon_lees_ferry_2002-01-25.json",
+      "glen_canyon_lees_ferry_2002-07-02.json",
+      "truckee_reno_sparks_2017-01-08.json"
+    ],
+    "validation": [
+      "glen_canyon_lees_ferry_2004-01-06.json",
+      "truckee_reno_sparks_2017-02-10.json"
+    ],
+    "test": [
+      "glen_canyon_lees_ferry.json",
+      "rio_grande_alameda_albuquerque_2023-05-12.json"
+    ]
+  },
+  "objective": {
+    "nse_weight": 0.7,
+    "correlation_weight": 0.3,
+    "robustness_penalty": 0.1,
+    "correlation_robustness_penalty": 0.05,
+    "worst_event_weight": 0.15,
+    "balance_by": "river"
+  },
+  "structural_variants": [
+    {
+      "name": "first_order",
+      "overrides": {
+        "spatial_order": 1
+      }
+    },
+    {
+      "name": "second_order",
+      "overrides": {
+        "spatial_order": 2
+      }
+    }
+  ],
+  "cross_group_validation": {
+    "enabled": true,
+    "passes": 1
+  },
+  "parameter_interpretation": {
+    "manning_scale": "Fixed at one; use each reach's independently estimated roughness.",
+    "width_scale": "Fixed at one; use each reach's independently estimated width.",
+    "slope_scale": "Fixed at one; use each reach's independently estimated slope.",
+    "lateral_inflow_fraction": "Fixed at zero; do not add a fitted distributed reach gain."
+  },
+  "parameter_grid": {
+    "manning_scale": [
+      1.0
+    ],
+    "width_scale": [
+      1.0
+    ],
+    "slope_scale": [
+      1.0
+    ],
+    "lateral_inflow_fraction": [
+      0.0
+    ]
+  }
+}

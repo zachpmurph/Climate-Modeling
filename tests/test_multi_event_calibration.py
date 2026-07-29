@@ -19,6 +19,12 @@ TRACKED_MULTI_RIVER_CALIBRATION = (
     / "validation"
     / "multi_river_calibration_suite.results.json"
 )
+PREDECLARED_STRUCTURAL_SUITE = (
+    REPO_ROOT
+    / "real_world_rivers"
+    / "validation"
+    / "multi_river_structural_suite.json"
+)
 
 
 def test_composite_objective_rewards_skill_and_penalizes_event_spread():
@@ -112,6 +118,30 @@ def test_parameter_overrides_apply_one_global_physical_scaling():
     assert overrides["reach"]["upstream_width_m"] == pytest.approx(24.0)
     assert overrides["reach"]["downstream_width_m"] == pytest.approx(36.0)
     assert overrides["lateral_inflow_fraction"] == pytest.approx(0.05)
+
+
+def test_multi_river_structural_experiment_is_predeclared_and_unfitted():
+    manifest = json.loads(
+        PREDECLARED_STRUCTURAL_SUITE.read_text(encoding="utf-8")
+    )
+
+    assert manifest["experiment_protocol"][
+        "declared_before_suite_run"
+    ] is True
+    assert manifest["experiment_protocol"]["retention_policy"].startswith(
+        "Retain"
+    )
+    assert {
+        variant["name"] for variant in manifest["structural_variants"]
+    } == {"first_order", "second_order"}
+    assert all(
+        values == [1.0]
+        for name, values in manifest["parameter_grid"].items()
+        if name != "lateral_inflow_fraction"
+    )
+    assert manifest["parameter_grid"]["lateral_inflow_fraction"] == [0.0]
+    assert manifest["objective"]["balance_by"] == "river"
+    assert manifest["cross_group_validation"]["enabled"] is True
 
 
 def test_training_pareto_front_retains_nse_correlation_tradeoffs():
