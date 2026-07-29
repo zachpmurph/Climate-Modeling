@@ -353,6 +353,64 @@ def test_runner_applies_reviewed_geometry_to_1d_solvers(tmp_path, solver):
     ]
 
 
+def test_runner_builds_trapezoidal_1d_geometry_and_balances_volume(tmp_path):
+    output_dir = tmp_path / "runs"
+    run_simulation.main(
+        [
+            PROFILE_PATH,
+            "--solver",
+            "saint_venant",
+            "--hydraulic-geometry",
+            GEOMETRY_PATH,
+            "--cross-section-shape",
+            "trapezoidal",
+            "--bottom-width-fraction",
+            "0.5",
+            "--rainfall-rate",
+            "0.00001",
+            "--t-final",
+            "0.01",
+            "--output-dir",
+            str(output_dir),
+            "--run-name",
+            "trapezoid",
+        ]
+    )
+
+    summary = json.loads(
+        (output_dir / "trapezoid_summary.json").read_text(encoding="utf-8")
+    )
+    section = summary["cross_section"]
+    assert section["shape"] == "trapezoidal"
+    assert section["channel_bottom_width_m"] == [
+        10.0,
+        12.0,
+        12.0,
+        12.0,
+        12.0,
+    ]
+    assert section["side_slope_h_to_v"] == pytest.approx(
+        [2.0, 15.0 / 7.0, 15.0 / 7.0, 15.0 / 7.0, 15.0 / 7.0]
+    )
+    assert summary["mass_unit"] == "m3"
+    assert abs(summary["mass_balance_error"]) < 1e-9
+
+
+def test_trapezoidal_cli_requires_dynamic_solver_and_geometry():
+    with pytest.raises(SystemExit, match="trapezoidal"):
+        run_simulation.main(
+            [
+                PROFILE_PATH,
+                "--solver",
+                "kinematic_wave",
+                "--cross-section-shape",
+                "trapezoidal",
+                "--t-final",
+                "0",
+            ]
+        )
+
+
 def test_temporal_forcing_csv_is_validated_and_interpolated(tmp_path):
     forcing_path = tmp_path / "inflow.csv"
     forcing_path.write_text(

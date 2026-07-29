@@ -163,6 +163,21 @@ def parse_args(argv=None):
         ),
     )
     p.add_argument(
+        "--cross-section-shape",
+        choices=("rectangular", "trapezoidal"),
+        default="rectangular",
+        help="1-D channel shape used with --hydraulic-geometry (default: rectangular)",
+    )
+    p.add_argument(
+        "--bottom-width-fraction",
+        type=float,
+        default=0.5,
+        help=(
+            "Trapezoid bottom width divided by reviewed bankfull width "
+            "(default: 0.5)"
+        ),
+    )
+    p.add_argument(
         "--floodplain-slope",
         type=float,
         default=0.02,
@@ -216,6 +231,19 @@ def main(argv=None):
     ):
         raise SystemExit(
             "error: downstream boundary options currently require --solver saint_venant"
+        )
+    if args.cross_section_shape == "trapezoidal" and (
+        args.solver != "saint_venant" or args.hydraulic_geometry is None
+    ):
+        raise SystemExit(
+            "error: trapezoidal cross-sections require --solver saint_venant "
+            "and --hydraulic-geometry"
+        )
+    if not np.isfinite(args.bottom_width_fraction) or not (
+        0.0 < args.bottom_width_fraction <= 1.0
+    ):
+        raise SystemExit(
+            "error: --bottom-width-fraction must be in the interval (0, 1]"
         )
     if (
         args.solver not in {"saint_venant", "saint_venant_2d"}
@@ -309,10 +337,19 @@ def main(argv=None):
             channel_width, bankfull_depth = load_channel_geometry(
                 args.hydraulic_geometry, profile.station_m
             )
+            bottom_width = None
+            side_slope = None
+            if args.cross_section_shape == "trapezoidal":
+                bottom_width = channel_width * args.bottom_width_fraction
+                side_slope = (
+                    channel_width - bottom_width
+                ) / (2.0 * bankfull_depth)
             domain = domain_from_profile(
                 profile,
                 channel_width_m=channel_width,
                 bankfull_depth_m=bankfull_depth,
+                channel_bottom_width_m=bottom_width,
+                side_slope_h_to_v=side_slope,
             )
 
     scenario = scenario_from_profile(
@@ -444,21 +481,34 @@ def main(argv=None):
         )
 
     # Mass balance error
-    cell_measure = (
-        result.domain.dx_m[:, None] * result.domain.dy_m[None, :]
-        if is_2d
-        else (
+    physical_volume = is_2d or (
+        not is_2d and result.domain.channel_width_m is not None
+    )
+    if is_2d:
+        storage_change = float(
+            np.sum(
+                (result.depth_final - result.depth_initial)
+                * result.domain.dx_m[:, None]
+                * result.domain.dy_m[None, :]
+            )
+        )
+    elif "cross_section_area_history" in result.extra:
+        area_history = result.extra["cross_section_area_history"]
+        storage_change = float(
+            np.sum((area_history[-1] - area_history[0]) * result.domain.dx_m)
+        )
+    else:
+        cell_measure = (
             result.domain.dx_m
             if result.domain.channel_width_m is None
             else result.domain.dx_m * result.domain.channel_width_m
         )
-    )
-    physical_volume = is_2d or (
-        not is_2d and result.domain.channel_width_m is not None
-    )
+        storage_change = float(
+            np.sum((result.depth_final - result.depth_initial) * cell_measure)
+        )
     mass_balance_error = (
         result.mass_inflow + result.mass_source + result.mass_correction - result.mass_outflow
-        - float(np.sum((result.depth_final - result.depth_initial) * cell_measure))
+        - storage_change
     )
 
     summary = {
@@ -524,8 +574,15 @@ def main(argv=None):
             "hydraulic_geometry": _portable_path(args.hydraulic_geometry),
             "channel_width_m": result.domain.channel_width_m.tolist(),
             "bankfull_depth_m": result.domain.bankfull_depth_m.tolist(),
-            "shape": "rectangular",
+            "shape": result.extra.get("cross_section_shape", "rectangular"),
         }
+        if result.domain.channel_bottom_width_m is not None:
+            summary["cross_section"]["channel_bottom_width_m"] = (
+                result.domain.channel_bottom_width_m.tolist()
+            )
+            summary["cross_section"]["side_slope_h_to_v"] = (
+                result.domain.side_slope_h_to_v.tolist()
+            )
     if args.map_markers is not None:
         summary["map_inputs"] = {
             "markers": _portable_path(args.map_markers),

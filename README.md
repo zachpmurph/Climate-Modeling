@@ -36,15 +36,19 @@ is recomputed every iteration from the CFL condition $\Delta t = \text{CFL} \cdo
 
 ### Saint-Venant (full dynamic wave) (`saint_venant_1d.py`)
 
-Solves the 1D Saint-Venant equations for rectangular cross-sectional area
-$A=Bh$ and whole-channel discharge $Q$:
+Solves the 1D Saint-Venant equations for rectangular or trapezoidal
+cross-sectional area $A=bh+zh^2$ and whole-channel discharge $Q$, where $b$
+is bottom width and $z$ is the horizontal-to-vertical side slope per bank.
+Setting $z=0$ recovers the rectangular section:
 
-$$\frac{\partial A}{\partial t} + \frac{\partial Q}{\partial x} = B r$$
+$$\frac{\partial A}{\partial t} + \frac{\partial Q}{\partial x} = T(h) r + q_l$$
 
-$$\frac{\partial Q}{\partial t} + \frac{\partial}{\partial x}\!\left(\frac{Q^2}{A} + \frac{g B h^2}{2}\right) = g A (S_0 - S_f) + S_B$$
+$$\frac{\partial Q}{\partial t} + \frac{\partial}{\partial x}\!\left(\frac{Q^2}{A} + g I_1\right) = g A (S_0 - S_f) + S_G$$
 
-where $S_f=n^2u|u|/R_h^{4/3}$ is the Manning friction slope, $S_B$ is the
-non-prismatic width source, and $g = 9.8 \times 60^2\ \text{m/min}^2$. This
+where $T=b+2zh$ is top width, $I_1=bh^2/2+zh^3/3$ is the hydrostatic
+pressure moment, $q_l$ is lateral inflow per metre of reach,
+$S_f=n^2u|u|/R_h^{4/3}$ is the Manning friction slope, $S_G$ is the
+non-prismatic geometry source, and $g = 9.8 \times 60^2\ \text{m/min}^2$. This
 adds the momentum equation, capturing pressure-gradient
 forces and flow inertia that the kinematic approximation omits — important near rapid
 transients, steep wetting fronts, and backwater effects.
@@ -54,9 +58,10 @@ finite-volume stencil, hydrostatic reconstruction for well-balanced non-flat bed
 a conservative draining limiter for wet/dry cells, ghost-cell boundaries, explicit
 forward Euler time stepping, operator-split Manning friction (semi-implicit in a
 single-step sense), and adaptive CFL time steps. The solver runs on the supplied
-profile grid and applies bed elevation, Manning roughness, and rainfall independently
-in every cell. A common-width face reconstruction plus a discrete width source
-preserves a non-flat lake at rest even when channel width changes by cell.
+profile grid and applies bed elevation, cross-section geometry, Manning roughness,
+and rainfall independently in every cell. A common-geometry face reconstruction
+plus a discrete geometry source preserves a non-flat lake at rest even when
+bottom width and bank slope change by cell.
 
 **Units:** meters and minutes throughout (Manning's $n$ is converted from the
 conventional s/m$^{1/3}$ units before use).
@@ -126,6 +131,7 @@ The rationale for each transition is given alongside the change.
 | **4q — Structural sensitivity evidence** | Current branch | Added a reproducible one-at-a-time matrix for the held-out Colorado River case, covering roughness, width, grid resolution, and reconstruction order. Results and score ranges are tracked without selecting or fitting a best parameter. | One field score hides parameter dependence and can encourage accidental calibration. The matrix exposes model risk while preserving the downstream gauge as validation data. |
 | **4r — Multi-event observed validation** | Current branch | Added three approved-USGS out-of-sample events, a reproducible provider fetcher, and a four-event suite with fixed geometry, roughness, grid, and numerical settings. | A single event cannot distinguish transferable behavior from a lucky hydrograph match. Fixed-parameter multi-event scores expose shared bias and condition-dependent skill without event-by-event tuning. |
 | **4s — Adaptive multi-event hydraulics** | Current branch | Replaced constant-flow startup with a 12-hour observed upstream spin-up, added conservative time-varying lateral inflow with separate mass accounting, and added constrained global calibration of roughness, width, slope, and reach gain. The optimizer combines NSE, correlation, and an event-consistency penalty using explicit training/validation/test splits. | A constant startup can create a lucky initial state, while single-event tuning confounds geometry and forcing. Global parameters and held-out events test whether improvements transfer across hydrographs. |
+| **4t — Stage-dependent 1-D geometry** | Current branch | Added per-cell trapezoidal cross-sections to 1-D Saint-Venant, including depth-dependent area, top width, pressure, hydraulic radius, wave speed, rainfall capture, and conservative geometry transitions. The CLI derives side slopes from reviewed bankfull width/depth and an explicit bottom-width fraction. | A fixed rectangular width cannot represent storage, wetted perimeter, pressure, or rainfall collection changing as river stage rises. Trapezoids are a controlled first step toward measured compound cross-sections while retaining exact rectangular backward compatibility. |
 
 ---
 
@@ -186,6 +192,8 @@ python src/rivers/simulations/run_simulation.py PROFILE --solver SOLVER --t-fina
 | `--width` | — | Total channel-plus-floodplain domain width in metres; required for `saint_venant_2d` |
 | `--cross-cells` | `10` | Number of cells across a 2-D domain |
 | `--hydraulic-geometry` | — | Reviewed `station_m,width_m,bankfull_depth_m` CSV; optional for physical 1-D sections and required for 2-D |
+| `--cross-section-shape` | `rectangular` | 1-D Saint-Venant section shape; `trapezoidal` requires reviewed hydraulic geometry |
+| `--bottom-width-fraction` | `0.5` | Trapezoid bottom width divided by reviewed bankfull width, in `(0, 1]` |
 | `--floodplain-slope` | `0.02` | Lateral rise/run outside the reviewed bankfull channel |
 | `--output-dir` | `data/real_world_rivers/runs/` | Output directory |
 | `--run-name` | `simulation` | Filename prefix for outputs |
@@ -249,8 +257,11 @@ For a physically scaled 1-D run, pass `--hydraulic-geometry`. The solver then
 interprets initial and boundary discharge as whole-channel m³/min, uses the
 interpolated width in storage and friction, and reports mass in m³. Omitting
 geometry retains the historical unit-width mode for verification and backward
-compatibility. `bankfull_depth_m` is retained as a reviewed reference; the 1-D
-section itself is currently rectangular.
+compatibility. The default section is rectangular. With
+`--cross-section-shape trapezoidal`, the reviewed width is treated as bankfull
+top width and `--bottom-width-fraction` sets the bottom width; the bank side
+slope is then derived from the reviewed bankfull depth. This is a simplified
+parameterized shape, not a substitute for surveyed cross-section coordinates.
 
 Time-varying forcing CSVs must start at `t_min=0`, contain at least two strictly
 increasing times, and have finite non-negative values. Values are linearly

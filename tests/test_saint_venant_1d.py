@@ -271,6 +271,145 @@ def test_varying_rectangular_width_preserves_nonflat_lake_at_rest():
     assert result["uses_cross_section"] is True
 
 
+def test_trapezoidal_geometry_helpers_are_mutually_consistent():
+    depth = np.array([0.0, 1.5, 3.0])
+    bottom_width = np.array([8.0, 10.0, 12.0])
+    side_slope = np.array([0.5, 1.0, 2.0])
+    area = sv._cross_section_area(depth, bottom_width, side_slope)
+
+    assert np.allclose(
+        sv._depth_from_area(area, bottom_width, side_slope), depth
+    )
+    assert np.allclose(
+        sv._top_width(depth, bottom_width, side_slope),
+        bottom_width + 2.0 * side_slope * depth,
+    )
+    assert sv._depth_from_area(24.0, 8.0, 0.0) == pytest.approx(3.0)
+
+
+def test_rectangular_geometry_is_backward_compatible():
+    cells = 21
+    x_m = np.linspace(0.0, 100.0, cells)
+    dx_m = np.full(cells, 100.0 / cells)
+    width = np.linspace(10.0, 15.0, cells)
+    kwargs = {
+        "L": 100.0,
+        "T_final": 0.01,
+        "h_init": np.linspace(0.2, 0.3, cells),
+        "q_init": np.full(cells, 1.0),
+        "left_inflow": 1.0,
+        "rainfall": lambda x, t: np.zeros_like(x),
+        "x_m": x_m,
+        "dx_m": dx_m,
+        "slope": np.full(cells, 0.001),
+        "manning_n": np.full(cells, 0.001),
+        "channel_width_m": width,
+    }
+
+    legacy = sv.run_model(**kwargs)
+    explicit = sv.run_model(
+        **kwargs,
+        channel_bottom_width_m=width,
+        side_slope_h_to_v=np.zeros(cells),
+    )
+
+    assert np.array_equal(legacy["h_final"], explicit["h_final"])
+    assert np.array_equal(legacy["q_final"], explicit["q_final"])
+    assert explicit["cross_section_shape"] == "rectangular"
+
+
+def test_varying_trapezoid_preserves_nonflat_lake_at_rest():
+    x_m = np.linspace(0.0, 1000.0, 101)
+    dx_m = np.full_like(x_m, 1000.0 / len(x_m))
+    slope = np.full_like(x_m, 0.001)
+    bed = -slope * x_m
+    depth = 2.0 - bed
+    bottom_width = 12.0 + 3.0 * np.sin(
+        np.linspace(0.0, np.pi, len(x_m))
+    )
+    side_slope = 0.5 + 0.5 * np.sin(
+        np.linspace(0.0, np.pi, len(x_m))
+    )
+    reference_width = bottom_width + 2.0 * side_slope * 3.0
+
+    result = sv.run_model(
+        1000.0,
+        0.1,
+        h_init=depth,
+        q_init=np.zeros_like(depth),
+        left_inflow=0.0,
+        rainfall=lambda x, t: np.zeros_like(x),
+        x_m=x_m,
+        dx_m=dx_m,
+        slope=slope,
+        manning_n=np.full_like(x_m, 0.001),
+        bed_elevation_m=bed,
+        channel_width_m=reference_width,
+        channel_bottom_width_m=bottom_width,
+        side_slope_h_to_v=side_slope,
+        spatial_order=2,
+        cfl=0.4,
+    )
+
+    assert np.max(np.abs(result["h_final"] - depth)) < 1e-12
+    assert np.max(np.abs(result["q_final"])) < 1e-10
+    assert result["cross_section_shape"] == "trapezoidal"
+
+
+def test_trapezoidal_rainfall_and_lateral_inflow_conserve_volume():
+    x_m = np.array([0.0, 100.0, 250.0])
+    dx_m = np.array([50.0, 125.0, 100.0])
+    bottom_width = np.array([8.0, 10.0, 12.0])
+    side_slope = np.array([0.5, 1.0, 1.5])
+    reference_width = bottom_width + 2.0 * side_slope * 2.0
+    rainfall = 1e-5
+    lateral = 0.1
+    duration = 0.02
+
+    result = sv.run_model(
+        float(np.sum(dx_m)),
+        duration,
+        h_init=np.full(3, 0.5),
+        q_init=np.zeros(3),
+        left_inflow=0.0,
+        rainfall=lambda x, t: np.full_like(x, rainfall),
+        lateral_inflow=lambda x, t: np.full_like(x, lateral),
+        x_m=x_m,
+        dx_m=dx_m,
+        slope=np.zeros(3),
+        manning_n=np.full(3, 0.001),
+        bed_elevation_m=np.zeros(3),
+        channel_width_m=reference_width,
+        channel_bottom_width_m=bottom_width,
+        side_slope_h_to_v=side_slope,
+        downstream_boundary="wall",
+    )
+
+    areas = result["cross_section_area_history"]
+    storage_delta = float(np.sum((areas[-1] - areas[0]) * dx_m))
+    expected_rainfall = float(
+        np.sum(
+            sv._top_width(
+                np.full(3, 0.5), bottom_width, side_slope
+            )
+            * rainfall
+            * dx_m
+        )
+        * duration
+    )
+    assert result["mass_rainfall"] == pytest.approx(
+        expected_rainfall, rel=2e-5
+    )
+    assert storage_delta == pytest.approx(
+        result["mass_inflow"]
+        + result["mass_source"]
+        - result["mass_outflow"]
+        + result["mass_floor_correction"],
+        rel=1e-10,
+        abs=1e-11,
+    )
+
+
 def test_second_order_reconstruction_preserves_varying_width_lake():
     x_m = np.linspace(0.0, 1000.0, 101)
     dx_m = np.full_like(x_m, 1000.0 / len(x_m))

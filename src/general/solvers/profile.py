@@ -219,6 +219,8 @@ def domain_from_profile(
     *,
     channel_width_m=None,
     bankfull_depth_m=None,
+    channel_bottom_width_m=None,
+    side_slope_h_to_v=None,
 ) -> Domain:
     """Build a Domain from a RiverProfile (uses per-cell slope and Manning n)."""
     if (channel_width_m is None) != (bankfull_depth_m is None):
@@ -235,9 +237,26 @@ def domain_from_profile(
         if bankfull_depth_m is None
         else np.asarray(bankfull_depth_m, dtype=float)
     )
+    if (channel_bottom_width_m is None) != (side_slope_h_to_v is None):
+        raise ValueError(
+            "channel_bottom_width_m and side_slope_h_to_v must be supplied together"
+        )
+    if channel_bottom_width_m is not None and width is None:
+        raise ValueError("Trapezoidal geometry requires channel_width_m")
+    bottom_width = (
+        None
+        if channel_bottom_width_m is None
+        else np.asarray(channel_bottom_width_m, dtype=float)
+    )
+    side_slope = (
+        None
+        if side_slope_h_to_v is None
+        else np.asarray(side_slope_h_to_v, dtype=float)
+    )
     for values, name in (
         (width, "channel_width_m"),
         (bankfull, "bankfull_depth_m"),
+        (bottom_width, "channel_bottom_width_m"),
     ):
         if values is not None and (
             values.shape != profile.station_m.shape
@@ -245,6 +264,16 @@ def domain_from_profile(
             or np.any(values <= 0)
         ):
             raise ValueError(f"{name} must contain one finite positive value per station")
+    if side_slope is not None and (
+        side_slope.shape != profile.station_m.shape
+        or np.any(~np.isfinite(side_slope))
+        or np.any(side_slope < 0)
+    ):
+        raise ValueError(
+            "side_slope_h_to_v must contain one finite non-negative value per station"
+        )
+    if bottom_width is not None and np.any(bottom_width > width):
+        raise ValueError("channel_bottom_width_m cannot exceed channel_width_m")
     return Domain(
         x_m=profile.station_m,
         dx_m=profile.dx_m,
@@ -252,6 +281,8 @@ def domain_from_profile(
         manning_n=profile.manning_n,
         channel_width_m=width,
         bankfull_depth_m=bankfull,
+        channel_bottom_width_m=bottom_width,
+        side_slope_h_to_v=side_slope,
     )
 
 

@@ -116,8 +116,10 @@ A reach with **two gauges**:
 - a **downstream** gauge whose observed discharge is the **validation target** the
   model tries to reproduce.
 
-Plus reviewed channel **width** along the reach so the rectangular-section model
-can represent whole-channel storage, hydraulic radius, and discharge.
+Plus reviewed channel **width** along the reach so the model can represent
+whole-channel storage, hydraulic radius, and discharge. A trapezoidal run also
+needs defensible bankfull depth and bottom width (or a documented bottom-width
+fraction); surveyed cross-section coordinates remain preferable.
 
 ## Workflow
 
@@ -163,10 +165,14 @@ can represent whole-channel storage, hydraulic radius, and discharge.
   unit errors. Roughness is emitted in the meters-and-minutes convention
   (see [ingestion_integration_requests.md](ingestion_integration_requests.md)); a
   large bias is a signal to investigate geometry/inputs, not to re-fit *n*.
-- The current 1-D geometry is rectangular. Bankfull depth is retained as a
-  reviewed reference, but compound floodplain conveyance, measured tributary
-  hydrographs, and downstream backwater are not represented. The calibrated
-  lateral-flow fraction is an effective distributed gain, not a substitute for
-  those observations.
+- The 1-D solver supports rectangular and simple trapezoidal sections, but the
+  committed Colorado calibration remains rectangular because its bottom width
+  has not been independently measured or reviewed. Do not invent that value and
+  rerun calibration: doing so would add another compensating parameter to an
+  already boundary-limited fit.
+- Simple trapezoids still omit compound floodplain conveyance and irregular
+  surveyed geometry. Measured tributary hydrographs are also absent from the
+  committed case. The calibrated lateral-flow fraction is an effective
+  distributed gain, not a substitute for those observations.
 - A clean single-event window (a rising/falling limb between two gauges with no major
   tributary in between) is the most interpretable first validation case.
