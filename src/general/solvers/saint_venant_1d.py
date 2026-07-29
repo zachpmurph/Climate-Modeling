@@ -24,15 +24,17 @@ def r(x, t):
     return np.zeros_like(x, dtype=float)
 
 
-def _velocity(h, q):
-    velocity = np.zeros_like(q, dtype=float)
-    np.divide(q, h, out=velocity, where=h > H_FLOOR)
+def _velocity(h, discharge, width):
+    velocity = np.zeros_like(discharge, dtype=float)
+    area = width * h
+    np.divide(discharge, area, out=velocity, where=area > H_FLOOR)
     return velocity
 
 
-def _physical_flux(h, q):
-    velocity = _velocity(h, q)
-    return q, q * velocity + 0.5 * g * h**2
+def _physical_flux(h, discharge, width):
+    velocity = _velocity(h, discharge, width)
+    area = width * h
+    return discharge, discharge * velocity + 0.5 * g * width * h**2
 
 
 def _left_discharge(left_inflow, t):
@@ -43,26 +45,229 @@ def _left_discharge(left_inflow, t):
     return value
 
 
-def _rusanov_fluxes(h, q, left_inflow, t):
+def _downstream_ghost(
+    h,
+    discharge,
+    bed,
+    downstream_boundary,
+    downstream_stage_m,
+    time,
+):
+    if downstream_boundary == "outflow":
+        return h[-1], discharge[-1]
+    if downstream_boundary == "wall":
+        return h[-1], -discharge[-1]
+    if downstream_boundary != "stage":
+        raise ValueError(
+            "downstream_boundary must be 'outflow', 'wall', or 'stage'"
+        )
+    if downstream_stage_m is None:
+        raise ValueError(
+            "downstream_stage_m is required for a stage boundary"
+        )
+    stage = (
+        downstream_stage_m(time)
+        if callable(downstream_stage_m)
+        else downstream_stage_m
+    )
+    stage = float(stage)
+    if not np.isfinite(stage):
+        raise ValueError("downstream_stage_m must be finite")
+    ghost_depth = max(stage - bed[-1], 0.0)
+    ghost_discharge = 0.0
+    if h[-1] > H_FLOOR:
+        ghost_discharge = discharge[-1] * ghost_depth / h[-1]
+    return ghost_depth, ghost_discharge
+
+
+def _bed_from_slope(x, slope):
+    bed = np.zeros_like(x, dtype=float)
+    if len(x) > 1:
+        bed[1:] = -np.cumsum(
+            0.5 * (slope[:-1] + slope[1:]) * np.diff(x)
+        )
+    return bed
+
+
+def _hydrostatic_states(h_left, q_left, bed_left, h_right, q_right, bed_right):
+    face_bed = np.maximum(bed_left, bed_right)
+    depth_left = np.maximum(0.0, h_left + bed_left - face_bed)
+    depth_right = np.maximum(0.0, h_right + bed_right - face_bed)
+    scale_left = np.zeros_like(h_left)
+    scale_right = np.zeros_like(h_right)
+    np.divide(depth_left, h_left, out=scale_left, where=h_left > H_FLOOR)
+    np.divide(depth_right, h_right, out=scale_right, where=h_right > H_FLOOR)
+    return depth_left, q_left * scale_left, depth_right, q_right * scale_right
+
+
+def _limited_increments(values):
+    """Minmod-limited cell increments; zero at physical boundaries."""
+    values = np.asarray(values, dtype=float)
+    increments = np.zeros_like(values)
+    backward = values[1:-1] - values[:-2]
+    forward = values[2:] - values[1:-1]
+    same_sign = backward * forward > 0.0
+    increments[1:-1] = np.where(
+        same_sign,
+        np.sign(backward) * np.minimum(np.abs(backward), np.abs(forward)),
+        0.0,
+    )
+    return increments
+
+
+def _interior_face_states(h, discharge, bed, width, spatial_order):
+    """Return left/right raw states at the n-1 interior faces."""
+    if spatial_order == 1:
+        return (
+            h[:-1].copy(),
+            discharge[:-1].copy(),
+            bed[:-1].copy(),
+            width[:-1].copy(),
+            h[1:].copy(),
+            discharge[1:].copy(),
+            bed[1:].copy(),
+            width[1:].copy(),
+        )
+
+    surface = h + bed
+    unit_discharge = discharge / width
+    surface_increment = _limited_increments(surface)
+    bed_increment = _limited_increments(bed)
+    width_increment = _limited_increments(width)
+    discharge_increment = _limited_increments(unit_discharge)
+
+    surface_left = surface[:-1] + 0.5 * surface_increment[:-1]
+    surface_right = surface[1:] - 0.5 * surface_increment[1:]
+    bed_left = bed[:-1] + 0.5 * bed_increment[:-1]
+    bed_right = bed[1:] - 0.5 * bed_increment[1:]
+    width_left = width[:-1] + 0.5 * width_increment[:-1]
+    width_right = width[1:] - 0.5 * width_increment[1:]
+    if np.any(width_left <= 0.0) or np.any(width_right <= 0.0):
+        raise FloatingPointError("Limited reconstruction produced non-positive width")
+    h_left = np.maximum(surface_left - bed_left, 0.0)
+    h_right = np.maximum(surface_right - bed_right, 0.0)
+    q_left = (
+        unit_discharge[:-1] + 0.5 * discharge_increment[:-1]
+    ) * width_left
+    q_right = (
+        unit_discharge[1:] - 0.5 * discharge_increment[1:]
+    ) * width_right
+    q_left[h_left <= H_FLOOR] = 0.0
+    q_right[h_right <= H_FLOOR] = 0.0
+    return (
+        h_left,
+        q_left,
+        bed_left,
+        width_left,
+        h_right,
+        q_right,
+        bed_right,
+        width_right,
+    )
+
+
+def _rusanov_fluxes(
+    h,
+    discharge,
+    bed,
+    width,
+    left_inflow,
+    t,
+    downstream_boundary,
+    downstream_stage_m,
+    spatial_order,
+):
     inflow = _left_discharge(left_inflow, t)
+    right_h, right_q = _downstream_ghost(
+        h,
+        discharge,
+        bed,
+        downstream_boundary,
+        downstream_stage_m,
+        t,
+    )
 
     # Equal ghost/interior depths remove numerical mass diffusion at each
     # boundary. Mirroring q around the requested inflow makes the left face
     # mass flux exactly equal to that prescribed discharge.
-    h_ext = np.concatenate(([h[0]], h, [h[-1]]))
-    q_ext = np.concatenate(([2.0 * inflow - q[0]], q, [q[-1]]))
-    h_left, h_right = h_ext[:-1], h_ext[1:]
-    q_left, q_right = q_ext[:-1], q_ext[1:]
+    h_ext = np.concatenate(([h[0]], h, [right_h]))
+    q_ext = np.concatenate(
+        ([2.0 * inflow - discharge[0]], discharge, [right_q])
+    )
+    bed_ext = np.concatenate(([bed[0]], bed, [bed[-1]]))
+    width_ext = np.concatenate(([width[0]], width, [width[-1]]))
+    center_h_left, center_h_right = h_ext[:-1], h_ext[1:]
+    center_width_left, center_width_right = width_ext[:-1], width_ext[1:]
+    h_left, h_right = center_h_left.copy(), center_h_right.copy()
+    q_left, q_right = q_ext[:-1].copy(), q_ext[1:].copy()
+    bed_left, bed_right = bed_ext[:-1].copy(), bed_ext[1:].copy()
+    width_left, width_right = (
+        center_width_left.copy(),
+        center_width_right.copy(),
+    )
+    (
+        h_left[1:-1],
+        q_left[1:-1],
+        bed_left[1:-1],
+        width_left[1:-1],
+        h_right[1:-1],
+        q_right[1:-1],
+        bed_right[1:-1],
+        width_right[1:-1],
+    ) = _interior_face_states(
+        h, discharge, bed, width, spatial_order
+    )
+    face_width = 0.5 * (width_left + width_right)
 
-    flux_h_left, flux_q_left = _physical_flux(h_left, q_left)
-    flux_h_right, flux_q_right = _physical_flux(h_right, q_right)
-    speed_left = np.abs(_velocity(h_left, q_left)) + np.sqrt(g * h_left)
-    speed_right = np.abs(_velocity(h_right, q_right)) + np.sqrt(g * h_right)
+    hs_left, qs_left, hs_right, qs_right = _hydrostatic_states(
+        h_left, q_left, bed_left, h_right, q_right, bed_right
+    )
+    # Reconstruct a common face area while retaining each side's velocity.
+    qs_left *= face_width / width_left
+    qs_right *= face_width / width_right
+    flux_h_left, flux_q_left = _physical_flux(hs_left, qs_left, face_width)
+    flux_h_right, flux_q_right = _physical_flux(hs_right, qs_right, face_width)
+    speed_left = np.abs(_velocity(hs_left, qs_left, face_width)) + np.sqrt(g * hs_left)
+    speed_right = np.abs(_velocity(hs_right, qs_right, face_width)) + np.sqrt(g * hs_right)
     alpha = np.maximum(speed_left, speed_right)
 
-    flux_h = 0.5 * (flux_h_left + flux_h_right) - 0.5 * alpha * (h_right - h_left)
-    flux_q = 0.5 * (flux_q_left + flux_q_right) - 0.5 * alpha * (q_right - q_left)
-    return flux_h, flux_q, alpha
+    area_left = face_width * hs_left
+    area_right = face_width * hs_right
+    flux_h = 0.5 * (flux_h_left + flux_h_right) - 0.5 * alpha * (
+        area_right - area_left
+    )
+    flux_q = 0.5 * (flux_q_left + flux_q_right) - 0.5 * alpha * (qs_right - qs_left)
+    correction_left = 0.5 * g * center_width_left * (
+        center_h_left**2 - hs_left**2
+    )
+    correction_right = 0.5 * g * center_width_right * (
+        center_h_right**2 - hs_right**2
+    )
+    geometry_balance = 0.5 * g * (
+        (face_width[1:] - width) * hs_left[1:] ** 2
+        - (face_width[:-1] - width) * hs_right[:-1] ** 2
+    )
+    return (
+        flux_h,
+        flux_q,
+        alpha,
+        correction_left,
+        correction_right,
+        geometry_balance,
+    )
+
+
+def _limit_draining_fluxes(area, area_source, dt, dx, flux_h, flux_q):
+    outgoing = np.maximum(flux_h[1:], 0.0) + np.maximum(-flux_h[:-1], 0.0)
+    available = (area + dt * area_source) * dx
+    theta = np.ones_like(area)
+    draining = dt * outgoing > available
+    np.divide(available, dt * outgoing, out=theta, where=draining)
+    theta = np.clip(theta, 0.0, 1.0)
+    donor_left = np.concatenate(([1.0], theta))
+    donor_right = np.concatenate((theta, [1.0]))
+    factor = np.where(flux_h >= 0.0, donor_left, donor_right)
+    return flux_h * factor, flux_q * factor
 
 
 def _cell_values(values, default, n_cells, name):
@@ -137,6 +342,15 @@ def _evaluate_rainfall(rainfall, x_m, t):
     return values
 
 
+def _cap_dt_at_forcing_breakpoints(dt, time, *forcings):
+    for forcing in forcings:
+        for breakpoint in getattr(forcing, "breakpoints_min", ()):
+            if time + 1e-12 < breakpoint < time + dt - 1e-12:
+                dt = float(breakpoint - time)
+                break
+    return dt
+
+
 def _record_times(final_time, record_interval):
     count = int(np.floor(final_time / record_interval + 1e-9))
     values = [index * record_interval for index in range(count + 1)]
@@ -157,15 +371,22 @@ def run_model(
     dx_m=None,
     slope=None,
     manning_n=None,
+    bed_elevation_m=None,
+    channel_width_m=None,
+    downstream_boundary="outflow",
+    downstream_stage_m=None,
+    spatial_order=1,
     cfl=None,
 ):
     """Run the 1D Saint-Venant equations on a uniform or supplied cell grid.
 
-    left_inflow is either a non-negative discharge in m^2/min or a callable
-    of time returning that discharge. None is a closed/no-inflow upstream
+    left_inflow is either a non-negative discharge or a callable of time
+    returning that discharge. With ``channel_width_m`` it is total flow in
+    m^3/min; the legacy unit-width mode uses m^2/min. None is a no-inflow upstream
     boundary. rainfall is a callable ``rainfall(x_m, t_min)`` returning one
-    non-negative rate in m/min per cell. The downstream boundary is
-    zero-gradient free outflow.
+    non-negative rate in m/min per cell. ``spatial_order=2`` uses limited
+    reconstruction with a two-stage SSP update. The downstream boundary may be
+    transmissive outflow, a reflecting wall, or a prescribed stage.
     """
     x, dx, bed_slope, roughness = _prepare_grid(
         L,
@@ -175,10 +396,33 @@ def run_model(
         manning_n,
     )
     n_cells = len(x)
+    bed = (
+        _bed_from_slope(x, bed_slope)
+        if bed_elevation_m is None
+        else _cell_values(bed_elevation_m, 0.0, n_cells, "bed_elevation_m")
+    )
+    width = _cell_values(channel_width_m, 1.0, n_cells, "channel_width_m")
+    if np.any(width <= 0):
+        raise ValueError("channel_width_m values must be positive")
+    uses_cross_section = channel_width_m is not None
     _validate_inputs(T_final, record_interval, n_cells, h_init, q_init)
     cfl_value = CFL if cfl is None else float(cfl)
     if not np.isfinite(cfl_value) or not (0 < cfl_value <= 1):
         raise ValueError("cfl must be finite and in the interval (0, 1]")
+    if spatial_order not in (1, 2):
+        raise ValueError("spatial_order must be 1 or 2")
+    _downstream_ghost(
+        np.ones(n_cells),
+        np.zeros(n_cells),
+        bed,
+        downstream_boundary,
+        downstream_stage_m,
+        0.0,
+    )
+    if downstream_boundary != "stage" and downstream_stage_m is not None:
+        raise ValueError(
+            "downstream_stage_m is only valid with downstream_boundary='stage'"
+        )
     rainfall_function = r if rainfall is None else rainfall
     center = float(x[0] + 0.5 * (x[-1] - x[0]))
 
@@ -186,7 +430,7 @@ def run_model(
         h = 0.01 * np.exp(-((x - center) ** 2) / 0.2)
     else:
         h = np.asarray(h_init, dtype=float).copy()
-    h = np.maximum(h, H_FLOOR)
+    h = np.maximum(h, 0.0)
 
     if q_init is None:
         q = np.zeros(n_cells)
@@ -208,8 +452,89 @@ def run_model(
     mass_floor_correction = 0.0
     t_current = 0.0
 
+    def euler_stage(h_stage, q_stage, stage_time, dt, flux_data=None):
+        if flux_data is None:
+            flux_data = _rusanov_fluxes(
+                h_stage,
+                q_stage,
+                bed,
+                width,
+                left_inflow,
+                stage_time,
+                downstream_boundary,
+                downstream_stage_m,
+                spatial_order,
+            )
+        (
+            flux_h,
+            flux_q,
+            _,
+            correction_left,
+            correction_right,
+            geometry_balance,
+        ) = flux_data
+        source = _evaluate_rainfall(rainfall_function, x, stage_time)
+        area = width * h_stage
+        area_source = width * source
+        flux_h, flux_q = _limit_draining_fluxes(
+            area, area_source, dt, dx, flux_h, flux_q
+        )
+        area_new = (
+            area
+            - (dt / dx) * (flux_h[1:] - flux_h[:-1])
+            + dt * area_source
+        )
+        q_new = q_stage - (dt / dx) * (
+            (flux_q + correction_left)[1:]
+            - (flux_q + correction_right)[:-1]
+            - geometry_balance
+        )
+
+        floor_addition = np.maximum(-area_new, 0.0)
+        area_new = np.maximum(area_new, 0.0)
+        h_new = area_new / width
+        velocity_new = _velocity(h_new, q_new, width)
+        friction_coeff = np.zeros_like(h_new)
+        wet = h_new > H_FLOOR
+        hydraulic_radius = h_new.copy()
+        if uses_cross_section:
+            hydraulic_radius[wet] = (
+                width[wet] * h_new[wet] / (width[wet] + 2.0 * h_new[wet])
+            )
+        friction_coeff[wet] = (
+            roughness[wet] ** 2
+            * np.abs(velocity_new[wet])
+            / hydraulic_radius[wet] ** (4.0 / 3.0)
+        )
+        q_new = q_new / (1.0 + dt * g * friction_coeff)
+        q_new[h_new <= H_FLOOR] = 0.0
+        diagnostics = {
+            "inflow_rate": float(flux_h[0]),
+            "downstream_rate": float(flux_h[-1]),
+            "source_rate": float(np.sum(area_source * dx)),
+            "floor_volume": float(np.sum(floor_addition * dx)),
+        }
+        return h_new, q_new, diagnostics
+
     while t_current < T_final - 1e-12:
-        flux_h, flux_q, interface_speed = _rusanov_fluxes(h, q, left_inflow, t_current)
+        (
+            flux_h,
+            flux_q,
+            interface_speed,
+            correction_left,
+            correction_right,
+            geometry_balance,
+        ) = _rusanov_fluxes(
+            h,
+            q,
+            bed,
+            width,
+            left_inflow,
+            t_current,
+            downstream_boundary,
+            downstream_stage_m,
+            spatial_order,
+        )
         cell_speed = np.maximum(interface_speed[:-1], interface_speed[1:])
         moving = cell_speed > 1e-12
         if np.any(moving):
@@ -219,29 +544,52 @@ def run_model(
         dt = min(dt, T_final - t_current)
         if rainfall is None and t_current < 50 < t_current + dt:
             dt = 50 - t_current
+        dt = _cap_dt_at_forcing_breakpoints(
+            dt,
+            t_current,
+            left_inflow,
+            rainfall_function,
+            downstream_stage_m,
+        )
 
         h_previous = h.copy()
         q_previous = q.copy()
-        source = _evaluate_rainfall(rainfall_function, x, t_current)
-
-        h_new = h - (dt / dx) * (flux_h[1:] - flux_h[:-1]) + dt * source
-        q_new = q - (dt / dx) * (flux_q[1:] - flux_q[:-1])
-
-        floor_addition = np.maximum(H_FLOOR - h_new, 0.0)
-        mass_floor_correction += float(np.sum(floor_addition * dx))
-        h_new = np.maximum(h_new, H_FLOOR)
-
-        velocity_new = _velocity(h_new, q_new)
-        friction_coeff = roughness**2 * np.abs(velocity_new) / h_new ** (4.0 / 3.0)
-        q_new = (q_new + dt * g * h_new * bed_slope) / (
-            1.0 + dt * g * friction_coeff
+        first_flux_data = (
+            flux_h,
+            flux_q,
+            interface_speed,
+            correction_left,
+            correction_right,
+            geometry_balance,
         )
-        q_new[h_new <= H_FLOOR] = 0.0
+        h_stage, q_stage, first_diagnostics = euler_stage(
+            h, q, t_current, dt, first_flux_data
+        )
+        if spatial_order == 2:
+            second_time = np.nextafter(t_current + dt, t_current)
+            h_euler, q_euler, second_diagnostics = euler_stage(
+                h_stage, q_stage, second_time, dt
+            )
+            h_new = 0.5 * (h + h_euler)
+            q_new = 0.5 * (q + q_euler)
+            diagnostics = {
+                key: 0.5 * (first_diagnostics[key] + second_diagnostics[key])
+                for key in first_diagnostics
+            }
+        else:
+            h_new, q_new = h_stage, q_stage
+            diagnostics = first_diagnostics
 
-        mass_inflow += float(flux_h[0] * dt)
-        mass_outflow += float(flux_h[-1] * dt)
-        mass_source += float(np.sum(source * dx) * dt)
+        mass_floor_correction += diagnostics["floor_volume"]
+        mass_inflow += diagnostics["inflow_rate"] * dt
+        downstream_mass = diagnostics["downstream_rate"] * dt
+        if downstream_mass >= 0.0:
+            mass_outflow += downstream_mass
+        else:
+            mass_inflow -= downstream_mass
+        mass_source += diagnostics["source_rate"] * dt
 
+        h, q = h_new, q_new
         t_next = t_current + dt
         while (
             next_record_idx < len(record_times)
@@ -254,8 +602,6 @@ def run_model(
             h_history.append(h_previous + fraction * (h_new - h_previous))
             q_history.append(q_previous + fraction * (q_new - q_previous))
             next_record_idx += 1
-
-        h, q = h_new, q_new
         t_current = t_next
 
     return {
@@ -263,6 +609,11 @@ def run_model(
         "dx_m": dx,
         "slope": bed_slope,
         "manning_n": roughness,
+        "bed_elevation_m": bed,
+        "channel_width_m": width,
+        "uses_cross_section": uses_cross_section,
+        "downstream_boundary": downstream_boundary,
+        "spatial_order": spatial_order,
         "times": np.array(times),
         "h_history": np.array(h_history),
         "q_history": np.array(q_history),
@@ -291,7 +642,16 @@ def save_time_series_csv(result, path):
 class _SaintVenantSolver:
     name = "saint_venant"
     supports = frozenset(
-        {"initial_depth", "initial_discharge", "left_inflow", "rainfall", "cfl"}
+        {
+            "initial_depth",
+            "initial_discharge",
+            "left_inflow",
+            "rainfall",
+            "cfl",
+            "downstream_boundary",
+            "downstream_stage",
+            "spatial_order",
+        }
     )
 
     def run(self, domain: Domain, scenario: Scenario) -> SimulationResult:
@@ -321,6 +681,11 @@ class _SaintVenantSolver:
             dx_m=domain.dx_m,
             slope=domain.slope,
             manning_n=domain.manning_n,
+            bed_elevation_m=getattr(domain, "bed_elevation_m", None),
+            channel_width_m=getattr(domain, "channel_width_m", None),
+            downstream_boundary=scenario.downstream_boundary,
+            downstream_stage_m=scenario.downstream_stage_m,
+            spatial_order=scenario.spatial_order,
             cfl=scenario.cfl,
         )
         return SimulationResult(
@@ -332,7 +697,13 @@ class _SaintVenantSolver:
             mass_inflow=raw["mass_inflow"],
             mass_source=raw["mass_source"],
             mass_outflow=raw["mass_outflow"],
+            mass_correction=raw["mass_floor_correction"],
             extra={
+                "bed_elevation_m": raw["bed_elevation_m"],
+                "channel_width_m": raw["channel_width_m"],
+                "cross_section_area_history": (
+                    raw["h_history"] * raw["channel_width_m"][None, :]
+                ),
                 "discharge_history": raw["q_history"],
                 "discharge_initial": raw["q_initial"],
                 "discharge_final": raw["q_final"],

@@ -11,7 +11,13 @@ if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
 from general.solvers.contract import Domain2D
-from general.solvers.profile import domain2d_from_profile, domain_from_profile, load_profile
+from general.solvers.profile import (
+    domain2d_from_profile,
+    domain_from_profile,
+    load_channel_geometry,
+    load_profile,
+    resample_profile,
+)
 from rivers.simulations.ingest_to_simulate import scenario_from_profile
 from rivers.simulations.registry import SOLVERS, dispatch
 
@@ -28,6 +34,43 @@ def _portable_path(path):
         return str(resolved)
 
 
+def _load_temporal_series(path, value_column):
+    """Load a linearly interpolated forcing series with constant end values."""
+    with Path(path).open(newline="", encoding="utf-8-sig") as handle:
+        rows = list(csv.DictReader(handle))
+    if len(rows) < 2:
+        raise ValueError(f"{path} must contain at least two forcing rows")
+    try:
+        times = np.asarray([float(row["t_min"]) for row in rows])
+        values = np.asarray([float(row[value_column]) for row in rows])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError(
+            f"{path} must contain numeric t_min and {value_column} columns"
+        ) from exc
+    if (
+        np.any(~np.isfinite(times))
+        or np.any(~np.isfinite(values))
+        or np.any(np.diff(times) <= 0)
+        or times[0] != 0.0
+        or np.any(values < 0)
+    ):
+        raise ValueError(
+            f"{path} needs t_min starting at 0 and strictly increasing, "
+            f"with finite non-negative {value_column}"
+        )
+
+    def forcing(time_min):
+        return float(np.interp(time_min, times, values))
+
+    forcing.breakpoints_min = times.copy()
+    return forcing
+
+
+def _forcing_value(forcing, time_min):
+    value = forcing(time_min) if callable(forcing) else forcing
+    return float(value)
+
+
 def parse_args(argv=None):
     p = argparse.ArgumentParser(description="Run a 1-D or 2-D river solver on a profile.")
     p.add_argument("profile", help="CSV or JSON river profile path")
@@ -39,9 +82,53 @@ def parse_args(argv=None):
     )
     p.add_argument("--t-final", type=float, required=True, help="Simulation duration in minutes")
     p.add_argument("--record-interval", type=float, default=1.0)
-    p.add_argument("--left-inflow", type=float, default=0.0, help="Constant upstream inflow flux, m^2/min")
+    p.add_argument(
+        "--left-inflow",
+        type=float,
+        default=0.0,
+        help=(
+            "Constant upstream flow: m^3/min with --hydraulic-geometry, "
+            "legacy unit-width m^2/min otherwise"
+        ),
+    )
+    p.add_argument(
+        "--inflow-series",
+        type=Path,
+        help="CSV with t_min,left_inflow for a time-varying upstream hydrograph",
+    )
     p.add_argument("--rainfall-rate", type=float, default=0.0, help="Uniform rainfall rate, m/min")
+    p.add_argument(
+        "--rainfall-series",
+        type=Path,
+        help="CSV with t_min,rainfall_rate_m_per_min for a uniform time-varying storm",
+    )
+    p.add_argument(
+        "--downstream-boundary",
+        choices=("outflow", "wall", "stage"),
+        default="outflow",
+        help="1-D Saint-Venant downstream condition (default: outflow)",
+    )
+    p.add_argument(
+        "--downstream-stage",
+        type=float,
+        help="Fixed water-surface elevation in metres for --downstream-boundary stage",
+    )
+    p.add_argument(
+        "--spatial-order",
+        type=int,
+        choices=(1, 2),
+        default=1,
+        help="Saint-Venant reconstruction order (default: 1)",
+    )
     p.add_argument("--cfl", type=float, default=0.5)
+    p.add_argument(
+        "--longitudinal-cells",
+        type=int,
+        help=(
+            "Linearly interpolate reviewed profile fields onto this many "
+            "derived solver cells"
+        ),
+    )
     p.add_argument(
         "--width",
         type=float,
@@ -52,6 +139,20 @@ def parse_args(argv=None):
         type=int,
         default=10,
         help="Number of cells across the channel for saint_venant_2d (default: 10)",
+    )
+    p.add_argument(
+        "--hydraulic-geometry",
+        type=Path,
+        help=(
+            "Reviewed station/width/bankfull CSV; enables physical 1-D "
+            "cross-sections and is required for a terrain-backed 2-D run"
+        ),
+    )
+    p.add_argument(
+        "--floodplain-slope",
+        type=float,
+        default=0.02,
+        help="Lateral rise/run outside the reviewed channel width (default: 0.02)",
     )
     p.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     p.add_argument("--run-name", default="simulation")
@@ -76,25 +177,170 @@ def main(argv=None):
     for map_path in (args.map_markers, args.map_geometry):
         if map_path is not None and not map_path.is_file():
             raise SystemExit(f"error: map input does not exist: {map_path}")
+    if args.inflow_series is not None and args.left_inflow != 0.0:
+        raise SystemExit("error: use either --left-inflow or --inflow-series, not both")
+    if args.solver != "saint_venant" and (
+        args.downstream_boundary != "outflow"
+        or args.downstream_stage is not None
+    ):
+        raise SystemExit(
+            "error: downstream boundary options currently require --solver saint_venant"
+        )
+    if (
+        args.solver not in {"saint_venant", "saint_venant_2d"}
+        and args.spatial_order != 1
+    ):
+        raise SystemExit(
+            "error: --spatial-order requires a Saint-Venant solver"
+        )
+    if (args.downstream_boundary == "stage") != (
+        args.downstream_stage is not None
+    ):
+        raise SystemExit(
+            "error: --downstream-stage is required only with --downstream-boundary stage"
+        )
+    for forcing_path in (args.inflow_series, args.rainfall_series):
+        if forcing_path is not None and not forcing_path.is_file():
+            raise SystemExit(f"error: forcing input does not exist: {forcing_path}")
 
-    profile = load_profile(args.profile)
+    try:
+        inflow = (
+            args.left_inflow
+            if args.inflow_series is None
+            else _load_temporal_series(args.inflow_series, "left_inflow")
+        )
+        temporal_rainfall = (
+            None
+            if args.rainfall_series is None
+            else _load_temporal_series(
+                args.rainfall_series, "rainfall_rate_m_per_min"
+            )
+        )
+    except ValueError as exc:
+        raise SystemExit(f"error: {exc}") from exc
+
+    source_profile = load_profile(args.profile)
+    source_cells = len(source_profile.station_m)
+    try:
+        profile = (
+            source_profile
+            if args.longitudinal_cells is None
+            else resample_profile(source_profile, args.longitudinal_cells)
+        )
+    except ValueError as exc:
+        raise SystemExit(f"error: {exc}") from exc
     if args.solver == "saint_venant_2d":
         if args.width is None:
             raise SystemExit("error: --width is required for saint_venant_2d")
-        domain = domain2d_from_profile(profile, args.width, args.cross_cells)
+        if args.hydraulic_geometry is None:
+            raise SystemExit(
+                "error: --hydraulic-geometry is required for saint_venant_2d"
+            )
+        if not args.hydraulic_geometry.is_file():
+            raise SystemExit(
+                f"error: hydraulic geometry does not exist: {args.hydraulic_geometry}"
+            )
+        channel_width, bankfull_depth = load_channel_geometry(
+            args.hydraulic_geometry, profile.station_m
+        )
+        domain = domain2d_from_profile(
+            profile,
+            args.width,
+            args.cross_cells,
+            channel_width_m=channel_width,
+            bankfull_depth_m=bankfull_depth,
+            floodplain_slope=args.floodplain_slope,
+        )
     else:
         if args.width is not None:
-            raise SystemExit("error: --width is only valid with saint_venant_2d")
-        domain = domain_from_profile(profile)
+            raise SystemExit(
+                "error: --width is only valid with saint_venant_2d"
+            )
+        if args.hydraulic_geometry is None:
+            domain = domain_from_profile(profile)
+        else:
+            if not args.hydraulic_geometry.is_file():
+                raise SystemExit(
+                    f"error: hydraulic geometry does not exist: {args.hydraulic_geometry}"
+                )
+            channel_width, bankfull_depth = load_channel_geometry(
+                args.hydraulic_geometry, profile.station_m
+            )
+            domain = domain_from_profile(
+                profile,
+                channel_width_m=channel_width,
+                bankfull_depth_m=bankfull_depth,
+            )
 
     scenario = scenario_from_profile(
         profile,
         t_final_min=args.t_final,
         record_interval_min=args.record_interval,
-        left_inflow=args.left_inflow,
+        left_inflow=inflow,
         rainfall_rate_m_per_min=args.rainfall_rate,
         cfl=args.cfl,
     )
+    if temporal_rainfall is not None:
+        base_rainfall = scenario.rainfall
+
+        def combined_rainfall(x, time):
+            base = (
+                np.zeros_like(x, dtype=float)
+                if base_rainfall is None
+                else base_rainfall(x, time)
+            )
+            return base + temporal_rainfall(time)
+
+        combined_rainfall.breakpoints_min = temporal_rainfall.breakpoints_min
+        scenario.rainfall = combined_rainfall
+
+    if isinstance(domain, Domain2D):
+        channel_depth = (
+            np.zeros(len(profile.station_m))
+            if profile.initial_depth_m is None
+            else np.asarray(profile.initial_depth_m, dtype=float)
+        )
+        channel_bed = np.min(domain.bed_elevation_m, axis=1)
+        water_surface = channel_bed + channel_depth
+        scenario.initial_depth_m = np.maximum(
+            water_surface[:, None] - domain.bed_elevation_m,
+            0.0,
+        )
+        wet = scenario.initial_depth_m > 0.0
+        wet_width = np.sum(wet * domain.dy_m[None, :], axis=1)
+        inflow_at_zero = _forcing_value(inflow, 0.0)
+        initial_unit_flow = np.zeros_like(scenario.initial_depth_m)
+        active_rows = wet_width > 0.0
+        initial_unit_flow[active_rows] = (
+            wet[active_rows]
+            * (inflow_at_zero / wet_width[active_rows])[:, None]
+        )
+        scenario.initial_discharge = initial_unit_flow
+
+        upstream_wet = wet[0]
+        upstream_width = float(np.sum(domain.dy_m[upstream_wet]))
+        if upstream_width <= 0.0 and inflow_at_zero > 0.0:
+            raise SystemExit(
+                "error: positive 2-D inflow needs at least one initially wet upstream cell"
+            )
+
+        def distributed_inflow(time):
+            values = np.zeros(len(domain.y_m))
+            if upstream_width > 0.0:
+                values[upstream_wet] = _forcing_value(inflow, time) / upstream_width
+            return values
+
+        if hasattr(inflow, "breakpoints_min"):
+            distributed_inflow.breakpoints_min = inflow.breakpoints_min
+        scenario.left_inflow = distributed_inflow
+        scenario.spatial_order = args.spatial_order
+    elif args.solver == "saint_venant":
+        scenario.initial_discharge = np.full(
+            len(domain.x_m), _forcing_value(inflow, 0.0)
+        )
+        scenario.downstream_boundary = args.downstream_boundary
+        scenario.downstream_stage_m = args.downstream_stage
+        scenario.spatial_order = args.spatial_order
 
     result = dispatch(args.solver, domain, scenario)
 
@@ -140,7 +386,14 @@ def main(argv=None):
     cell_measure = (
         result.domain.dx_m[:, None] * result.domain.dy_m[None, :]
         if is_2d
-        else result.domain.dx_m
+        else (
+            result.domain.dx_m
+            if result.domain.channel_width_m is None
+            else result.domain.dx_m * result.domain.channel_width_m
+        )
+    )
+    physical_volume = is_2d or (
+        not is_2d and result.domain.channel_width_m is not None
     )
     mass_balance_error = (
         result.mass_inflow + result.mass_source + result.mass_correction - result.mass_outflow
@@ -159,12 +412,50 @@ def main(argv=None):
         "mass_outflow": result.mass_outflow,
         "mass_correction": result.mass_correction,
         "mass_balance_error": mass_balance_error,
+        "mass_unit": "m3" if physical_volume else "m2",
+        "profile_resolution": {
+            "source_observation_stations": source_cells,
+            "solver_cells": len(profile.station_m),
+            "method": (
+                "source_grid"
+                if args.longitudinal_cells is None
+                else "linear_interpolation_derived_grid"
+            ),
+            "creates_observations": False,
+        },
+        "forcing_inputs": {
+            "inflow_series": (
+                None
+                if args.inflow_series is None
+                else _portable_path(args.inflow_series)
+            ),
+            "rainfall_series": (
+                None
+                if args.rainfall_series is None
+                else _portable_path(args.rainfall_series)
+            ),
+        },
+        "downstream_boundary": {
+            "type": args.downstream_boundary,
+            "stage_m": args.downstream_stage,
+        },
+        "spatial_order": args.spatial_order,
     }
     if is_2d:
         summary["grid"] = {
             "nx": len(result.domain.x_m),
             "ny": len(result.domain.y_m),
             "width_m": float(np.sum(result.domain.dy_m)),
+            "hydraulic_geometry": _portable_path(args.hydraulic_geometry),
+            "floodplain_slope": args.floodplain_slope,
+            "bankfull_depth_m": bankfull_depth.tolist(),
+        }
+    elif result.domain.channel_width_m is not None:
+        summary["cross_section"] = {
+            "hydraulic_geometry": _portable_path(args.hydraulic_geometry),
+            "channel_width_m": result.domain.channel_width_m.tolist(),
+            "bankfull_depth_m": result.domain.bankfull_depth_m.tolist(),
+            "shape": "rectangular",
         }
     if args.map_markers is not None:
         summary["map_inputs"] = {
@@ -176,7 +467,10 @@ def main(argv=None):
 
     artifact_text = f"  Fields: {fields_path}" if fields_path else ""
     print(f"Done. CSV: {csv_path}{artifact_text}  Summary: {json_path}")
-    print(f"Mass balance error: {mass_balance_error:.4e} {'m^3' if is_2d else 'm^2'}")
+    print(
+        f"Mass balance error: {mass_balance_error:.4e} "
+        f"{'m^3' if physical_volume else 'm^2'}"
+    )
 
 
 if __name__ == "__main__":

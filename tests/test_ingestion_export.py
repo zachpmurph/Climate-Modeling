@@ -49,8 +49,8 @@ def _build_reach(tmp_path):
         roughness_path,
         ["start_station_m", "end_station_m", "manning_n", "method"],
         [
-            {"start_station_m": 0, "end_station_m": 1000, "manning_n": 0.035, "method": "survey"},
-            {"start_station_m": 1000, "end_station_m": 2000, "manning_n": 0.04, "method": "survey"},
+            {"start_station_m": 0, "end_station_m": 1000, "manning_n": 0.035 / 60, "method": "survey"},
+            {"start_station_m": 1000, "end_station_m": 2000, "manning_n": 0.04 / 60, "method": "survey"},
         ],
     )
     import_roughness(reach_id, roughness_path, db_path=db_path)
@@ -124,7 +124,7 @@ def test_metadata_sources_are_scoped_to_the_exported_reach(tmp_path):
     other_id = create_reach("Nile", "OtherReach", other_markers, db_path=db_path)
     other_rough = tmp_path / "other_rough.csv"
     _write_csv(other_rough, ["start_station_m", "end_station_m", "manning_n"],
-               [{"start_station_m": 0, "end_station_m": 1000, "manning_n": 0.05}])
+               [{"start_station_m": 0, "end_station_m": 1000, "manning_n": 0.05 / 60}])
     import_roughness(other_id, other_rough, db_path=db_path)
 
     output = tmp_path / "profile.csv"

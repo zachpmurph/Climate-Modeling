@@ -13,7 +13,7 @@ from rivers.ingest.validation import (
 )
 
 
-def _row(station_m, slope=0.001, manning_n=0.035, **extra):
+def _row(station_m, slope=0.001, manning_n=0.035 / 60.0, **extra):
     row = {
         "station_m": station_m,
         "slope": slope,

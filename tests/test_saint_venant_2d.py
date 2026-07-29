@@ -76,6 +76,86 @@ def test_lake_at_rest_stays_at_rest(monkeypatch):
     assert np.max(np.abs(result["hv_final"])) == pytest.approx(0.0, abs=1e-12)
 
 
+def test_second_order_reconstruction_preserves_nonflat_lake():
+    count = 24
+    length = 2.4
+    spacing = np.full(count, length / count)
+    x = (np.arange(count) + 0.5) * spacing[0]
+    y = x.copy()
+    xx, yy = np.meshgrid(x, y, indexing="ij")
+    bed = (
+        0.05
+        * np.sin(2.0 * np.pi * xx / length)
+        * np.sin(2.0 * np.pi * yy / length)
+    )
+    depth = 0.2 - bed
+    zero = np.zeros_like(depth)
+    result = sv2.run_model(
+        T_final=0.02,
+        record_interval=0.02,
+        h_init=depth,
+        hu_init=zero,
+        hv_init=zero,
+        x_m=x,
+        y_m=y,
+        dx_m=spacing,
+        dy_m=spacing,
+        slope_x=zero,
+        slope_y=zero,
+        manning_n=zero,
+        bed_elevation_m=bed,
+        rainfall=lambda x, y, time: zero,
+        boundary_x="periodic",
+        boundary_y="periodic",
+        spatial_order=2,
+        cfl=0.3,
+    )
+
+    assert np.max(np.abs(result["h_final"] - depth)) < 1e-12
+    assert np.max(np.abs(result["hu_final"])) < 1e-12
+    assert np.max(np.abs(result["hv_final"])) < 1e-12
+
+
+def test_second_order_reconstruction_reduces_shear_wave_error():
+    def shear_error(order):
+        cells = 40
+        length = 10.0
+        dx = np.full(cells, length / cells)
+        x = (np.arange(cells) + 0.5) * dx[0]
+        y = np.array([5.0])
+        dy = np.array([10.0])
+        depth = np.full((cells, 1), 0.01)
+        velocity_x = 4.0
+        zero = np.zeros_like(depth)
+        result = sv2.run_model(
+            T_final=0.2,
+            record_interval=0.2,
+            h_init=depth,
+            hu_init=np.full_like(depth, depth[0, 0] * velocity_x),
+            hv_init=(depth[0, 0] * np.sin(2.0 * np.pi * x / length))[:, None],
+            x_m=x,
+            y_m=y,
+            dx_m=dx,
+            dy_m=dy,
+            slope_x=zero,
+            slope_y=zero,
+            manning_n=zero,
+            bed_elevation_m=zero,
+            rainfall=lambda x, y, time: zero,
+            boundary_x="periodic",
+            boundary_y="periodic",
+            spatial_order=order,
+            cfl=0.3,
+        )
+        exact = np.sin(
+            2.0 * np.pi * (x - velocity_x * 0.2) / length
+        )
+        numerical = result["hv_final"][:, 0] / result["h_final"][:, 0]
+        return float(np.sqrt(np.mean((numerical - exact) ** 2)))
+
+    assert shear_error(2) < 0.25 * shear_error(1)
+
+
 def test_problem_uniform_in_y_stays_uniform_in_y(monkeypatch):
     # Uniform in y, solid y-walls, uniform inflow -> the solution must not develop
     # any y-structure (each x-column stays constant across y).

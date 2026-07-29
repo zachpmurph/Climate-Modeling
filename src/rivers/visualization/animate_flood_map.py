@@ -29,6 +29,7 @@ from rivers.ingest.common import haversine_m
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_FLOODPLAIN_SLOPE = 0.02
 DEFAULT_MAX_WIDTH_M = 5_000.0
+DISPLAY_DRY_DEPTH_M = 1e-8
 
 
 def _positive_float(value: str) -> float:
@@ -178,7 +179,11 @@ def inundation_widths(
     """Estimate wetted widths using a symmetric planar floodplain cross-section."""
     overbank_depth = np.maximum(depths_m - bankfull_depths_m, 0.0)
     widths = channel_widths_m + 2.0 * overbank_depth / floodplain_slope
-    return np.minimum(widths, max_width_m)
+    return np.where(
+        depths_m > DISPLAY_DRY_DEPTH_M,
+        np.minimum(widths, max_width_m),
+        0.0,
+    )
 
 
 def _cross_section_edges(centerline: np.ndarray, widths_m: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -243,6 +248,8 @@ def build_frames(
             depth = float(0.5 * (frame_depths[index] + frame_depths[index + 1]))
             width = float(0.5 * (widths[index] + widths[index + 1]))
             bankfull = float(0.5 * (bankfull_depths_m[index] + bankfull_depths_m[index + 1]))
+            if depth <= DISPLAY_DRY_DEPTH_M:
+                continue
             segments.append(
                 {
                     "coordinates": [
@@ -293,9 +300,22 @@ def _named_map_inputs(river: str) -> tuple[Path, Path]:
     if river == "example":
         directory = REPO_ROOT / "real_world_rivers" / "tools"
         return directory / "example_markers.csv", directory / "example_geometry.csv"
+
     slug = river.replace("-", "_")
-    directory = REPO_ROOT / "real_world_rivers" / "curated"
-    return directory / f"{slug}_markers.csv", directory / f"{slug}_geometry.csv"
+    definition_path = REPO_ROOT / "real_world_rivers" / "curated" / f"{slug}.json"
+    if not definition_path.is_file():
+        raise ValueError(f"Unknown named river: {river}")
+
+    definition = json.loads(definition_path.read_text(encoding="utf-8"))
+    markers = definition.get("markers")
+    geometry = definition.get("geometry", {}).get("file")
+    if not markers or not geometry:
+        raise ValueError(
+            f"Curated definition for {river} must declare markers and geometry.file"
+        )
+
+    directory = definition_path.parent
+    return (directory / markers).resolve(), (directory / geometry).resolve()
 
 
 def resolve_map_inputs(args: argparse.Namespace) -> tuple[Path, Path, dict[str, object]]:

@@ -1,0 +1,206 @@
+{
+  "schema_version": 1,
+  "case": {
+    "name": "Glen Canyon Dam to Lees Ferry \u2014 2004-07-01",
+    "river": "Colorado River",
+    "upstream_gauge": "USGS-09379910",
+    "downstream_gauge": "USGS-09380000",
+    "observation_window": [
+      "2004-07-01T00:00:00Z",
+      "2004-07-02T00:00:00Z"
+    ],
+    "purpose": "Uncalibrated two-gauge baseline; downstream observations are not used as a boundary or calibration target."
+  },
+  "method": {
+    "type": "one_at_a_time",
+    "purpose": "Structural sensitivity screening only; downstream observations remain held out and no parameter is calibrated.",
+    "parameters": [
+      "Manning roughness +/-20%",
+      "channel width +/-20%",
+      "longitudinal cells approximately halved/doubled",
+      "first- versus second-order spatial reconstruction"
+    ]
+  },
+  "runs": [
+    {
+      "name": "baseline",
+      "changes": {},
+      "scores": {
+        "nse": 0.3713141167337086,
+        "rmse": 3697.075491132537,
+        "bias": -2278.464560917427,
+        "percent_bias": -9.165236396739722,
+        "pearson_r": 0.7875730610488633,
+        "n": 97
+      },
+      "mass": {
+        "inflow_m3": 37288424.45457489,
+        "source_m3": 0.0,
+        "outflow_m3": 32474161.204950202,
+        "floor_correction_m3": 0.0
+      }
+    },
+    {
+      "name": "roughness_minus_20_percent",
+      "changes": {
+        "manning_n_factor": 0.8
+      },
+      "scores": {
+        "nse": 0.6297349344643115,
+        "rmse": 2837.2514944157106,
+        "bias": -1058.0917192803226,
+        "percent_bias": -4.256226277547255,
+        "pearson_r": 0.83730825832485,
+        "n": 97
+      },
+      "mass": {
+        "inflow_m3": 37288391.49368228,
+        "source_m3": 0.0,
+        "outflow_m3": 34229350.890557066,
+        "floor_correction_m3": 0.0
+      }
+    },
+    {
+      "name": "roughness_plus_20_percent",
+      "changes": {
+        "manning_n_factor": 1.2
+      },
+      "scores": {
+        "nse": 0.050964511425029,
+        "rmse": 4542.3719224424485,
+        "bias": -3332.4267563098147,
+        "percent_bias": -13.404851460187745,
+        "pearson_r": 0.7538642438663895,
+        "n": 97
+      },
+      "mass": {
+        "inflow_m3": 37288444.143683836,
+        "source_m3": 0.0,
+        "outflow_m3": 30958076.07430412,
+        "floor_correction_m3": 0.0
+      }
+    },
+    {
+      "name": "width_minus_20_percent",
+      "changes": {
+        "channel_width_factor": 0.8
+      },
+      "scores": {
+        "nse": 0.31819913723351556,
+        "rmse": 3850.084288704839,
+        "bias": -2395.468323711211,
+        "percent_bias": -9.635889819973697,
+        "pearson_r": 0.7653506172818579,
+        "n": 97
+      },
+      "mass": {
+        "inflow_m3": 37288441.848162696,
+        "source_m3": 0.0,
+        "outflow_m3": 32303868.64751096,
+        "floor_correction_m3": 0.0
+      }
+    },
+    {
+      "name": "width_plus_20_percent",
+      "changes": {
+        "channel_width_factor": 1.2
+      },
+      "scores": {
+        "nse": 0.4093973323437988,
+        "rmse": 3583.3494792944734,
+        "bias": -2215.5388765564344,
+        "percent_bias": -8.9121147188836,
+        "pearson_r": 0.8092060006425882,
+        "n": 97
+      },
+      "mass": {
+        "inflow_m3": 37288408.82101406,
+        "source_m3": 0.0,
+        "outflow_m3": 32566251.761778284,
+        "floor_correction_m3": 0.0
+      }
+    },
+    {
+      "name": "coarse_grid",
+      "changes": {
+        "cells": 41
+      },
+      "scores": {
+        "nse": 0.3749768645995578,
+        "rmse": 3686.2901079636376,
+        "bias": -2256.2206629798056,
+        "percent_bias": -9.075759217028326,
+        "pearson_r": 0.7870891633007249,
+        "n": 97
+      },
+      "mass": {
+        "inflow_m3": 37288234.36020341,
+        "source_m3": 0.0,
+        "outflow_m3": 32505969.387275252,
+        "floor_correction_m3": 0.0
+      }
+    },
+    {
+      "name": "fine_grid",
+      "changes": {
+        "cells": 161
+      },
+      "scores": {
+        "nse": 0.36953619230478285,
+        "rmse": 3702.299467340099,
+        "bias": -2289.6324967585924,
+        "percent_bias": -9.21015997106413,
+        "pearson_r": 0.7878789439562598,
+        "n": 97
+      },
+      "mass": {
+        "inflow_m3": 37288518.795597985,
+        "source_m3": 0.0,
+        "outflow_m3": 32458209.969721626,
+        "floor_correction_m3": 0.0
+      }
+    },
+    {
+      "name": "second_order_reconstruction",
+      "changes": {
+        "spatial_order": 2
+      },
+      "scores": {
+        "nse": -1.3523882526779936,
+        "rmse": 7151.480606302345,
+        "bias": -1401.4123544396757,
+        "percent_bias": -5.637250514258364,
+        "pearson_r": 0.2793002021895184,
+        "n": 97
+      },
+      "mass": {
+        "inflow_m3": 37288615.7053724,
+        "source_m3": 0.0,
+        "outflow_m3": 33950687.42374929,
+        "floor_correction_m3": 0.0
+      }
+    }
+  ],
+  "score_ranges": {
+    "nse": {
+      "minimum": -1.3523882526779936,
+      "maximum": 0.6297349344643115
+    },
+    "rmse": {
+      "minimum": 2837.2514944157106,
+      "maximum": 7151.480606302345
+    },
+    "bias": {
+      "minimum": -3332.4267563098147,
+      "maximum": -1058.0917192803226
+    },
+    "percent_bias": {
+      "minimum": -13.404851460187745,
+      "maximum": -4.256226277547255
+    },
+    "pearson_r": {
+      "minimum": 0.2793002021895184,
+      "maximum": 0.83730825832485
+    }
+  }
+}

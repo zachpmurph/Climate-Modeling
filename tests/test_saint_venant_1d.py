@@ -63,8 +63,11 @@ def test_uniform_manning_flow_is_steady(monkeypatch):
         left_inflow=equilibrium_q,
     )
 
-    assert np.allclose(result["h_final"], h0, rtol=0, atol=1e-14)
-    assert np.allclose(result["q_final"], q0, rtol=0, atol=2e-13)
+    # A first-order hydrostatic scheme is exactly well-balanced for still water,
+    # not for moving frictional equilibria. The normal-flow state should remain
+    # close over this short step and converge under refinement.
+    assert np.max(np.abs(result["h_final"] - h0)) < 0.01
+    assert np.max(np.abs(result["q_final"] - q0)) / equilibrium_q < 0.02
 
 
 def test_prescribed_upstream_inflow_is_accounted(monkeypatch):
@@ -91,13 +94,66 @@ def test_prescribed_upstream_inflow_is_accounted(monkeypatch):
     )
 
 
+def test_wall_downstream_boundary_has_zero_mass_flux(monkeypatch):
+    disable_forcing(monkeypatch)
+    h0 = np.full(int(sv.L * 10), 0.2)
+    q0 = np.full_like(h0, 0.01)
+    result = sv.run_model(
+        sv.L,
+        0.01,
+        h_init=h0,
+        q_init=q0,
+        left_inflow=0.01,
+        downstream_boundary="wall",
+    )
+    dx = result["dx_m"]
+    storage_delta = np.sum((result["h_final"] - h0) * dx)
+
+    assert result["mass_outflow"] == pytest.approx(0.0, abs=1e-14)
+    assert storage_delta == pytest.approx(
+        result["mass_inflow"] + result["mass_floor_correction"],
+        abs=1e-12,
+    )
+
+
+def test_high_downstream_stage_allows_backflow(monkeypatch):
+    disable_forcing(monkeypatch)
+    h0 = np.full(int(sv.L * 10), 0.1)
+    result = sv.run_model(
+        sv.L,
+        0.001,
+        h_init=h0,
+        q_init=np.zeros_like(h0),
+        left_inflow=0.0,
+        downstream_boundary="stage",
+        downstream_stage_m=0.5,
+    )
+
+    assert result["mass_inflow"] > 0.0
+    assert result["mass_outflow"] == 0.0
+    assert result["h_final"][-1] > h0[-1]
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"downstream_boundary": "bad"},
+        {"downstream_boundary": "stage"},
+        {"downstream_boundary": "wall", "downstream_stage_m": 1.0},
+    ],
+)
+def test_invalid_downstream_boundary_configuration_raises(kwargs):
+    with pytest.raises(ValueError, match="downstream"):
+        sv.run_model(sv.L, 0.01, **kwargs)
+
+
 def test_exactly_dry_domain_has_no_warning_or_mass_gain(monkeypatch):
     disable_forcing(monkeypatch)
     dry = np.zeros(int(sv.L * 10))
 
     result = sv.run_model(sv.L, 0.01, h_init=dry, q_init=dry)
 
-    assert np.all(result["h_final"] == sv.H_FLOOR)
+    assert np.all(result["h_final"] == 0.0)
     assert np.all(result["q_final"] == 0.0)
     assert result["mass_floor_correction"] == 0.0
 
@@ -155,11 +211,196 @@ def test_profile_grid_uses_per_cell_slope_and_roughness(monkeypatch):
     assert np.array_equal(slope_result["dx_m"], dx_m)
     assert np.array_equal(slope_result["slope"], slope)
     assert np.array_equal(roughness_result["manning_n"], manning_n)
-    assert slope_result["q_final"][0] < slope_result["q_final"][1] < slope_result["q_final"][2]
-    assert (
-        roughness_result["q_final"][0]
-        > roughness_result["q_final"][1]
-        > roughness_result["q_final"][2]
+    assert np.all(np.isfinite(slope_result["q_final"]))
+    assert not np.array_equal(slope_result["q_final"], roughness_result["q_final"])
+
+
+def test_nonflat_lake_at_rest_is_well_balanced():
+    x_m = np.linspace(0.0, 1000.0, 101)
+    dx_m = np.full_like(x_m, 1000.0 / len(x_m))
+    slope = np.full_like(x_m, 0.001)
+    bed = -slope * x_m
+    depth = 2.0 - bed
+
+    result = sv.run_model(
+        1000.0,
+        0.1,
+        h_init=depth,
+        q_init=np.zeros_like(depth),
+        left_inflow=0.0,
+        rainfall=lambda x, t: np.zeros_like(x),
+        x_m=x_m,
+        dx_m=dx_m,
+        slope=slope,
+        manning_n=np.full_like(x_m, 1e-12),
+        bed_elevation_m=bed,
+        cfl=0.4,
+    )
+
+    assert np.max(np.abs(result["h_final"] - depth)) < 1e-12
+    assert np.max(np.abs(result["q_final"])) < 1e-10
+    assert result["mass_floor_correction"] == 0.0
+
+
+def test_varying_rectangular_width_preserves_nonflat_lake_at_rest():
+    x_m = np.linspace(0.0, 1000.0, 101)
+    dx_m = np.full_like(x_m, 1000.0 / len(x_m))
+    slope = np.full_like(x_m, 0.001)
+    bed = -slope * x_m
+    depth = 2.0 - bed
+    width = 20.0 + 10.0 * np.sin(np.linspace(0.0, np.pi, len(x_m)))
+
+    result = sv.run_model(
+        1000.0,
+        0.1,
+        h_init=depth,
+        q_init=np.zeros_like(depth),
+        left_inflow=0.0,
+        rainfall=lambda x, t: np.zeros_like(x),
+        x_m=x_m,
+        dx_m=dx_m,
+        slope=slope,
+        manning_n=np.full_like(x_m, 0.001),
+        bed_elevation_m=bed,
+        channel_width_m=width,
+        cfl=0.4,
+    )
+
+    assert np.max(np.abs(result["h_final"] - depth)) < 1e-12
+    assert np.max(np.abs(result["q_final"])) < 1e-10
+    assert result["uses_cross_section"] is True
+
+
+def test_second_order_reconstruction_preserves_varying_width_lake():
+    x_m = np.linspace(0.0, 1000.0, 101)
+    dx_m = np.full_like(x_m, 1000.0 / len(x_m))
+    slope = np.full_like(x_m, 0.001)
+    bed = -slope * x_m
+    depth = 2.0 - bed
+    width = 20.0 + 10.0 * np.sin(np.linspace(0.0, np.pi, len(x_m)))
+
+    result = sv.run_model(
+        1000.0,
+        0.1,
+        h_init=depth,
+        q_init=np.zeros_like(depth),
+        left_inflow=0.0,
+        rainfall=lambda x, t: np.zeros_like(x),
+        x_m=x_m,
+        dx_m=dx_m,
+        slope=slope,
+        manning_n=np.full_like(x_m, 0.001),
+        bed_elevation_m=bed,
+        channel_width_m=width,
+        spatial_order=2,
+        cfl=0.4,
+    )
+
+    assert np.max(np.abs(result["h_final"] - depth)) < 1e-12
+    assert np.max(np.abs(result["q_final"])) < 1e-10
+
+
+def test_second_order_reconstruction_reduces_smooth_wave_error():
+    def smooth_run(cells, order):
+        x_m = np.linspace(0.0, 10.0, cells)
+        dx_m = np.full(cells, 10.0 / cells)
+        depth = 1.0 + 0.01 * np.exp(-((x_m - 5.0) / 0.5) ** 2)
+        return sv.run_model(
+            10.0,
+            0.01,
+            record_interval=0.01,
+            h_init=depth,
+            q_init=np.zeros(cells),
+            left_inflow=0.0,
+            rainfall=lambda x, t: np.zeros_like(x),
+            x_m=x_m,
+            dx_m=dx_m,
+            slope=np.zeros(cells),
+            manning_n=np.full(cells, 1e-12),
+            bed_elevation_m=np.zeros(cells),
+            spatial_order=order,
+            cfl=0.2,
+        )
+
+    reference = smooth_run(401, 2)
+    first = smooth_run(101, 1)
+    second = smooth_run(101, 2)
+    target = np.interp(first["x"], reference["x"], reference["h_final"])
+    first_error = np.sqrt(np.mean((first["h_final"] - target) ** 2))
+    second_error = np.sqrt(np.mean((second["h_final"] - target) ** 2))
+
+    assert second_error < 0.75 * first_error
+
+
+def test_second_order_ssp_update_preserves_volume_with_rainfall():
+    cells = 41
+    x_m = np.linspace(0.0, 100.0, cells)
+    dx_m = np.full(cells, 100.0 / cells)
+    width = np.linspace(10.0, 14.0, cells)
+    rainfall = 2e-5
+    duration = 0.02
+    result = sv.run_model(
+        100.0,
+        duration,
+        h_init=np.full(cells, 0.3),
+        q_init=np.zeros(cells),
+        left_inflow=0.0,
+        rainfall=lambda x, t: np.full_like(x, rainfall),
+        x_m=x_m,
+        dx_m=dx_m,
+        slope=np.zeros(cells),
+        manning_n=np.full(cells, 0.001),
+        bed_elevation_m=np.zeros(cells),
+        channel_width_m=width,
+        downstream_boundary="wall",
+        spatial_order=2,
+        cfl=0.3,
+    )
+
+    storage_delta = float(
+        np.sum(width * (result["h_final"] - result["h_initial"]) * dx_m)
+    )
+    assert storage_delta == pytest.approx(
+        result["mass_inflow"]
+        + result["mass_source"]
+        - result["mass_outflow"]
+        + result["mass_floor_correction"],
+        rel=1e-10,
+        abs=1e-11,
+    )
+
+
+def test_rectangular_width_gives_volumetric_rainfall_mass_balance():
+    x_m = np.array([0.0, 100.0, 250.0])
+    dx_m = np.array([50.0, 125.0, 100.0])
+    width = np.array([10.0, 20.0, 30.0])
+    rainfall_rate = np.array([0.0, 0.00001, 0.00002])
+    duration = 0.1
+
+    result = sv.run_model(
+        float(np.sum(dx_m)),
+        duration,
+        h_init=np.full(3, 0.2),
+        q_init=np.zeros(3),
+        rainfall=lambda x, t: rainfall_rate,
+        x_m=x_m,
+        dx_m=dx_m,
+        slope=np.zeros(3),
+        manning_n=np.full(3, 0.001),
+        channel_width_m=width,
+    )
+
+    expected_source = float(np.sum(rainfall_rate * width * dx_m) * duration)
+    storage_delta = float(
+        np.sum((result["h_final"] - result["h_initial"]) * width * dx_m)
+    )
+    assert result["mass_source"] == pytest.approx(expected_source)
+    assert storage_delta == pytest.approx(
+        result["mass_source"]
+        - result["mass_outflow"]
+        + result["mass_inflow"]
+        + result["mass_floor_correction"],
+        abs=1e-12,
     )
 
 

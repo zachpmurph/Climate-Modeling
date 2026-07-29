@@ -11,13 +11,18 @@ an ingested river profile through a single CLI.
 
 ### Kinematic wave (`linear_advection.py`)
 
-Solves the 1D kinematic wave equation for water depth $h(x, t)$:
+With reviewed rectangular-section width $B(x)$, solves the conservative
+kinematic wave equation for cross-sectional area $A=Bh$:
 
-$$\frac{\partial h}{\partial t} + \frac{\partial q(h)}{\partial x} = r(x, t)$$
+$$\frac{\partial A}{\partial t} + \frac{\partial Q(A)}{\partial x} = B r(x, t)$$
 
-The flux $q$ and wave speed $c$ are related to depth through Manning's equation:
+The whole-channel flow uses Manning's equation with hydraulic radius
+$R_h=A/(B+2h)$:
 
-$$q(h) = \frac{1}{n} h^{5/3} \sqrt{S_0}, \qquad c(h) = \frac{dq}{dh} = \frac{5}{3n} h^{2/3} \sqrt{S_0}$$
+$$Q(h) = \frac{1}{n} A R_h^{2/3} \sqrt{S_0}.$$
+
+Without hydraulic geometry, the backward-compatible unit-width form is
+$q=h^{5/3}\sqrt{S_0}/n$.
 
 where $S_0$ is bed slope, $n$ is Manning's roughness coefficient, and $r(x, t)$ is
 a rainfall source. The kinematic approximation assumes the friction slope equals the
@@ -31,22 +36,27 @@ is recomputed every iteration from the CFL condition $\Delta t = \text{CFL} \cdo
 
 ### Saint-Venant (full dynamic wave) (`saint_venant_1d.py`)
 
-Solves the 1D Saint-Venant equations for depth $h$ and unit discharge $q$ together:
+Solves the 1D Saint-Venant equations for rectangular cross-sectional area
+$A=Bh$ and whole-channel discharge $Q$:
 
-$$\frac{\partial h}{\partial t} + \frac{\partial q}{\partial x} = r$$
+$$\frac{\partial A}{\partial t} + \frac{\partial Q}{\partial x} = B r$$
 
-$$\frac{\partial q}{\partial t} + \frac{\partial}{\partial x}\!\left(\frac{q^2}{h} + \frac{g h^2}{2}\right) = g h (S_0 - S_f)$$
+$$\frac{\partial Q}{\partial t} + \frac{\partial}{\partial x}\!\left(\frac{Q^2}{A} + \frac{g B h^2}{2}\right) = g A (S_0 - S_f) + S_B$$
 
-where $S_f = n^2 q^2 / h^{10/3}$ is the Manning friction slope and $g = 9.8 \times
-60^2\ \text{m/min}^2$. This adds the momentum equation, capturing pressure-gradient
+where $S_f=n^2u|u|/R_h^{4/3}$ is the Manning friction slope, $S_B$ is the
+non-prismatic width source, and $g = 9.8 \times 60^2\ \text{m/min}^2$. This
+adds the momentum equation, capturing pressure-gradient
 forces and flow inertia that the kinematic approximation omits — important near rapid
 transients, steep wetting fronts, and backwater effects.
 
 **Numerical scheme:** Rusanov (local Lax-Friedrichs) face fluxes over a conservative
-finite-volume stencil, ghost-cell boundaries, explicit forward Euler time stepping,
-operator-split Manning friction (semi-implicit in a single-step sense), adaptive CFL
-time step. The solver runs on the supplied profile grid and applies bed slope,
-Manning roughness, and rainfall independently in every cell.
+finite-volume stencil, hydrostatic reconstruction for well-balanced non-flat beds,
+a conservative draining limiter for wet/dry cells, ghost-cell boundaries, explicit
+forward Euler time stepping, operator-split Manning friction (semi-implicit in a
+single-step sense), and adaptive CFL time steps. The solver runs on the supplied
+profile grid and applies bed elevation, Manning roughness, and rainfall independently
+in every cell. A common-width face reconstruction plus a discrete width source
+preserves a non-flat lake at rest even when channel width changes by cell.
 
 **Units:** meters and minutes throughout (Manning's $n$ is converted from the
 conventional s/m$^{1/3}$ units before use).
@@ -88,7 +98,7 @@ The rationale for each transition is given alongside the change.
 |---|---|---|---|
 | **0 — Linear advection** | `50c0d1c` | Upwind finite-volume solver for $\partial_t h + a \partial_x h = 0$ with constant wave speed $a$. No source term. | Starting point: verify the grid, time loop, and upwind stencil work correctly on a problem with a known solution before adding nonlinearity. |
 | **1 — Rainfall source term** | `a1ae414` `d5ab4f4` `0b8b7e6` | Added $r(x, t)$ source term; fixed a `dx` computation bug; added analytical verification test via method of characteristics. | Rainfall is the primary driver of overland flow. Verification against a closed-form solution confirmed the source term was coded correctly before moving to nonlinear physics. |
-| **2 — Nonlinear kinematic wave** | `536bf04` | Replaced constant wave speed with Manning's-equation closure $c(h)$. Parameters adjusted to physically realistic overland-flow values ($S_0 = 0.05$, $n = 0.05$). | Linear advection does not capture wave steepening or depth-dependent propagation speed. The Manning's closure is the standard kinematic-wave model for overland flow; no closed-form solution exists once $c$ depends on $h$. |
+| **2 — Nonlinear kinematic wave** | `536bf04` | Replaced constant wave speed with Manning's-equation closure $c(h)$. Parameters use $S_0 = 0.05$ and conventional SI $n = 0.05$ (stored as $0.05/60$ in the current minutes-based model). | Linear advection does not capture wave steepening or depth-dependent propagation speed. The Manning's closure is the standard kinematic-wave model for overland flow; no closed-form solution exists once $c$ depends on $h$. |
 | **2.1 — Adaptive time stepping** | `b15e0e9` | CFL-based adaptive $\Delta t$, recomputed each step from the current $c_\text{max}$. General code cleanup; made upwind updates cleaner. | With nonlinear $c(h)$, a fixed $\Delta t$ chosen at $t = 0$ can violate the CFL condition as depth grows, producing numerical oscillations. Adaptive stepping guarantees stability throughout. |
 | **2.2 — Plot output to file** | `5ba28e8` | Switched from `plt.show()` to saving figures under `graphs/`. | `plt.show()` blocks execution in headless or remote environments. Saving to file lets the script run non-interactively. |
 | **2.3 — Function refactor** | `26e0568` | Wrapped the time loop in `run_model()`. | Bare module-level code is untestable. A function interface lets pytest call the solver with different inputs without running the whole script. |
@@ -102,9 +112,19 @@ The rationale for each transition is given alongside the change.
 | **4c — Kinematic wave consolidated** | `a282b4f` `e1ec579` | Folded the real-river kinematic wave capability (per-cell slope and Manning's $n$, upstream inflow, rainfall) into `linear_advection.py` and removed the duplicate `river_kinematic_wave.py` and its pre-harness runner. `linear_advection.py` now runs standalone on a profile (or a built-in demo) and is the `kinematic_wave` solver in the harness. `--solver river_kinematic_wave` is replaced by `--solver kinematic_wave`. | The overland-flow file and the real-river file had diverged into near-duplicate kinematic wave solvers. Consolidating to one implementation removes the redundancy and the need for a separate file to run a real-profile simulation. |
 | **4d — Model-neutral flood reporting** | `6116048` | Added a reporting consumer for saved time-series CSV and summary JSON artifacts. It produces a self-contained interactive HTML report and versioned outcomes JSON with peak depth, timing, reach-threshold exceedance, and mass-balance diagnostics. | Reporting should evolve independently from numerical model development. Consuming saved artifacts prevents visualization code from coupling to solver internals and makes the interpretation boundary explicit. |
 | **4e — Profile-grid dynamic wave and forcing** | Current branch | Saint-Venant now runs on the supplied nonuniform profile grid with per-cell bed slope and Manning roughness. Both solvers accept spatially and temporally varying rainfall callables. Profile initial depth, rainfall, and labels are transferred into `Scenario`. | Reconstructing a uniform grid and using module-level coefficients discarded real-reach variation. Sampling rainfall only once also prevented event functions from changing through time. |
-| **4f — Integrated 2-D shallow water** | Current branch | Added `Domain2D` and a registered `saint_venant_2d` solver. The unified runner extrudes a profile across a requested width, applies spatial terrain, roughness, and rainfall, saves complete fields to NPZ, and produces plan-view area-based flood reports. | The standalone 2-D solver could not consume ingested profiles or participate in shared simulation and reporting workflows. |
+| **4f — Integrated 2-D shallow water** | Current branch | Added `Domain2D` and a registered `saint_venant_2d` solver. The unified runner builds a terrain-backed channel and floodplain from reviewed width/bankfull geometry, applies spatial terrain, roughness, and rainfall, saves complete fields to NPZ, and produces plan-view area-based flood reports. | The standalone 2-D solver could not consume ingested profiles or participate in shared simulation and reporting workflows; a flat cross-channel extrusion could not represent overbank inundation. |
 | **4g — Tier 3 numerical verification** | Current branch | Added explicit bed elevation, hydrostatic reconstruction, a conservative draining limiter, finite-state diagnostics, periodic verification boundaries, analytic convergence, non-flat equilibrium, 1-D reduction, radial symmetry, strict mass, and wet/dry gates. Pinned dependencies and clean-checkout CI preserve evidence. | Stability and visual plausibility do not establish PDE accuracy. The solver now has quantitative, reproducible evidence for first-order convergence, well-balancedness, positivity, multidimensional symmetry, and machine-precision conservation within its documented scope. |
 | **4h — Geographic flood screening** | Current branch | Added an interactive topographic map that animates canonical saved depth time series along a reviewed river centerline. The runner can record portable marker and geometry paths in its summary so the map command auto-discovers them. | Existing reports quantify outcomes but do not place a 1-D result in geographic context. The map makes scenario review easier while explicitly retaining the distinction between estimated cross-section width and a terrain-resolving 2-D inundation boundary. |
+| **4i — Observed baseline and well-balanced 1-D dynamics** | Current branch | Added an approved-USGS two-gauge validation case and rebuilt 1-D Saint-Venant bed coupling with hydrostatic reconstruction and a conservative draining limiter. | Exact flat-bed and synthetic tests hid spurious currents over real topography. The observed case now quantifies field error, while the 1-D solver preserves a non-flat lake at rest without mass-adding depth floors. |
+| **4j — Hydraulic cross-sections** | Current branch | Added reviewed per-cell channel width and bankfull depth to the 1-D domain. Both 1-D solvers now conserve whole-channel volume and discharge when geometry is supplied; Saint-Venant includes rectangular hydraulic radius and a well-balanced non-prismatic width source. | Unit-width flow cannot reproduce real storage, wetted perimeter, friction, rainfall volume, or gauge discharge without ad hoc conversions. |
+| **4k — Event forcing and consistent startup** | Current branch | Added linearly interpolated inflow/rainfall CSV forcing, preserved callable hydrographs in every solver, aligned time steps with forcing knots, and initialized dynamic-wave discharge from the boundary flow. Whole-channel 2-D flow is distributed only across initially wet upstream cells. | Collapsing a hydrograph to its first value and starting a flowing boundary from zero momentum create physically false transients and erase the event being simulated. |
+| **4l — Provenance-safe solver grids** | Current branch | Added optional longitudinal resampling that linearly interpolates reviewed fields onto a derived numerical grid while preserving reach length and labeling the source/solver cell counts in every summary. | A five-station measurement profile is too coarse for routing, but silently treating interpolated cells as observations overstates the evidence. |
+| **4m — Conservative dry kinematic states** | Current branch | Removed the artificial minimum depth from profile loading and kinematic updates, added a conservative draining limiter, retained time-varying hydrographs, and exposed any roundoff floor correction in mass accounting. | A hidden depth floor creates water in every dry cell and can make a mass balance appear better than it is. |
+| **4n — Downstream hydraulic boundaries** | Current branch | Added free-outflow, reflecting-wall, and prescribed-stage downstream boundaries to 1-D Saint-Venant, including stage-driven backflow and signed boundary mass accounting. | A zero-gradient outlet cannot represent a dam, closed gate, lake level, tide, or downstream backwater control. |
+| **4o — Limited second-order reconstruction** | Current branch | Added optional minmod-limited second-order reconstruction of water surface, bed, and velocity/momentum to both Saint-Venant solvers (plus width and unit discharge in 1-D). It retains hydrostatic well-balancing and conservative draining limiters while reducing smooth-wave diffusion; the 1-D path uses a two-stage SSP update. | First-order piecewise-constant Rusanov fluxes smear hydrographs and wetting fronts, especially on long reaches. Pairing higher-order spatial reconstruction with forward Euler also caused unacceptable long-run behavior. |
+| **4p — Manning fixture units** | Current branch | Converted the shipped example profile, reviewed-roughness example, standalone kinematic demo, and ingestion fixtures from conventional SI seconds-based Manning values to the repository's minutes-based values (`n_model = n_SI / 60`). | Supplying `0.035` directly to a minutes-based solver makes roughness 60× too large and mislabels a seconds-scale Manning flux as per-minute flow. |
+| **4q — Structural sensitivity evidence** | Current branch | Added a reproducible one-at-a-time matrix for the held-out Colorado River case, covering roughness, width, grid resolution, and reconstruction order. Results and score ranges are tracked without selecting or fitting a best parameter. | One field score hides parameter dependence and can encourage accidental calibration. The matrix exposes model risk while preserving the downstream gauge as validation data. |
+| **4r — Multi-event observed validation** | Current branch | Added three approved-USGS out-of-sample events, a reproducible provider fetcher, and a four-event suite with fixed geometry, roughness, grid, and numerical settings. | A single event cannot distinguish transferable behavior from a lucky hydrograph match. Fixed-parameter multi-event scores expose shared bias and condition-dependent skill without event-by-event tuning. |
 
 ---
 
@@ -151,11 +171,19 @@ python src/rivers/simulations/run_simulation.py PROFILE --solver SOLVER --t-fina
 | `--solver` | `saint_venant` | One of: `kinematic_wave`, `saint_venant`, `saint_venant_2d` |
 | `--t-final` | *(required)* | Simulation duration, minutes |
 | `--record-interval` | `1.0` | Snapshot interval, minutes |
-| `--left-inflow` | `0.0` | Constant upstream inflow flux, m²/min |
+| `--left-inflow` | `0.0` | Constant upstream flow: m³/min with hydraulic geometry, legacy m²/min otherwise |
+| `--inflow-series` | — | CSV with `t_min,left_inflow`; mutually exclusive with nonzero `--left-inflow` |
 | `--rainfall-rate` | `0.0` | Uniform rainfall rate, m/min |
+| `--rainfall-series` | — | CSV with `t_min,rainfall_rate_m_per_min`; added to profile and constant rainfall |
+| `--downstream-boundary` | `outflow` | 1-D Saint-Venant: `outflow`, `wall`, or `stage` |
+| `--downstream-stage` | — | Fixed water-surface elevation for a `stage` boundary |
+| `--spatial-order` | `1` | Saint-Venant reconstruction order: robust first-order or less-diffusive second-order |
 | `--cfl` | `0.5` | CFL target (0 < CFL ≤ 1) |
-| `--width` | — | Channel width in metres; required for `saint_venant_2d` |
-| `--cross-cells` | `10` | Number of cells across a 2-D channel |
+| `--longitudinal-cells` | — | Derived solver-cell count; linearly interpolates reviewed fields without creating observations |
+| `--width` | — | Total channel-plus-floodplain domain width in metres; required for `saint_venant_2d` |
+| `--cross-cells` | `10` | Number of cells across a 2-D domain |
+| `--hydraulic-geometry` | — | Reviewed `station_m,width_m,bankfull_depth_m` CSV; optional for physical 1-D sections and required for 2-D |
+| `--floodplain-slope` | `0.02` | Lateral rise/run outside the reviewed bankfull channel |
 | `--output-dir` | `data/real_world_rivers/runs/` | Output directory |
 | `--run-name` | `simulation` | Filename prefix for outputs |
 
@@ -179,21 +207,26 @@ python src/rivers/simulations/run_simulation.py \
     --run-name hanford_sv
 ```
 
-**Example — 2-D Saint-Venant on an extruded rectangular channel:**
+**Example — 2-D Saint-Venant on a terrain-backed channel and floodplain:**
 ```bash
 python src/rivers/simulations/run_simulation.py \
     real_world_rivers/tools/example_river_profile.csv \
     --solver saint_venant_2d \
     --width 100 \
     --cross-cells 20 \
+    --hydraulic-geometry real_world_rivers/tools/example_geometry.csv \
     --t-final 10 \
     --run-name hanford_sv2
 ```
 
-The 2-D runner repeats profile slope, Manning roughness, initial depth, and
-rainfall across the requested width. It writes a full `<run>_fields.npz`, a
-summary JSON, and a cross-channel-mean CSV for compatibility with 1-D tools.
-Build laterally varying cases programmatically by passing a `Domain2D` directly.
+The 2-D runner uses the reviewed channel width and bankfull depth to construct a
+centred parabolic channel, then raises the floodplain beyond each bank at
+`--floodplain-slope`. Profile initial depth is applied as a level water surface,
+so higher bank and floodplain cells start dry. It writes a full
+`<run>_fields.npz`, a summary JSON, and a cross-channel-mean CSV for
+compatibility with 1-D tools. This synthetic cross-section is safer than a flat
+extrusion but is not a DEM or surveyed cross-section; build measured terrain
+cases programmatically by passing a `Domain2D` directly.
 
 Each solver declares which `Scenario` knobs it supports. Passing a knob a solver
 doesn't support raises `UnsupportedScenario` immediately rather than silently
@@ -208,6 +241,25 @@ For programmatic scenarios, `Scenario.rainfall` may be any callable with the
 signature `rainfall(x_m, t_min) -> rates_m_per_min`; all solvers evaluate it
 during time stepping. A 2-D case may instead set `Scenario.rainfall_2d` with
 `rainfall_2d(x_m, y_m, t_min) -> rates_m_per_min`.
+
+For a physically scaled 1-D run, pass `--hydraulic-geometry`. The solver then
+interprets initial and boundary discharge as whole-channel m³/min, uses the
+interpolated width in storage and friction, and reports mass in m³. Omitting
+geometry retains the historical unit-width mode for verification and backward
+compatibility. `bankfull_depth_m` is retained as a reviewed reference; the 1-D
+section itself is currently rectangular.
+
+Time-varying forcing CSVs must start at `t_min=0`, contain at least two strictly
+increasing times, and have finite non-negative values. Values are linearly
+interpolated between rows and held constant outside the supplied range. Solver
+time steps land exactly on every forcing row, preventing a sharp forcing change
+from being skipped. The summary records portable paths to both forcing files.
+
+Use `--longitudinal-cells` when a reviewed profile is too sparse for numerical
+routing. The source CSV/JSON remains unchanged. Slope, roughness, optional
+depth, rainfall, and hydraulic geometry are interpolated onto a derived grid;
+labels survive only at exact reviewed stations. Every summary records both
+counts, the interpolation method, and `creates_observations: false`.
 
 ### Reporting saved flood outcomes
 
@@ -329,6 +381,31 @@ python src/general/verification/verify_saint_venant_2d.py \
     --output docs/validation/saint_venant_2d_results.json
 ```
 
+Reproduce the held-out two-gauge field baseline and its structural sensitivity
+screening:
+
+```bash
+python src/rivers/validation/run_case.py \
+    real_world_rivers/validation/glen_canyon_lees_ferry.json
+python src/rivers/validation/run_sensitivity.py \
+    real_world_rivers/validation/glen_canyon_lees_ferry.json
+python src/rivers/validation/run_suite.py \
+    real_world_rivers/validation/validation_suite.json
+```
+
+The field case is deliberately uncalibrated. Its downstream observations are
+used only for scoring; the sensitivity matrix varies roughness, width,
+longitudinal resolution, and spatial reconstruction one at a time. The tracked
+screening shows NSE from `-1.35` to `0.63`: roughness dominates the tested input
+range, grid refinement is nearly neutral, and second-order reconstruction exposes
+strong sensitivity to the simplified steady-flow initialization. Do not choose a
+variant from this matrix as a calibration.
+
+The four-event fixed-parameter suite has median NSE `0.302` (range `-0.070` to
+`0.558`) and percent bias from `-14.13%` to `-9.17%`. Correlation remains
+`0.736–0.808`, so the model generally follows hydrograph timing but persistently
+underpredicts discharge volume.
+
 Dependencies are pinned in `requirements.txt`. The GitHub Actions verification
 workflow runs the complete suite and matrix from a clean checkout.
 
@@ -347,6 +424,10 @@ src/general/viz/animate_depth.py               # animates a saved depth-vs-time 
 src/rivers/simulations/registry.py             # name → Solver mapping
 src/rivers/simulations/run_simulation.py       # unified CLI dispatcher
 src/rivers/simulations/ingest_to_simulate.py   # profile_path → (Domain, Scenario) helper
+src/rivers/validation/run_case.py              # held-out two-gauge field validation
+src/rivers/validation/run_sensitivity.py       # one-at-a-time structural sensitivity
+src/rivers/validation/fetch_event.py            # reproducible approved-USGS event fetch
+src/rivers/validation/run_suite.py              # fixed-parameter multi-event evidence
 src/rivers/reporting/generate_flood_report.py  # saved artifacts → HTML + outcomes JSON
 src/rivers/visualization/animate_flood_map.py  # saved time series → geographic HTML animation
 src/rivers/ingest/run_ingestion.py             # config-driven ingestion CLI (one reach or --all)
@@ -382,15 +463,16 @@ real_world_rivers/                             # example profiles and Columbia R
 | `saint_venant` | `saint_venant_1d.py` | Yes (callable or const) | Yes | Yes | Profile stations |
 | `saint_venant_2d` | `saint_venant_2d.py` | Yes (callable or const) | Yes, per 2-D cell | x and y | Profile × cross-channel cells |
 
-All solvers run on the profile's longitudinal stations and widths, honouring
-spatially varying slope, Manning's $n$, initial depth, and rainfall.
+All solvers run on the profile's longitudinal stations, honouring spatially
+varying slope, Manning's $n$, initial depth, and rainfall. Reviewed hydraulic
+geometry adds physical 1-D channel width or constructs the synthetic 2-D
+channel/floodplain terrain.
 
 ---
 
 ## Next steps
 
-- Add measured cross-section geometry so unit-width discharge can be converted
-  consistently to whole-channel flow.
+- Extend rectangular 1-D sections to surveyed compound/trapezoidal geometry.
 - Save Saint-Venant discharge histories through the unified CLI alongside depth.
 - Extend the data pipeline to additional river systems beyond the Columbia River
   Hanford reach.

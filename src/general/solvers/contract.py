@@ -18,6 +18,9 @@ class Domain:
     dx_m: np.ndarray       # cell widths, metres
     slope: np.ndarray      # bed slope S0, dimensionless
     manning_n: np.ndarray  # Manning roughness n
+    bed_elevation_m: np.ndarray | None = None  # explicit z_b, shape (nx,)
+    channel_width_m: np.ndarray | None = None  # rectangular top/bottom width, shape (nx,)
+    bankfull_depth_m: np.ndarray | None = None  # reviewed reference depth, shape (nx,)
 
 
 @dataclass(frozen=True)
@@ -50,6 +53,9 @@ class Scenario:
     labels: tuple[str, ...] = ()
     boundary_x: str = "inflow_outflow"
     boundary_y: str = "wall"
+    downstream_boundary: str = "outflow"
+    downstream_stage_m: float | Callable[[float], float] | None = None
+    spatial_order: int = 1
 
 
 @dataclass

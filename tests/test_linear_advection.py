@@ -36,6 +36,9 @@ def test_load_profile_csv():
 
     assert np.allclose(profile.station_m, [0, 1000, 2000, 3000, 4000])
     assert np.all(profile.dx_m > 0)
+    assert profile.manning_n.tolist() == pytest.approx(
+        [0.035 / 60, 0.038 / 60, 0.040 / 60, 0.042 / 60, 0.045 / 60]
+    )
     assert np.allclose(profile.initial_depth_m, [0.04, 0.04, 0.04, 0.04, 0.04])
     assert profile.rainfall_rate_m_per_min is not None
     assert profile.labels[0] == "upstream"
@@ -80,7 +83,12 @@ def test_upstream_inflow_mass_balance():
     storage_initial = np.sum(result["depth_initial"] * result["dx_m"])
     storage_final = np.sum(result["depth_final"] * result["dx_m"])
     delta_storage = storage_final - storage_initial
-    expected_delta = result["mass_inflow"] + result["mass_source"] - result["mass_outflow"]
+    expected_delta = (
+        result["mass_inflow"]
+        + result["mass_source"]
+        - result["mass_outflow"]
+        + result["mass_floor_correction"]
+    )
 
     assert delta_storage == pytest.approx(expected_delta, rel=1e-3, abs=1e-8)
     assert result["mass_source"] == pytest.approx(0.0)
@@ -105,11 +113,68 @@ def test_rainfall_source_mass_balance():
     storage_initial = np.sum(result["depth_initial"] * result["dx_m"])
     storage_final = np.sum(result["depth_final"] * result["dx_m"])
     delta_storage = storage_final - storage_initial
-    expected_delta = result["mass_inflow"] + result["mass_source"] - result["mass_outflow"]
+    expected_delta = (
+        result["mass_inflow"]
+        + result["mass_source"]
+        - result["mass_outflow"]
+        + result["mass_floor_correction"]
+    )
     expected_source = 0.00001 * np.sum(profile.dx_m) * 10.0
 
     assert result["mass_source"] == pytest.approx(expected_source, rel=1e-10)
     assert delta_storage == pytest.approx(expected_delta, rel=1e-3, abs=1e-8)
+
+
+def test_exactly_dry_domain_stays_dry_without_artificial_mass():
+    profile = la.make_profile(
+        station_m=[0.0, 100.0, 200.0],
+        slope=[0.001, 0.001, 0.001],
+        manning_n=[0.04, 0.04, 0.04],
+        initial_depth_m=[0.0, 0.0, 0.0],
+    )
+    result = la.run_model(
+        profile,
+        t_final_min=10.0,
+        left_inflow_flux=0.0,
+    )
+
+    assert np.array_equal(result["depth_initial"], np.zeros(3))
+    assert np.array_equal(result["depth_final"], np.zeros(3))
+    assert result["mass_inflow"] == 0.0
+    assert result["mass_source"] == 0.0
+    assert result["mass_outflow"] == 0.0
+    assert result["mass_floor_correction"] == 0.0
+
+
+def test_rectangular_width_uses_hydraulic_radius_and_conserves_volume():
+    profile = _uniform_profile(n_cells=21, length_m=100.0)
+    width = np.linspace(10.0, 20.0, len(profile.station_m))
+    rainfall = 0.00001
+    result = la.run_model(
+        profile,
+        t_final_min=1.0,
+        left_inflow_flux=0.0,
+        base_depth_m=0.2,
+        rainfall_rate_m_per_min=rainfall,
+        channel_width_m=width,
+    )
+
+    storage_delta = np.sum(
+        (result["depth_final"] - result["depth_initial"])
+        * width
+        * profile.dx_m
+    )
+    expected_delta = (
+        result["mass_inflow"]
+        + result["mass_source"]
+        - result["mass_outflow"]
+        + result["mass_floor_correction"]
+    )
+    assert storage_delta == pytest.approx(expected_delta, rel=1e-9, abs=1e-10)
+    assert result["mass_source"] == pytest.approx(
+        rainfall * np.sum(width * profile.dx_m)
+    )
+    assert result["uses_cross_section"] is True
 
 
 def test_profile_rainfall_adds_to_uniform_rainfall():
@@ -150,6 +215,31 @@ def test_callable_rainfall_is_evaluated_during_time_stepping():
     assert len(evaluation_times) > 1
     assert min(evaluation_times) == 0.0
     assert max(evaluation_times) > 0.0
+
+
+def test_callable_inflow_is_not_collapsed_to_initial_value():
+    profile = _uniform_profile(
+        n_cells=101,
+        length_m=10.0,
+        slope=0.05,
+        manning_n=0.05,
+    )
+    evaluation_times = []
+
+    def inflow(time):
+        evaluation_times.append(time)
+        return 0.001 + 0.01 * time
+
+    result = la.run_model(
+        profile,
+        t_final_min=0.05,
+        left_inflow_flux=inflow,
+        base_depth_m=0.5,
+    )
+
+    assert min(evaluation_times) == 0.0
+    assert max(evaluation_times) > 0.0
+    assert result["mass_inflow"] > 0.001 * 0.05
 
 
 # ── analytical equilibrium ─────────────────────────────────────────────────

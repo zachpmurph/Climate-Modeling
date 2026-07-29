@@ -39,7 +39,7 @@ from general.solvers.profile import (
     make_profile,
 )
 
-MIN_DEPTH = 1e-10
+MIN_DEPTH = 0.0
 
 
 def q(depth_m, slope, manning_n):
@@ -52,6 +52,39 @@ def c(depth_m, slope, manning_n):
     """Kinematic wave speed dq/dh."""
     depth_m = np.maximum(depth_m, 0.0)
     return (5.0 / (3.0 * manning_n)) * (depth_m ** (2.0 / 3.0)) * np.sqrt(slope)
+
+
+def _section_discharge(depth_m, slope, manning_n, width_m):
+    """Total Manning discharge for a rectangular cross-section (m^3/min)."""
+    depth = np.maximum(np.asarray(depth_m, dtype=float), 0.0)
+    width = np.asarray(width_m, dtype=float)
+    area = width * depth
+    hydraulic_radius = np.zeros_like(depth)
+    np.divide(area, width + 2.0 * depth, out=hydraulic_radius)
+    return (
+        area
+        * hydraulic_radius ** (2.0 / 3.0)
+        * np.sqrt(slope)
+        / manning_n
+    )
+
+
+def _section_wave_speed(depth_m, slope, manning_n, width_m):
+    """Derivative dQ/dA for the rectangular-section Manning relation."""
+    depth = np.maximum(np.asarray(depth_m, dtype=float), 0.0)
+    width = np.asarray(width_m, dtype=float)
+    discharge = _section_discharge(depth, slope, manning_n, width)
+    derivative = np.zeros_like(depth)
+    wet = depth > 0.0
+    derivative[wet] = (
+        discharge[wet]
+        / width[wet]
+        * (
+            5.0 / (3.0 * depth[wet])
+            - 4.0 / (3.0 * (width[wet] + 2.0 * depth[wet]))
+        )
+    )
+    return derivative
 
 
 def _initial_depth(profile, base_depth_m, wave_center_m, wave_amplitude_m, wave_width_m):
@@ -67,7 +100,7 @@ def _initial_depth(profile, base_depth_m, wave_center_m, wave_amplitude_m, wave_
             wave_width_m = max(float(profile.length_m) / 20.0, float(np.min(profile.dx_m)))
         depth += wave_amplitude_m * np.exp(-((profile.station_m - wave_center_m) ** 2) / (2.0 * wave_width_m ** 2))
 
-    return np.maximum(depth, MIN_DEPTH)
+    return np.maximum(depth, 0.0)
 
 
 def _evaluate_rainfall(rainfall, stations_m, t_current):
@@ -81,6 +114,23 @@ def _evaluate_rainfall(rainfall, stations_m, t_current):
     if not np.all(np.isfinite(values)) or np.any(values < 0):
         raise ValueError("rainfall must return finite, non-negative rates")
     return values
+
+
+def _evaluate_inflow(left_inflow, t_current):
+    value = left_inflow(t_current) if callable(left_inflow) else left_inflow
+    value = float(value)
+    if not np.isfinite(value) or value < 0:
+        raise ValueError("left_inflow_flux must be finite and non-negative")
+    return value
+
+
+def _cap_dt_at_forcing_breakpoints(dt, time, *forcings):
+    for forcing in forcings:
+        for breakpoint in getattr(forcing, "breakpoints_min", ()):
+            if time + 1e-12 < breakpoint < time + dt - 1e-12:
+                dt = float(breakpoint - time)
+                break
+    return dt
 
 
 def _rainfall_source(
@@ -120,11 +170,13 @@ def run_model(
     rainfall_end_min=None,
     cfl=0.5,
     rainfall=None,
+    channel_width_m=None,
 ):
     """Run a 1D river kinematic wave model with upstream inflow and rainfall.
 
-    ``left_inflow_flux`` is the depth-area flux entering the left boundary in
-    square meters per minute. Rainfall source terms are depth added per minute.
+    ``left_inflow_flux`` is total flow in m^3/min when ``channel_width_m`` is
+    supplied, and is the legacy unit-width flux in m^2/min otherwise. Rainfall
+    source terms are depth added per minute.
     ``rainfall`` may be a callable ``rainfall(station_m, t_min)`` returning one
     non-negative rate per cell. The model state is water depth in meters.
     """
@@ -132,8 +184,7 @@ def run_model(
         raise ValueError("t_final_min must be non-negative")
     if record_interval_min <= 0:
         raise ValueError("record_interval_min must be positive")
-    if left_inflow_flux < 0:
-        raise ValueError("left_inflow_flux must be non-negative")
+    _evaluate_inflow(left_inflow_flux, 0.0)
     if rainfall_rate_m_per_min < 0:
         raise ValueError("rainfall_rate_m_per_min must be non-negative")
     if rainfall_start_min < 0:
@@ -142,6 +193,20 @@ def run_model(
         raise ValueError("rainfall_end_min must be greater than or equal to rainfall_start_min")
     if not (0 < cfl <= 1):
         raise ValueError("cfl must be in the interval (0, 1]")
+    if channel_width_m is None:
+        channel_width = np.ones_like(profile.station_m, dtype=float)
+        uses_cross_section = False
+    else:
+        channel_width = np.asarray(channel_width_m, dtype=float)
+        if (
+            channel_width.shape != profile.station_m.shape
+            or np.any(~np.isfinite(channel_width))
+            or np.any(channel_width <= 0)
+        ):
+            raise ValueError(
+                "channel_width_m must contain one finite positive width per cell"
+            )
+        uses_cross_section = True
 
     depth = _initial_depth(profile, base_depth_m, wave_center_m, wave_amplitude_m, wave_width_m)
     initial_depth = depth.copy()
@@ -159,11 +224,18 @@ def run_model(
     mass_inflow = 0.0
     mass_source = 0.0
     mass_outflow = 0.0
+    mass_floor_correction = 0.0
 
     while t_current < t_final_min - 1e-12:
         # Adaptive time step from the CFL condition against the current max wave
         # speed -- c(h) is nonlinear, so a fixed dt can go unstable as h grows.
-        wave_speed = c(depth, profile.slope, profile.manning_n)
+        wave_speed = (
+            _section_wave_speed(
+                depth, profile.slope, profile.manning_n, channel_width
+            )
+            if uses_cross_section
+            else c(depth, profile.slope, profile.manning_n)
+        )
         c_max = float(np.max(wave_speed))
         if c_max > 0:
             dt = cfl * float(np.min(profile.dx_m)) / c_max
@@ -178,14 +250,24 @@ def run_model(
             dt = rainfall_end_min - t_current
         if t_current < rainfall_start_min < t_current + dt:
             dt = rainfall_start_min - t_current
+        dt = _cap_dt_at_forcing_breakpoints(
+            dt, t_current, left_inflow_flux, rainfall
+        )
         if dt <= 1e-12:
             dt = min(t_final_min - t_current, 1e-12)
 
         # Conservative upwind flux update: left interface carries the upstream
         # inflow, interior interfaces carry the upwind cell's Manning flux.
-        cell_flux = q(depth, profile.slope, profile.manning_n)
+        cell_flux = (
+            _section_discharge(
+                depth, profile.slope, profile.manning_n, channel_width
+            )
+            if uses_cross_section
+            else q(depth, profile.slope, profile.manning_n)
+        )
         interface_flux = np.empty(len(depth) + 1, dtype=float)
-        interface_flux[0] = left_inflow_flux
+        inflow = _evaluate_inflow(left_inflow_flux, t_current)
+        interface_flux[0] = inflow
         interface_flux[1:] = cell_flux
 
         source = _rainfall_source(
@@ -196,13 +278,35 @@ def run_model(
             rainfall,
             t_current,
         )
-        depth = depth - (dt / profile.dx_m) * (interface_flux[1:] - interface_flux[:-1])
-        depth = depth + dt * source
-        depth = np.maximum(depth, MIN_DEPTH)
+        area = channel_width * depth
+        area_source = channel_width * source
+        outgoing = interface_flux[1:]
+        available = (area + dt * area_source) * profile.dx_m
+        theta = np.ones_like(area)
+        draining = dt * outgoing > available
+        np.divide(
+            available,
+            dt * outgoing,
+            out=theta,
+            where=draining,
+        )
+        interface_flux[1:] *= np.clip(theta, 0.0, 1.0)
+        area = (
+            area
+            - (dt / profile.dx_m) * (interface_flux[1:] - interface_flux[:-1])
+            + dt * area_source
+        )
+        floor_addition = np.maximum(-area, 0.0)
+        mass_floor_correction += float(
+            np.sum(floor_addition * profile.dx_m)
+        )
+        depth = np.maximum(area, 0.0) / channel_width
 
-        mass_inflow += left_inflow_flux * dt
-        mass_source += float(np.sum(source * profile.dx_m) * dt)
-        mass_outflow += cell_flux[-1] * dt
+        mass_inflow += inflow * dt
+        mass_source += float(
+            np.sum(source * channel_width * profile.dx_m) * dt
+        )
+        mass_outflow += interface_flux[-1] * dt
         t_current += dt
 
         if next_record_idx < len(record_times) and t_current >= record_times[next_record_idx] - 1e-9:
@@ -215,6 +319,8 @@ def run_model(
         "dx_m": profile.dx_m,
         "slope": profile.slope,
         "manning_n": profile.manning_n,
+        "channel_width_m": channel_width,
+        "uses_cross_section": uses_cross_section,
         "times": np.array(times),
         "depth_history": np.array(history),
         "depth_initial": initial_depth,
@@ -222,6 +328,7 @@ def run_model(
         "mass_inflow": mass_inflow,
         "mass_source": mass_source,
         "mass_outflow": mass_outflow,
+        "mass_floor_correction": mass_floor_correction,
         "left_inflow_flux": left_inflow_flux,
         "rainfall_rate_m_per_min": rainfall_rate_m_per_min,
         "rainfall_start_min": rainfall_start_min,
@@ -244,25 +351,42 @@ def save_time_series_csv(result, path):
 def save_summary_json(result, path):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    storage_initial = float(np.sum(result["depth_initial"] * result["dx_m"]))
-    storage_final = float(np.sum(result["depth_final"] * result["dx_m"]))
-    expected_delta = result["mass_inflow"] + result["mass_source"] - result["mass_outflow"]
+    cell_plan_area = result["channel_width_m"] * result["dx_m"]
+    storage_initial = float(np.sum(result["depth_initial"] * cell_plan_area))
+    storage_final = float(np.sum(result["depth_final"] * cell_plan_area))
+    expected_delta = (
+        result["mass_inflow"]
+        + result["mass_source"]
+        - result["mass_outflow"]
+        + result["mass_floor_correction"]
+    )
     summary = {
         "t_start_min": float(result["times"][0]),
         "t_final_min": float(result["times"][-1]),
         "cells": int(len(result["station_m"])),
         "river_length_m": float(np.sum(result["dx_m"])),
-        "left_inflow_flux_m2_per_min": float(result["left_inflow_flux"]),
+        (
+            "left_inflow_m3_per_min"
+            if result["uses_cross_section"]
+            else "left_inflow_flux_m2_per_min"
+        ): (
+            None
+            if callable(result["left_inflow_flux"])
+            else float(result["left_inflow_flux"])
+        ),
         "rainfall_rate_m_per_min": float(result["rainfall_rate_m_per_min"]),
         "rainfall_start_min": float(result["rainfall_start_min"]),
         "rainfall_end_min": None if result["rainfall_end_min"] is None else float(result["rainfall_end_min"]),
-        "mass_inflow_m2": float(result["mass_inflow"]),
-        "mass_source_m2": float(result["mass_source"]),
-        "mass_outflow_m2": float(result["mass_outflow"]),
-        "storage_initial_m2": storage_initial,
-        "storage_final_m2": storage_final,
-        "storage_delta_m2": storage_final - storage_initial,
-        "mass_balance_error_m2": (storage_final - storage_initial) - expected_delta,
+        f"mass_inflow_{'m3' if result['uses_cross_section'] else 'm2'}": float(result["mass_inflow"]),
+        f"mass_source_{'m3' if result['uses_cross_section'] else 'm2'}": float(result["mass_source"]),
+        f"mass_outflow_{'m3' if result['uses_cross_section'] else 'm2'}": float(result["mass_outflow"]),
+        f"mass_floor_correction_{'m3' if result['uses_cross_section'] else 'm2'}": float(result["mass_floor_correction"]),
+        f"storage_initial_{'m3' if result['uses_cross_section'] else 'm2'}": storage_initial,
+        f"storage_final_{'m3' if result['uses_cross_section'] else 'm2'}": storage_final,
+        f"storage_delta_{'m3' if result['uses_cross_section'] else 'm2'}": storage_final - storage_initial,
+        f"mass_balance_error_{'m3' if result['uses_cross_section'] else 'm2'}": (
+            storage_final - storage_initial
+        ) - expected_delta,
         "max_depth_final_m": float(np.max(result["depth_final"])),
     }
     path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
@@ -283,20 +407,17 @@ class _KinematicWaveSolver:
             initial_depth_m=init_depth if isinstance(init_depth, np.ndarray) else None,
         )
 
-        left_inflow = scenario.left_inflow
-        if callable(left_inflow):
-            left_inflow = float(left_inflow(0.0))
-
         base_depth_m = float(init_depth) if not isinstance(init_depth, np.ndarray) else 0.01
 
         result = run_model(
             profile,
             t_final_min=scenario.t_final_min,
-            left_inflow_flux=float(left_inflow),
+            left_inflow_flux=scenario.left_inflow,
             record_interval_min=scenario.record_interval_min,
             rainfall=scenario.rainfall,
             cfl=scenario.cfl,
             base_depth_m=base_depth_m,
+            channel_width_m=getattr(domain, "channel_width_m", None),
         )
 
         return SimulationResult(
@@ -308,6 +429,14 @@ class _KinematicWaveSolver:
             mass_inflow=result["mass_inflow"],
             mass_source=result["mass_source"],
             mass_outflow=result["mass_outflow"],
+            mass_correction=result["mass_floor_correction"],
+            extra={
+                "channel_width_m": result["channel_width_m"],
+                "cross_section_area_history": (
+                    result["depth_history"]
+                    * result["channel_width_m"][None, :]
+                ),
+            },
         )
 
 
@@ -321,7 +450,7 @@ def _demo_profile():
     return make_profile(
         station_m=np.linspace(0.0, 10.0, n_cells),
         slope=np.full(n_cells, 0.05),
-        manning_n=np.full(n_cells, 0.05),
+        manning_n=np.full(n_cells, 0.05 / 60.0),
         #initial_depth_m=0.1 * np.exp(-((x - 3.0) ** 2) / (2 * 1.0 ** 2))
     )
 

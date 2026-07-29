@@ -46,8 +46,8 @@ def _make_definition(dir_path, name="columbia", output_name="columbia.profile.cs
     _write_csv(
         dir_path / "roughness.csv",
         ["start_station_m", "end_station_m", "manning_n", "method"],
-        [{"start_station_m": 0, "end_station_m": 1000, "manning_n": 0.035, "method": "survey"},
-         {"start_station_m": 1000, "end_station_m": 2000, "manning_n": 0.04, "method": "survey"}],
+        [{"start_station_m": 0, "end_station_m": 1000, "manning_n": 0.035 / 60, "method": "survey"},
+         {"start_station_m": 1000, "end_station_m": 2000, "manning_n": 0.04 / 60, "method": "survey"}],
     )
     definition = {
         "river": {"name": "Columbia", "region": "WA", "country": "US"},
