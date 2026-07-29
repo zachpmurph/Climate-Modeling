@@ -121,6 +121,13 @@ whole-channel storage, hydraulic radius, and discharge. A trapezoidal run also
 needs defensible bankfull depth and bottom width (or a documented bottom-width
 fraction); surveyed cross-section coordinates remain preferable.
 
+Where available, also collect downstream water-surface stage and every material
+tributary or return flow between the gauges. Record diversions separately; the
+current point-source interface accepts inflows, not withdrawals. The unified runner
+accepts stage as `--downstream-stage-series` and spatial point flows as
+`--lateral-inflow-points`. These observations should replace, not accompany, a
+calibrated uniform reach-gain fraction.
+
 ## Workflow
 
 1. **Ingest** the reach with both gauges (a curated definition with two `flow`
@@ -174,5 +181,9 @@ fraction); surveyed cross-section coordinates remain preferable.
   surveyed geometry. Measured tributary hydrographs are also absent from the
   committed case. The calibrated lateral-flow fraction is an effective
   distributed gain, not a substitute for those observations.
+- USGS parameter `00065` is gage height, but it becomes a model water-surface
+  elevation only after applying the station's gage datum consistently with the
+  model bed datum. Never pass raw gage height as absolute stage without that
+  conversion.
 - A clean single-event window (a rising/falling limb between two gauges with no major
   tributary in between) is the most interpretable first validation case.

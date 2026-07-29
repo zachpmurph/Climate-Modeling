@@ -426,6 +426,94 @@ def test_temporal_forcing_csv_is_validated_and_interpolated(tmp_path):
     assert np.array_equal(forcing.breakpoints_min, [0.0, 5.0, 10.0])
 
 
+def test_downstream_stage_series_allows_datum_below_zero(tmp_path):
+    forcing_path = tmp_path / "stage.csv"
+    forcing_path.write_text(
+        "t_min,downstream_stage_m\n0,-1.0\n5,-0.5\n",
+        encoding="utf-8",
+    )
+    forcing = run_simulation._load_temporal_series(
+        forcing_path, "downstream_stage_m", allow_negative=True
+    )
+
+    assert forcing(2.5) == pytest.approx(-0.75)
+    assert np.array_equal(forcing.breakpoints_min, [0.0, 5.0])
+
+
+def test_point_lateral_inflows_are_spatial_and_conservative(tmp_path):
+    forcing_path = tmp_path / "tributaries.csv"
+    forcing_path.write_text(
+        "station_m,t_min,discharge_m3_per_min\n"
+        "100,0,10\n"
+        "100,10,20\n"
+        "240,0,5\n"
+        "240,10,5\n",
+        encoding="utf-8",
+    )
+    x_m = np.array([0.0, 100.0, 250.0])
+    dx_m = np.array([50.0, 125.0, 100.0])
+    forcing = run_simulation._load_point_lateral_inflows(
+        forcing_path, x_m, dx_m
+    )
+
+    rates = forcing(x_m, 5.0)
+    assert rates == pytest.approx([0.0, 15.0 / 125.0, 5.0 / 100.0])
+    assert np.sum(rates * dx_m) == pytest.approx(20.0)
+    assert forcing.breakpoints_min == pytest.approx((0.0, 10.0))
+    assert forcing.point_count == 2
+
+
+def test_runner_records_measured_point_and_stage_inputs(tmp_path):
+    point_path = tmp_path / "tributary.csv"
+    point_path.write_text(
+        "station_m,t_min,discharge_m3_per_min\n"
+        "1000,0,1\n"
+        "1000,1,1\n",
+        encoding="utf-8",
+    )
+    stage_path = tmp_path / "stage.csv"
+    stage_path.write_text(
+        "t_min,downstream_stage_m\n0,0.01\n1,0.01\n",
+        encoding="utf-8",
+    )
+    output_dir = tmp_path / "runs"
+    run_simulation.main(
+        [
+            PROFILE_PATH,
+            "--solver",
+            "saint_venant",
+            "--hydraulic-geometry",
+            GEOMETRY_PATH,
+            "--lateral-inflow-points",
+            str(point_path),
+            "--downstream-boundary",
+            "stage",
+            "--downstream-stage-series",
+            str(stage_path),
+            "--t-final",
+            "0",
+            "--output-dir",
+            str(output_dir),
+            "--run-name",
+            "measured",
+        ]
+    )
+
+    summary = json.loads(
+        (output_dir / "measured_summary.json").read_text(encoding="utf-8")
+    )
+    assert summary["forcing_inputs"]["lateral_inflow_points"] == str(
+        point_path.resolve()
+    )
+    assert summary["forcing_inputs"]["downstream_stage_series"] == str(
+        stage_path.resolve()
+    )
+    assert summary["downstream_boundary"]["type"] == "stage"
+    assert summary["downstream_boundary"]["stage_series"] == str(
+        stage_path.resolve()
+    )
+
+
 def test_runner_uses_boundary_flow_as_initial_1d_discharge(
     tmp_path, monkeypatch
 ):

@@ -132,6 +132,7 @@ The rationale for each transition is given alongside the change.
 | **4r — Multi-event observed validation** | Current branch | Added three approved-USGS out-of-sample events, a reproducible provider fetcher, and a four-event suite with fixed geometry, roughness, grid, and numerical settings. | A single event cannot distinguish transferable behavior from a lucky hydrograph match. Fixed-parameter multi-event scores expose shared bias and condition-dependent skill without event-by-event tuning. |
 | **4s — Adaptive multi-event hydraulics** | Current branch | Replaced constant-flow startup with a 12-hour observed upstream spin-up, added conservative time-varying lateral inflow with separate mass accounting, and added constrained global calibration of roughness, width, slope, and reach gain. The optimizer combines NSE, correlation, and an event-consistency penalty using explicit training/validation/test splits. | A constant startup can create a lucky initial state, while single-event tuning confounds geometry and forcing. Global parameters and held-out events test whether improvements transfer across hydrographs. |
 | **4t — Stage-dependent 1-D geometry** | Current branch | Added per-cell trapezoidal cross-sections to 1-D Saint-Venant, including depth-dependent area, top width, pressure, hydraulic radius, wave speed, rainfall capture, and conservative geometry transitions. The CLI derives side slopes from reviewed bankfull width/depth and an explicit bottom-width fraction. | A fixed rectangular width cannot represent storage, wetted perimeter, pressure, or rainfall collection changing as river stage rises. Trapezoids are a controlled first step toward measured compound cross-sections while retaining exact rectangular backward compatibility. |
+| **4u — Measured hydraulic controls** | Current branch | Added time-varying downstream-stage boundaries and spatially located point-inflow series for tributaries or return flows. Point discharges are mapped conservatively to the nearest reach cell, and summaries retain their source paths. | A free outlet and a calibrated uniform reach-gain fraction can hide backwater and missing-flow errors. Direct observations make those controls explicit and prevent roughness or geometry from absorbing their effects. |
 
 ---
 
@@ -184,8 +185,10 @@ python src/rivers/simulations/run_simulation.py PROFILE --solver SOLVER --t-fina
 | `--rainfall-series` | — | CSV with `t_min,rainfall_rate_m_per_min`; added to profile and constant rainfall |
 | `--lateral-inflow-rate` | `0.0` | 1-D Saint-Venant distributed inflow, m³/min per metre of reach |
 | `--lateral-inflow-series` | — | CSV with `t_min,lateral_inflow_m3_per_min_per_m`; mutually exclusive with nonzero constant lateral inflow |
+| `--lateral-inflow-points` | — | CSV with `station_m,t_min,discharge_m3_per_min`; conservatively inserts measured point flows at the nearest 1-D cell |
 | `--downstream-boundary` | `outflow` | 1-D Saint-Venant: `outflow`, `wall`, or `stage` |
 | `--downstream-stage` | — | Fixed water-surface elevation for a `stage` boundary |
+| `--downstream-stage-series` | — | CSV with `t_min,downstream_stage_m`; time-varying measured stage for a `stage` boundary |
 | `--spatial-order` | `1` | Saint-Venant reconstruction order: robust first-order or less-diffusive second-order |
 | `--cfl` | `0.5` | CFL target (0 < CFL ≤ 1) |
 | `--longitudinal-cells` | — | Derived solver-cell count; linearly interpolates reviewed fields without creating observations |
@@ -268,6 +271,10 @@ increasing times, and have finite non-negative values. Values are linearly
 interpolated between rows and held constant outside the supplied range. Solver
 time steps land exactly on every forcing row, preventing a sharp forcing change
 from being skipped. The summary records portable paths to both forcing files.
+Downstream stage may be negative when the chosen vertical datum permits it.
+Point-inflow files group rows by `station_m`; every point needs its own series
+starting at zero. The runner converts each whole-channel point discharge into a
+cell source whose integrated volume is exactly the supplied flow.
 
 Use `--longitudinal-cells` when a reviewed profile is too sparse for numerical
 routing. The source CSV/JSON remains unchanged. Slope, roughness, optional

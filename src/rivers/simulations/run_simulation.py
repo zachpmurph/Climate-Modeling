@@ -34,7 +34,7 @@ def _portable_path(path):
         return str(resolved)
 
 
-def _load_temporal_series(path, value_column):
+def _load_temporal_series(path, value_column, *, allow_negative=False):
     """Load a linearly interpolated forcing series with constant end values."""
     with Path(path).open(newline="", encoding="utf-8-sig") as handle:
         rows = list(csv.DictReader(handle))
@@ -52,11 +52,13 @@ def _load_temporal_series(path, value_column):
         or np.any(~np.isfinite(values))
         or np.any(np.diff(times) <= 0)
         or times[0] != 0.0
-        or np.any(values < 0)
+        or (not allow_negative and np.any(values < 0))
     ):
         raise ValueError(
             f"{path} needs t_min starting at 0 and strictly increasing, "
-            f"with finite non-negative {value_column}"
+            f"with finite "
+            f"{'values' if allow_negative else 'non-negative values'} "
+            f"for {value_column}"
         )
 
     def forcing(time_min):
@@ -64,6 +66,64 @@ def _load_temporal_series(path, value_column):
 
     forcing.breakpoints_min = times.copy()
     return forcing
+
+
+def _load_point_lateral_inflows(path, x_m, dx_m):
+    """Map measured point inflows to conservative nearest-cell source rates."""
+    with Path(path).open(newline="", encoding="utf-8-sig") as handle:
+        rows = list(csv.DictReader(handle))
+    if not rows:
+        raise ValueError(f"{path} must contain point-inflow rows")
+    grouped = {}
+    try:
+        for row in rows:
+            station = float(row["station_m"])
+            time = float(row["t_min"])
+            flow = float(row["discharge_m3_per_min"])
+            grouped.setdefault(station, []).append((time, flow))
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError(
+            f"{path} must contain numeric station_m, t_min, and "
+            "discharge_m3_per_min columns"
+        ) from exc
+
+    stations = np.asarray(x_m, dtype=float)
+    cell_lengths = np.asarray(dx_m, dtype=float)
+    series = []
+    all_breakpoints = set()
+    for station, observations in grouped.items():
+        observations.sort()
+        times = np.asarray([item[0] for item in observations], dtype=float)
+        flows = np.asarray([item[1] for item in observations], dtype=float)
+        if (
+            len(times) < 2
+            or not np.isfinite(station)
+            or station < stations[0]
+            or station > stations[-1]
+            or np.any(~np.isfinite(times))
+            or np.any(~np.isfinite(flows))
+            or times[0] != 0.0
+            or np.any(np.diff(times) <= 0.0)
+            or np.any(flows < 0.0)
+        ):
+            raise ValueError(
+                f"Each point inflow in {path} needs a station inside the "
+                "domain and at least two finite, non-negative values with "
+                "t_min starting at 0 and strictly increasing"
+            )
+        cell = int(np.argmin(np.abs(stations - station)))
+        series.append((cell, times, flows))
+        all_breakpoints.update(float(value) for value in times)
+
+    def lateral_inflow(x, time_min):
+        rates = np.zeros_like(x, dtype=float)
+        for cell, times, flows in series:
+            rates[cell] += float(np.interp(time_min, times, flows)) / cell_lengths[cell]
+        return rates
+
+    lateral_inflow.breakpoints_min = tuple(sorted(all_breakpoints))
+    lateral_inflow.point_count = len(series)
+    return lateral_inflow
 
 
 def _forcing_value(forcing, time_min):
@@ -117,6 +177,14 @@ def parse_args(argv=None):
         ),
     )
     p.add_argument(
+        "--lateral-inflow-points",
+        type=Path,
+        help=(
+            "CSV with station_m,t_min,discharge_m3_per_min for measured "
+            "tributary or return-flow inputs"
+        ),
+    )
+    p.add_argument(
         "--downstream-boundary",
         choices=("outflow", "wall", "stage"),
         default="outflow",
@@ -126,6 +194,11 @@ def parse_args(argv=None):
         "--downstream-stage",
         type=float,
         help="Fixed water-surface elevation in metres for --downstream-boundary stage",
+    )
+    p.add_argument(
+        "--downstream-stage-series",
+        type=Path,
+        help="CSV with t_min,downstream_stage_m for a measured stage boundary",
     )
     p.add_argument(
         "--spatial-order",
@@ -209,17 +282,24 @@ def main(argv=None):
     if args.inflow_series is not None and args.left_inflow != 0.0:
         raise SystemExit("error: use either --left-inflow or --inflow-series, not both")
     if (
-        args.lateral_inflow_series is not None
-        and args.lateral_inflow_rate != 0.0
+        sum(
+            (
+                args.lateral_inflow_series is not None,
+                args.lateral_inflow_points is not None,
+                args.lateral_inflow_rate != 0.0,
+            )
+        )
+        > 1
     ):
         raise SystemExit(
-            "error: use either --lateral-inflow-rate or "
-            "--lateral-inflow-series, not both"
+            "error: use only one lateral inflow rate, uniform series, "
+            "or point-input file"
         )
     if args.lateral_inflow_rate < 0.0:
         raise SystemExit("error: --lateral-inflow-rate must be non-negative")
     if args.solver != "saint_venant" and (
         args.lateral_inflow_series is not None
+        or args.lateral_inflow_points is not None
         or args.lateral_inflow_rate != 0.0
     ):
         raise SystemExit(
@@ -228,6 +308,7 @@ def main(argv=None):
     if args.solver != "saint_venant" and (
         args.downstream_boundary != "outflow"
         or args.downstream_stage is not None
+        or args.downstream_stage_series is not None
     ):
         raise SystemExit(
             "error: downstream boundary options currently require --solver saint_venant"
@@ -252,16 +333,29 @@ def main(argv=None):
         raise SystemExit(
             "error: --spatial-order requires a Saint-Venant solver"
         )
-    if (args.downstream_boundary == "stage") != (
+    if (
         args.downstream_stage is not None
+        and args.downstream_stage_series is not None
     ):
         raise SystemExit(
-            "error: --downstream-stage is required only with --downstream-boundary stage"
+            "error: use either --downstream-stage or "
+            "--downstream-stage-series, not both"
+        )
+    has_downstream_stage = (
+        args.downstream_stage is not None
+        or args.downstream_stage_series is not None
+    )
+    if (args.downstream_boundary == "stage") != has_downstream_stage:
+        raise SystemExit(
+            "error: one downstream stage input is required only with "
+            "--downstream-boundary stage"
         )
     for forcing_path in (
         args.inflow_series,
         args.rainfall_series,
         args.lateral_inflow_series,
+        args.lateral_inflow_points,
+        args.downstream_stage_series,
     ):
         if forcing_path is not None and not forcing_path.is_file():
             raise SystemExit(f"error: forcing input does not exist: {forcing_path}")
@@ -285,6 +379,15 @@ def main(argv=None):
             else _load_temporal_series(
                 args.lateral_inflow_series,
                 "lateral_inflow_m3_per_min_per_m",
+            )
+        )
+        temporal_downstream_stage = (
+            None
+            if args.downstream_stage_series is None
+            else _load_temporal_series(
+                args.downstream_stage_series,
+                "downstream_stage_m",
+                allow_negative=True,
             )
         )
     except ValueError as exc:
@@ -374,7 +477,14 @@ def main(argv=None):
         combined_rainfall.breakpoints_min = temporal_rainfall.breakpoints_min
         scenario.rainfall = combined_rainfall
 
-    if args.lateral_inflow_rate != 0.0 or temporal_lateral_inflow is not None:
+    if args.lateral_inflow_points is not None:
+        try:
+            scenario.lateral_inflow = _load_point_lateral_inflows(
+                args.lateral_inflow_points, domain.x_m, domain.dx_m
+            )
+        except ValueError as exc:
+            raise SystemExit(f"error: {exc}") from exc
+    elif args.lateral_inflow_rate != 0.0 or temporal_lateral_inflow is not None:
         lateral_forcing = (
             args.lateral_inflow_rate
             if temporal_lateral_inflow is None
@@ -437,7 +547,11 @@ def main(argv=None):
             len(domain.x_m), _forcing_value(inflow, 0.0)
         )
         scenario.downstream_boundary = args.downstream_boundary
-        scenario.downstream_stage_m = args.downstream_stage
+        scenario.downstream_stage_m = (
+            args.downstream_stage
+            if temporal_downstream_stage is None
+            else temporal_downstream_stage
+        )
         scenario.spatial_order = args.spatial_order
 
     result = dispatch(args.solver, domain, scenario)
@@ -560,6 +674,14 @@ def main(argv=None):
         },
         "spatial_order": args.spatial_order,
     }
+    if args.lateral_inflow_points is not None:
+        summary["forcing_inputs"]["lateral_inflow_points"] = _portable_path(
+            args.lateral_inflow_points
+        )
+    if args.downstream_stage_series is not None:
+        stage_series_path = _portable_path(args.downstream_stage_series)
+        summary["forcing_inputs"]["downstream_stage_series"] = stage_series_path
+        summary["downstream_boundary"]["stage_series"] = stage_series_path
     if is_2d:
         summary["grid"] = {
             "nx": len(result.domain.x_m),
