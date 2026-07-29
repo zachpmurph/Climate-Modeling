@@ -9,6 +9,9 @@ A static, dependency-free site presenting the repository's flood models:
 - **Playground** — pick a model (kinematic wave, 1-D Saint-Venant, or 2-D
   Saint-Venant), set channel and storm conditions, and run the simulation live in
   the browser.
+- **Validation** — the model against *observed* data: four real events on the Colorado
+  River below Glen Canyon Dam, with reach parameters held identical across every event,
+  compared to the downstream gauge. Sourced from `real_world_rivers/validation/`.
 - **About** — provenance, verification status, and limitations.
 
 No frameworks, no build step, no CDN: plain HTML/CSS/JS with inline SVG charts.
@@ -32,6 +35,10 @@ committed as published site content:
 ```bash
 python website/build_scenarios.py
 ```
+
+That writes both the atlas and `data/validation.json`. The atlas takes a couple of
+minutes; to refresh only the observed-event comparison after re-running the validation
+suite, use `python website/build_scenarios.py --validation`.
 
 Regenerate after any change to the solvers, the regions, or the event definitions.
 The Columbia region applies one documented adjustment: the source profile's first
@@ -68,6 +75,18 @@ enforced `cfl <= 0.5` the outgoing-to-available volume ratio is bounded by the C
 number, so `theta` measures exactly 1.0 in every case. Both implementations then scale
 by 1.0, so the branch cannot make them diverge — it is a positivity guard, not a live
 path.
+
+## The Validation tab's one checked claim
+
+`data/validation.json` is reshaped from `real_world_rivers/validation/*.results.json`;
+nothing is recomputed. The page's central assertion is that no parameter was fitted per
+event, so the builder **verifies it** — it compares reach length, cells, slope, Manning n,
+width, warm-up, spatial order, initial condition, lateral inflow, and rainfall across all
+four cases and raises rather than publishing the claim if any of them differ.
+
+Deliberate framing: this is an *uncalibrated comparison*, not a pass. One case is a
+baseline and three are out-of-sample; one of those scores below zero on Nash–Sutcliffe.
+Don't reword the tab to say the model is "validated".
 
 ## Cost of a 2-D run in the browser
 

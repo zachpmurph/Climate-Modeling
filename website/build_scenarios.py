@@ -925,15 +925,105 @@ def _write_reference(name, payload):
     print(f"  reference: {path.name}")
 
 
+# ── observed-event validation suite ────────────────────────────────────────
+
+VALIDATION_DIR = REPO_ROOT / "real_world_rivers" / "validation"
+
+# Parameters that the suite's whole argument depends on being identical across
+# every event. If any of these differ between cases, the "no event-specific
+# fitting" claim is false and the site must not repeat it.
+FIXED_PARAMETER_KEYS = (
+    "length_m", "cells", "slope", "manning_n", "upstream_width_m",
+    "downstream_width_m", "warmup_min", "spatial_order",
+    "initial_condition", "lateral_inflow", "rainfall",
+)
+
+
+def build_validation():
+    """Publish the multi-event observed-data comparison.
+
+    Source: real_world_rivers/validation/, produced by
+    src/rivers/validation/run_suite.py. Nothing is recomputed here; this only
+    reshapes the results for the browser -- and checks the one claim the view
+    is built around.
+    """
+    suite = json.loads((VALIDATION_DIR / "validation_suite.json").read_text(encoding="utf-8"))
+    summary = json.loads((VALIDATION_DIR / "validation_suite.results.json").read_text(encoding="utf-8"))
+
+    cases = []
+    shared = None
+    for config_name in suite["cases"]:
+        stem = config_name[:-len(".json")]
+        result = json.loads((VALIDATION_DIR / f"{stem}.results.json").read_text(encoding="utf-8"))
+        assumptions = result["assumptions"]
+
+        fixed = {k: assumptions.get(k) for k in FIXED_PARAMETER_KEYS}
+        if shared is None:
+            shared = fixed
+        elif fixed != shared:
+            differing = [k for k in FIXED_PARAMETER_KEYS if fixed.get(k) != shared.get(k)]
+            raise ValueError(
+                "the validation suite claims no event-specific parameter fitting, but "
+                f"{stem} differs from the first case in: {', '.join(differing)}. "
+                "Fix the suite or stop publishing the fixed-parameter claim."
+            )
+
+        series = result["series"]
+        window = result["case"]["observation_window"]
+        cases.append({
+            "id": stem,
+            "name": result["case"]["name"],
+            "date": window[0][:10],
+            "window": window,
+            "status": result["status"],
+            "purpose": result["case"].get("purpose", ""),
+            "solver": result["solver"],
+            "times_min": series["observed_times_min"],
+            "observed_m3_per_min": series["observed_downstream_m3_per_min"],
+            "predicted_m3_per_min": series["predicted_downstream_m3_per_min"],
+            "scores": result["scores"],
+            "observation_count": {
+                "upstream": result["observations"]["upstream_count"],
+                "downstream": result["observations"]["downstream_count"],
+            },
+        })
+
+    payload = {
+        "generated_by": "website/build_scenarios.py --validation",
+        "suite": summary["suite"],
+        "parameter_policy": suite["parameter_policy"],
+        "score_summary": summary["score_summary"],
+        "fixed_parameters": shared,
+        "roughness_origin": json.loads(
+            (VALIDATION_DIR / suite["cases"][0]).read_text(encoding="utf-8")
+        )["reach"].get("roughness_origin", ""),
+        "cases": cases,
+    }
+    path = DATA_DIR / "validation.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    print(f"Wrote {path} ({path.stat().st_size / 1024:.0f} KB)")
+    for case in cases:
+        s = case["scores"]
+        print(f"  {case['date']} {case['status']:<26} NSE {s['nse']:+.3f}  "
+              f"bias {s['percent_bias']:+.1f}%  r {s['pearson_r']:.3f}")
+    print("  fixed across every event: " +
+          ", ".join(f"{k}={shared[k]}" for k in ("length_m", "cells", "slope", "manning_n")))
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Build Flood Explorer data artifacts")
     parser.add_argument("--references", action="store_true",
                         help="Write JS-parity reference cases instead of the atlas")
+    parser.add_argument("--validation", action="store_true",
+                        help="Rebuild only the observed-event validation data")
     args = parser.parse_args(argv)
     if args.references:
         build_references()
+    elif args.validation:
+        build_validation()
     else:
         build_atlas()
+        build_validation()
     return 0
 
 

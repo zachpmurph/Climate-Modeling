@@ -17,6 +17,7 @@
     <nav class="tabs" role="tablist" aria-label="Site sections">
       <button class="tab active" data-tab="regions" role="tab" aria-selected="true">Regions</button>
       <button class="tab" data-tab="playground" role="tab" aria-selected="false">Playground</button>
+      <button class="tab" data-tab="validation" role="tab" aria-selected="false">Validation</button>
       <button class="tab" data-tab="about" role="tab" aria-selected="false">About</button>
     </nav>
   </div>
@@ -170,6 +171,58 @@
     </div>
   </section>
 
+  <!-- ── Validation (observed events) ────────────────────────────────── -->
+  <section id="tab-validation" class="tab-panel" role="tabpanel">
+    <p class="lede">Everywhere else on this site the model is answering
+    <em>what if</em>. Here it is answering <em>did it happen that way</em>: the same solver
+    run against four real days on the Colorado River below Glen Canyon Dam, compared against
+    what the downstream gauge actually recorded.</p>
+    <div id="policy-card" class="policy"></div>
+    <div class="rig">
+      <div class="rail">
+        <div class="card">
+          <h2>Observed event</h2>
+          <div class="choice" id="case-choice"></div>
+        </div>
+        <div class="readouts" id="case-scores"></div>
+      </div>
+      <div class="stage">
+        <p class="narrative" id="case-purpose"></p>
+        <div class="chart-block">
+          <h3 id="val-hydro-title">Modelled against observed discharge</h3>
+          <p class="chart-note">The upstream gauge drives the model; the downstream gauge is
+          never fed to it, so this line is a genuine prediction rather than a fit.</p>
+          <div id="val-hydrograph"></div>
+        </div>
+        <div class="chart-block split">
+          <div>
+            <h3>Every reading against the 1:1 line</h3>
+            <p class="chart-note">Points below the diagonal are moments the model predicted less
+            water than the gauge measured.</p>
+            <div id="val-scatter"></div>
+          </div>
+          <div id="val-readacross"></div>
+        </div>
+        <div class="chart-block">
+          <h3>Skill across all four events</h3>
+          <p class="chart-note">Nash–Sutcliffe compares the model against simply predicting the
+          mean of the observations: 1 is perfect, 0 is no better than the mean, below 0 is worse.</p>
+          <div id="val-skill"></div>
+          <h3 class="subhead">Bias across all four events</h3>
+          <div id="val-bias"></div>
+        </div>
+        <div class="chart-block">
+          <h3>Parameters, held identical across every event</h3>
+          <p class="chart-note">The point of the suite. Nothing below was tuned per event — the
+          builder refuses to publish this page if the four cases disagree on any of it.</p>
+          <div id="val-params" class="param-grid"></div>
+        </div>
+        <div id="val-limits" class="limitations"></div>
+      </div>
+    </div>
+    <div id="validation-error" class="error-card" hidden></div>
+  </section>
+
   <!-- ── About ───────────────────────────────────────────────────────── -->
   <section id="tab-about" class="tab-panel" role="tabpanel">
     <div class="prose">
@@ -189,6 +242,16 @@
       verified to a formal numerical standard (convergence studies, well-balancing,
       positivity, conservation); the 1-D solvers pass mass-balance and
       analytical-equilibrium tests.</p>
+      <h2>Verified is not the same as validated</h2>
+      <p><strong>Verification</strong> asks whether the equations are being solved correctly, and
+      this suite is verified to a formal standard. <strong>Validation</strong> asks whether those
+      equations describe a real river — a separate question, answered only by observed data. The
+      <strong>Validation</strong> tab is where that question is put honestly: four real days on the
+      Colorado River below Glen Canyon Dam, one solver, one set of reach parameters held identical
+      across every event, compared against what the downstream gauge recorded. The model tracks
+      the shape of each day reasonably (correlation 0.74–0.81) but runs 9–14% low on every single
+      event, and on one of the four it scores worse than simply predicting the average flow. That
+      is an uncalibrated result, reported as-is rather than tuned away.</p>
       <h2>What this is not</h2>
       <p>This is a <strong>screening and education tool</strong>, not a flood forecast.
       For the 1-D regions, depths are cross-section averages: they say how high the water
@@ -196,8 +259,9 @@
       over an <em>idealised</em> straight compound channel — it is a picture of how water
       behaves on that geometry, not a map of any real floodplain, and it contains no
       levees, buildings, bridges, culverts, or infiltration. Roughness and geometry are
-      estimates; the models are verified numerically but not calibrated against observed
-      flood events. Do not use this site for safety-critical decisions.</p>
+      estimates; the models are verified numerically and, on the one reach where observed data
+      has been compared, are measurably biased low. Nothing here has been calibrated. Do not use
+      this site for safety-critical decisions.</p>
       <h2>Units</h2>
       <p>The models compute in meters and minutes (Manning n = SI value / 60,
       g = 35316 m/min²). The interface accepts familiar units (SI n, mm/h rain) and

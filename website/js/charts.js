@@ -153,6 +153,133 @@ export function hydrographChart(container, { times, values, unit, minAxisMax = 1
   return { setCursor };
 }
 
+/** Two or more named series on shared axes, with a legend. Static (no cursor). */
+export function multiSeriesChart(container, { times, series, unit }) {
+  container.innerHTML = "";
+  const W = 960;
+  const H = 260;
+  const M = { top: 30, right: 18, bottom: 36, left: 78 };
+  const plotW = W - M.left - M.right;
+  const plotH = H - M.top - M.bottom;
+
+  let maxValue = 0;
+  for (const s of series) for (const v of s.values) if (v > maxValue) maxValue = v;
+  maxValue = Math.max(maxValue * 1.08, 1e-9);
+  const tSpan = Math.max(times[times.length - 1] - times[0], 1e-9);
+  const useHours = tSpan > 180;
+
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img" }, container);
+  const toX = (t) => M.left + ((t - times[0]) / tSpan) * plotW;
+  const toY = (v) => M.top + plotH - (v / maxValue) * plotH;
+
+  for (const tick of niceTicks(maxValue, 4)) {
+    const y = toY(tick);
+    el("line", { x1: M.left, x2: M.left + plotW, y1: y, y2: y, stroke: "#e3e9ec" }, svg);
+    const label = el("text", { x: M.left - 8, y: y + 4, "text-anchor": "end", "font-size": 12,
+      fill: "#51636d" }, svg);
+    label.textContent = formatNumber(tick, 0);
+  }
+  for (const tick of niceTicks(tSpan, 6)) {
+    const label = el("text", { x: toX(times[0] + tick), y: H - 12, "text-anchor": "middle",
+      "font-size": 12, fill: "#51636d" }, svg);
+    label.textContent = useHours ? `${formatNumber(tick / 60, 0)} h` : `${formatNumber(tick, 0)} min`;
+  }
+  const yTitle = el("text", { x: 16, y: M.top + plotH / 2, "font-size": 12, fill: "#51636d",
+    transform: `rotate(-90 16 ${M.top + plotH / 2})`, "text-anchor": "middle" }, svg);
+  yTitle.textContent = unit;
+
+  let legendX = M.left;
+  for (const s of series) {
+    el("polyline", {
+      fill: "none", stroke: s.color, "stroke-width": s.width || 2,
+      "stroke-dasharray": s.dash || "none",
+      points: times.map((t, i) => `${toX(t).toFixed(1)},${toY(s.values[i]).toFixed(1)}`).join(" "),
+    }, svg);
+    el("line", { x1: legendX, x2: legendX + 22, y1: 14, y2: 14, stroke: s.color,
+      "stroke-width": s.width || 2, "stroke-dasharray": s.dash || "none" }, svg);
+    const label = el("text", { x: legendX + 28, y: 18, "font-size": 12, fill: "#51636d" }, svg);
+    label.textContent = s.label;
+    legendX += 40 + s.label.length * 7.1;
+  }
+}
+
+/**
+ * Observed against modelled on a shared square scale, with the 1:1 line.
+ * Points below the diagonal are under-predictions -- the pattern a pair of
+ * hydrograph lines makes you infer but never shows directly.
+ */
+export function scatterChart(container, { observed, predicted, unit }) {
+  container.innerHTML = "";
+  const W = 520;
+  const H = 460;
+  const M = { top: 16, right: 16, bottom: 46, left: 74 };
+  const plotW = W - M.left - M.right;
+  const plotH = H - M.top - M.bottom;
+
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const v of observed.concat(predicted)) { if (v < lo) lo = v; if (v > hi) hi = v; }
+  const pad = Math.max((hi - lo) * 0.06, 1e-9);
+  lo = Math.max(0, lo - pad);
+  hi += pad;
+  const span = Math.max(hi - lo, 1e-9);
+
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img" }, container);
+  const toX = (v) => M.left + ((v - lo) / span) * plotW;
+  const toY = (v) => M.top + plotH - ((v - lo) / span) * plotH;
+
+  for (let s = 0; s <= 4; s += 1) {
+    const value = lo + (span * s) / 4;
+    el("line", { x1: M.left, x2: M.left + plotW, y1: toY(value), y2: toY(value), stroke: "#e3e9ec" }, svg);
+    el("line", { x1: toX(value), x2: toX(value), y1: M.top, y2: M.top + plotH, stroke: "#e3e9ec" }, svg);
+    const yl = el("text", { x: M.left - 8, y: toY(value) + 4, "text-anchor": "end", "font-size": 11,
+      fill: "#51636d" }, svg);
+    yl.textContent = formatNumber(value, 0);
+    const xl = el("text", { x: toX(value), y: M.top + plotH + 18, "text-anchor": "middle",
+      "font-size": 11, fill: "#51636d" }, svg);
+    xl.textContent = formatNumber(value, 0);
+  }
+  el("line", { x1: toX(lo), y1: toY(lo), x2: toX(hi), y2: toY(hi), stroke: "#51636d",
+    "stroke-width": 1.4, "stroke-dasharray": "6 4" }, svg);
+  const oneToOne = el("text", { x: toX(hi) - 6, y: toY(hi) + 16, "text-anchor": "end",
+    "font-size": 11, fill: "#51636d" }, svg);
+  oneToOne.textContent = "1:1";
+
+  for (let i = 0; i < observed.length; i += 1) {
+    el("circle", { cx: toX(observed[i]).toFixed(1), cy: toY(predicted[i]).toFixed(1), r: 3.1,
+      fill: "rgba(13, 79, 119, 0.55)", stroke: "#0d4f77", "stroke-width": 0.7 }, svg);
+  }
+  const xTitle = el("text", { x: M.left + plotW / 2, y: H - 8, "text-anchor": "middle",
+    "font-size": 12, fill: "#51636d" }, svg);
+  xTitle.textContent = `observed ${unit}`;
+  const yTitle = el("text", { x: 16, y: M.top + plotH / 2, "font-size": 12, fill: "#51636d",
+    transform: `rotate(-90 16 ${M.top + plotH / 2})`, "text-anchor": "middle" }, svg);
+  yTitle.textContent = `modelled ${unit}`;
+}
+
+/**
+ * Diverging bars about a zero baseline. compareBars assumes positive values;
+ * Nash-Sutcliffe can go negative, and that case is the one worth seeing.
+ */
+export function divergingBars(container, rows, currentId) {
+  container.innerHTML = "";
+  const limit = Math.max(...rows.map((r) => Math.abs(r.value)), 1e-9);
+  for (const row of rows) {
+    const div = document.createElement("div");
+    div.className = "diverge-row" + (row.id === currentId ? " current" : "");
+    const half = (Math.abs(row.value) / limit) * 50;
+    const negative = row.value < 0;
+    div.innerHTML = `<span class="diverge-name"></span>
+      <span class="diverge-track"><span class="diverge-zero"></span>
+        <span class="diverge-fill ${negative ? "neg" : "pos"}"
+              style="width:${half}%;${negative ? `right:50%` : `left:50%`}"></span></span>
+      <span class="mono"></span>`;
+    div.querySelector(".diverge-name").textContent = row.name;
+    div.querySelector(".mono").textContent = row.display;
+    container.appendChild(div);
+  }
+}
+
 /** Horizontal comparison bars (peak depth per event). */
 export function compareBars(container, rows, currentId) {
   container.innerHTML = "";
