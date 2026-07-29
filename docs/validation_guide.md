@@ -336,6 +336,30 @@ widening the search until reviewed geometry and measured controls replace the
 compensating estimates. The failure is retained as evidence that higher
 training NSE and correlation do not guarantee spatial transfer.
 
+## Reconstruction-order transfer test
+
+`multi_river_structural_suite.json` was committed before its suite run and fixes
+all physical multipliers at one and distributed reach gain at zero. It compares
+only first- and second-order reconstruction on the same river-balanced split.
+Joint Colorado/Truckee training selects first order: its balanced mean NSE is
+`0.4075` and correlation `0.8758`, versus second-order NSE `-0.1049` and
+correlation `0.6789`. First order is the only training Pareto candidate, so the
+choice does not depend on the `0.7/0.3` weighting.
+
+The river-omission folds reveal why order must remain a tested structural
+choice:
+
+- Truckee-only training selects second order because its event NSE rises from
+  `0.9668` to `0.9735`, but the omitted Colorado events then score NSE `-1.4083`
+  and `-0.9583` (mean `-1.1833`);
+- Colorado-only training selects first order, and the omitted Truckee event
+  scores NSE `0.9668`.
+
+The frozen joint choice leaves the untouched Rio result at NSE `-2.8482`; a
+numerical reconstruction change does not repair its missing reach dynamics.
+This negative result is retained. It argues for measured channel state and
+controls, not event- or river-specific order selection.
+
 ## What you need
 
 A reach with **two gauges**:

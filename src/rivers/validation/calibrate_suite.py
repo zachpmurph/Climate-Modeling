@@ -1043,6 +1043,7 @@ def calibrate_suite(manifest_path, *, output_path=None, passes=2):
     evidence = {
         "schema_version": 2,
         "suite": manifest["suite"],
+        "experiment_protocol": manifest.get("experiment_protocol"),
         "method": {
             "optimizer": "deterministic coordinate search",
             "passes_requested": int(passes),

@@ -25,6 +25,9 @@ PREDECLARED_STRUCTURAL_SUITE = (
     / "validation"
     / "multi_river_structural_suite.json"
 )
+TRACKED_STRUCTURAL_SUITE = PREDECLARED_STRUCTURAL_SUITE.with_suffix(
+    ".results.json"
+)
 
 
 def test_composite_objective_rewards_skill_and_penalizes_event_spread():
@@ -142,6 +145,60 @@ def test_multi_river_structural_experiment_is_predeclared_and_unfitted():
     assert manifest["parameter_grid"]["lateral_inflow_fraction"] == [0.0]
     assert manifest["objective"]["balance_by"] == "river"
     assert manifest["cross_group_validation"]["enabled"] is True
+
+
+def test_tracked_structural_transfer_retains_selection_and_group_failures():
+    evidence = json.loads(
+        TRACKED_STRUCTURAL_SUITE.read_text(encoding="utf-8")
+    )
+
+    assert evidence["experiment_protocol"][
+        "declared_before_suite_run"
+    ] is True
+    assert evidence["selected_structural_variant"] == "first_order"
+    assert evidence["selected_parameters"] == {
+        "manning_scale": 1.0,
+        "width_scale": 1.0,
+        "slope_scale": 1.0,
+        "lateral_inflow_fraction": 0.0,
+    }
+    variants = {
+        item["name"]: item
+        for item in evidence["structural_variant_training_results"]
+    }
+    assert variants["first_order"]["training_objective"] == pytest.approx(
+        0.4019989559590379
+    )
+    assert variants["second_order"]["training_objective"] == pytest.approx(
+        -0.15504110271942478
+    )
+    assert [
+        item["structural_variant"]
+        for item in evidence["training_pareto_front"]["candidates"]
+    ] == ["first_order"]
+
+    rio = next(
+        event
+        for event in evidence["splits"]["test"]["events"]
+        if event["config"].startswith("rio_grande_")
+    )
+    assert rio["scores"]["nse"] == pytest.approx(-2.848221673886379)
+    folds = {
+        fold["held_out_group"]: fold
+        for fold in evidence["leave_one_group_out"]["folds"]
+    }
+    assert folds["Colorado River"]["selected_structural_variant"] == (
+        "second_order"
+    )
+    assert folds["Colorado River"]["held_out_summary"]["nse"][
+        "mean"
+    ] == pytest.approx(-1.183327183098779)
+    assert folds["Truckee River"]["selected_structural_variant"] == (
+        "first_order"
+    )
+    assert folds["Truckee River"]["held_out_summary"]["nse"][
+        "mean"
+    ] == pytest.approx(0.9668349182700161)
 
 
 def test_training_pareto_front_retains_nse_correlation_tradeoffs():
