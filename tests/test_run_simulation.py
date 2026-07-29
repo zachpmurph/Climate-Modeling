@@ -468,6 +468,33 @@ def test_runner_records_time_varying_forcing_inputs(tmp_path):
     }
 
 
+def test_runner_records_prescribed_downstream_stage(tmp_path):
+    run_simulation.main(
+        [
+            PROFILE_PATH,
+            "--solver",
+            "saint_venant",
+            "--downstream-boundary",
+            "stage",
+            "--downstream-stage",
+            "-2.5",
+            "--t-final",
+            "0",
+            "--output-dir",
+            str(tmp_path),
+            "--run-name",
+            "stage",
+        ]
+    )
+    summary = json.loads(
+        (tmp_path / "stage_summary.json").read_text(encoding="utf-8")
+    )
+    assert summary["downstream_boundary"] == {
+        "type": "stage",
+        "stage_m": -2.5,
+    }
+
+
 def test_runner_records_portable_map_inputs(tmp_path):
     output_dir = tmp_path / "runs"
     markers = "real_world_rivers/tools/example_markers.csv"

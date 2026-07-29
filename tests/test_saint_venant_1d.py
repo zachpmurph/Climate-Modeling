@@ -94,6 +94,59 @@ def test_prescribed_upstream_inflow_is_accounted(monkeypatch):
     )
 
 
+def test_wall_downstream_boundary_has_zero_mass_flux(monkeypatch):
+    disable_forcing(monkeypatch)
+    h0 = np.full(int(sv.L * 10), 0.2)
+    q0 = np.full_like(h0, 0.01)
+    result = sv.run_model(
+        sv.L,
+        0.01,
+        h_init=h0,
+        q_init=q0,
+        left_inflow=0.01,
+        downstream_boundary="wall",
+    )
+    dx = result["dx_m"]
+    storage_delta = np.sum((result["h_final"] - h0) * dx)
+
+    assert result["mass_outflow"] == pytest.approx(0.0, abs=1e-14)
+    assert storage_delta == pytest.approx(
+        result["mass_inflow"] + result["mass_floor_correction"],
+        abs=1e-12,
+    )
+
+
+def test_high_downstream_stage_allows_backflow(monkeypatch):
+    disable_forcing(monkeypatch)
+    h0 = np.full(int(sv.L * 10), 0.1)
+    result = sv.run_model(
+        sv.L,
+        0.001,
+        h_init=h0,
+        q_init=np.zeros_like(h0),
+        left_inflow=0.0,
+        downstream_boundary="stage",
+        downstream_stage_m=0.5,
+    )
+
+    assert result["mass_inflow"] > 0.0
+    assert result["mass_outflow"] == 0.0
+    assert result["h_final"][-1] > h0[-1]
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"downstream_boundary": "bad"},
+        {"downstream_boundary": "stage"},
+        {"downstream_boundary": "wall", "downstream_stage_m": 1.0},
+    ],
+)
+def test_invalid_downstream_boundary_configuration_raises(kwargs):
+    with pytest.raises(ValueError, match="downstream"):
+        sv.run_model(sv.L, 0.01, **kwargs)
+
+
 def test_exactly_dry_domain_has_no_warning_or_mass_gain(monkeypatch):
     disable_forcing(monkeypatch)
     dry = np.zeros(int(sv.L * 10))

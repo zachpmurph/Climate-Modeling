@@ -45,6 +45,41 @@ def _left_discharge(left_inflow, t):
     return value
 
 
+def _downstream_ghost(
+    h,
+    discharge,
+    bed,
+    downstream_boundary,
+    downstream_stage_m,
+    time,
+):
+    if downstream_boundary == "outflow":
+        return h[-1], discharge[-1]
+    if downstream_boundary == "wall":
+        return h[-1], -discharge[-1]
+    if downstream_boundary != "stage":
+        raise ValueError(
+            "downstream_boundary must be 'outflow', 'wall', or 'stage'"
+        )
+    if downstream_stage_m is None:
+        raise ValueError(
+            "downstream_stage_m is required for a stage boundary"
+        )
+    stage = (
+        downstream_stage_m(time)
+        if callable(downstream_stage_m)
+        else downstream_stage_m
+    )
+    stage = float(stage)
+    if not np.isfinite(stage):
+        raise ValueError("downstream_stage_m must be finite")
+    ghost_depth = max(stage - bed[-1], 0.0)
+    ghost_discharge = 0.0
+    if h[-1] > H_FLOOR:
+        ghost_discharge = discharge[-1] * ghost_depth / h[-1]
+    return ghost_depth, ghost_discharge
+
+
 def _bed_from_slope(x, slope):
     bed = np.zeros_like(x, dtype=float)
     if len(x) > 1:
@@ -65,15 +100,32 @@ def _hydrostatic_states(h_left, q_left, bed_left, h_right, q_right, bed_right):
     return depth_left, q_left * scale_left, depth_right, q_right * scale_right
 
 
-def _rusanov_fluxes(h, discharge, bed, width, left_inflow, t):
+def _rusanov_fluxes(
+    h,
+    discharge,
+    bed,
+    width,
+    left_inflow,
+    t,
+    downstream_boundary,
+    downstream_stage_m,
+):
     inflow = _left_discharge(left_inflow, t)
+    right_h, right_q = _downstream_ghost(
+        h,
+        discharge,
+        bed,
+        downstream_boundary,
+        downstream_stage_m,
+        t,
+    )
 
     # Equal ghost/interior depths remove numerical mass diffusion at each
     # boundary. Mirroring q around the requested inflow makes the left face
     # mass flux exactly equal to that prescribed discharge.
-    h_ext = np.concatenate(([h[0]], h, [h[-1]]))
+    h_ext = np.concatenate(([h[0]], h, [right_h]))
     q_ext = np.concatenate(
-        ([2.0 * inflow - discharge[0]], discharge, [discharge[-1]])
+        ([2.0 * inflow - discharge[0]], discharge, [right_q])
     )
     bed_ext = np.concatenate(([bed[0]], bed, [bed[-1]]))
     width_ext = np.concatenate(([width[0]], width, [width[-1]]))
@@ -233,6 +285,8 @@ def run_model(
     manning_n=None,
     bed_elevation_m=None,
     channel_width_m=None,
+    downstream_boundary="outflow",
+    downstream_stage_m=None,
     cfl=None,
 ):
     """Run the 1D Saint-Venant equations on a uniform or supplied cell grid.
@@ -265,6 +319,18 @@ def run_model(
     cfl_value = CFL if cfl is None else float(cfl)
     if not np.isfinite(cfl_value) or not (0 < cfl_value <= 1):
         raise ValueError("cfl must be finite and in the interval (0, 1]")
+    _downstream_ghost(
+        np.ones(n_cells),
+        np.zeros(n_cells),
+        bed,
+        downstream_boundary,
+        downstream_stage_m,
+        0.0,
+    )
+    if downstream_boundary != "stage" and downstream_stage_m is not None:
+        raise ValueError(
+            "downstream_stage_m is only valid with downstream_boundary='stage'"
+        )
     rainfall_function = r if rainfall is None else rainfall
     center = float(x[0] + 0.5 * (x[-1] - x[0]))
 
@@ -302,7 +368,16 @@ def run_model(
             correction_left,
             correction_right,
             geometry_balance,
-        ) = _rusanov_fluxes(h, q, bed, width, left_inflow, t_current)
+        ) = _rusanov_fluxes(
+            h,
+            q,
+            bed,
+            width,
+            left_inflow,
+            t_current,
+            downstream_boundary,
+            downstream_stage_m,
+        )
         cell_speed = np.maximum(interface_speed[:-1], interface_speed[1:])
         moving = cell_speed > 1e-12
         if np.any(moving):
@@ -313,7 +388,11 @@ def run_model(
         if rainfall is None and t_current < 50 < t_current + dt:
             dt = 50 - t_current
         dt = _cap_dt_at_forcing_breakpoints(
-            dt, t_current, left_inflow, rainfall_function
+            dt,
+            t_current,
+            left_inflow,
+            rainfall_function,
+            downstream_stage_m,
         )
 
         h_previous = h.copy()
@@ -358,7 +437,11 @@ def run_model(
         q_new[h_new <= H_FLOOR] = 0.0
 
         mass_inflow += float(flux_h[0] * dt)
-        mass_outflow += float(flux_h[-1] * dt)
+        downstream_mass = float(flux_h[-1] * dt)
+        if downstream_mass >= 0.0:
+            mass_outflow += downstream_mass
+        else:
+            mass_inflow -= downstream_mass
         mass_source += float(np.sum(area_source * dx) * dt)
 
         h, q = h_new, q_new
@@ -384,6 +467,7 @@ def run_model(
         "bed_elevation_m": bed,
         "channel_width_m": width,
         "uses_cross_section": uses_cross_section,
+        "downstream_boundary": downstream_boundary,
         "times": np.array(times),
         "h_history": np.array(h_history),
         "q_history": np.array(q_history),
@@ -412,7 +496,15 @@ def save_time_series_csv(result, path):
 class _SaintVenantSolver:
     name = "saint_venant"
     supports = frozenset(
-        {"initial_depth", "initial_discharge", "left_inflow", "rainfall", "cfl"}
+        {
+            "initial_depth",
+            "initial_discharge",
+            "left_inflow",
+            "rainfall",
+            "cfl",
+            "downstream_boundary",
+            "downstream_stage",
+        }
     )
 
     def run(self, domain: Domain, scenario: Scenario) -> SimulationResult:
@@ -444,6 +536,8 @@ class _SaintVenantSolver:
             manning_n=domain.manning_n,
             bed_elevation_m=getattr(domain, "bed_elevation_m", None),
             channel_width_m=getattr(domain, "channel_width_m", None),
+            downstream_boundary=scenario.downstream_boundary,
+            downstream_stage_m=scenario.downstream_stage_m,
             cfl=scenario.cfl,
         )
         return SimulationResult(

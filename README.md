@@ -120,6 +120,7 @@ The rationale for each transition is given alongside the change.
 | **4k — Event forcing and consistent startup** | Current branch | Added linearly interpolated inflow/rainfall CSV forcing, preserved callable hydrographs in every solver, aligned time steps with forcing knots, and initialized dynamic-wave discharge from the boundary flow. Whole-channel 2-D flow is distributed only across initially wet upstream cells. | Collapsing a hydrograph to its first value and starting a flowing boundary from zero momentum create physically false transients and erase the event being simulated. |
 | **4l — Provenance-safe solver grids** | Current branch | Added optional longitudinal resampling that linearly interpolates reviewed fields onto a derived numerical grid while preserving reach length and labeling the source/solver cell counts in every summary. | A five-station measurement profile is too coarse for routing, but silently treating interpolated cells as observations overstates the evidence. |
 | **4m — Conservative dry kinematic states** | Current branch | Removed the artificial minimum depth from profile loading and kinematic updates, added a conservative draining limiter, retained time-varying hydrographs, and exposed any roundoff floor correction in mass accounting. | A hidden depth floor creates water in every dry cell and can make a mass balance appear better than it is. |
+| **4n — Downstream hydraulic boundaries** | Current branch | Added free-outflow, reflecting-wall, and prescribed-stage downstream boundaries to 1-D Saint-Venant, including stage-driven backflow and signed boundary mass accounting. | A zero-gradient outlet cannot represent a dam, closed gate, lake level, tide, or downstream backwater control. |
 
 ---
 
@@ -170,6 +171,8 @@ python src/rivers/simulations/run_simulation.py PROFILE --solver SOLVER --t-fina
 | `--inflow-series` | — | CSV with `t_min,left_inflow`; mutually exclusive with nonzero `--left-inflow` |
 | `--rainfall-rate` | `0.0` | Uniform rainfall rate, m/min |
 | `--rainfall-series` | — | CSV with `t_min,rainfall_rate_m_per_min`; added to profile and constant rainfall |
+| `--downstream-boundary` | `outflow` | 1-D Saint-Venant: `outflow`, `wall`, or `stage` |
+| `--downstream-stage` | — | Fixed water-surface elevation for a `stage` boundary |
 | `--cfl` | `0.5` | CFL target (0 < CFL ≤ 1) |
 | `--longitudinal-cells` | — | Derived solver-cell count; linearly interpolates reviewed fields without creating observations |
 | `--width` | — | Total channel-plus-floodplain domain width in metres; required for `saint_venant_2d` |

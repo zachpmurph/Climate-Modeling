@@ -102,6 +102,17 @@ def parse_args(argv=None):
         type=Path,
         help="CSV with t_min,rainfall_rate_m_per_min for a uniform time-varying storm",
     )
+    p.add_argument(
+        "--downstream-boundary",
+        choices=("outflow", "wall", "stage"),
+        default="outflow",
+        help="1-D Saint-Venant downstream condition (default: outflow)",
+    )
+    p.add_argument(
+        "--downstream-stage",
+        type=float,
+        help="Fixed water-surface elevation in metres for --downstream-boundary stage",
+    )
     p.add_argument("--cfl", type=float, default=0.5)
     p.add_argument(
         "--longitudinal-cells",
@@ -161,6 +172,19 @@ def main(argv=None):
             raise SystemExit(f"error: map input does not exist: {map_path}")
     if args.inflow_series is not None and args.left_inflow != 0.0:
         raise SystemExit("error: use either --left-inflow or --inflow-series, not both")
+    if args.solver != "saint_venant" and (
+        args.downstream_boundary != "outflow"
+        or args.downstream_stage is not None
+    ):
+        raise SystemExit(
+            "error: downstream boundary options currently require --solver saint_venant"
+        )
+    if (args.downstream_boundary == "stage") != (
+        args.downstream_stage is not None
+    ):
+        raise SystemExit(
+            "error: --downstream-stage is required only with --downstream-boundary stage"
+        )
     for forcing_path in (args.inflow_series, args.rainfall_series):
         if forcing_path is not None and not forcing_path.is_file():
             raise SystemExit(f"error: forcing input does not exist: {forcing_path}")
@@ -299,6 +323,8 @@ def main(argv=None):
         scenario.initial_discharge = np.full(
             len(domain.x_m), _forcing_value(inflow, 0.0)
         )
+        scenario.downstream_boundary = args.downstream_boundary
+        scenario.downstream_stage_m = args.downstream_stage
 
     result = dispatch(args.solver, domain, scenario)
 
@@ -392,6 +418,10 @@ def main(argv=None):
                 if args.rainfall_series is None
                 else _portable_path(args.rainfall_series)
             ),
+        },
+        "downstream_boundary": {
+            "type": args.downstream_boundary,
+            "stage_m": args.downstream_stage,
         },
     }
     if is_2d:

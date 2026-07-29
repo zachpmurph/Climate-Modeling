@@ -53,6 +53,8 @@ class Scenario:
     labels: tuple[str, ...] = ()
     boundary_x: str = "inflow_outflow"
     boundary_y: str = "wall"
+    downstream_boundary: str = "outflow"
+    downstream_stage_m: float | Callable[[float], float] | None = None
 
 
 @dataclass
