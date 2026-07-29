@@ -21,6 +21,13 @@ t_min,0,100,200
 This is the format already written by
 `src/rivers/simulations/run_simulation.py`.
 
+For a 1-D Saint-Venant run, the runner also writes
+`<run>_discharge.csv` on the identical time/station grid. The run summary's
+`discharge_path` points to it and `discharge_unit` distinguishes
+whole-channel `m3_per_min` (reviewed width supplied) from unit-width
+`m2_per_min`. This optional companion artifact supports observed-flow
+validation; the flood-outcome report remains depth based.
+
 For a 2-D run, the summary additionally points to `<run>_fields.npz`. That
 artifact contains `x_m`, `y_m`, `dx_m`, `dy_m`, `bed_elevation_m`,
 `times_min`, `depth_m`, `discharge_x_m2_per_min`, and

@@ -138,6 +138,7 @@ The rationale for each transition is given alongside the change.
 | **4w — Probabilistic 2-D outcomes** | Current branch | Added seeded Latin-hypercube ensembles over roughness, longitudinal slope, channel width, bankfull depth, floodplain slope, inflow, rainfall, and downstream-stage offset. Saved evidence includes depth, terrain, and water-surface quantiles, wet probability, wet-area bands, every sampled parameter set, and member mass residuals, plus a self-contained uncertainty report. | A single inundation map hides uncertainty in estimated terrain, geometry, forcing, and roughness. Conditional outcome bands expose where those inputs materially change the modeled flood footprint without presenting them as calibrated forecast probabilities. |
 | **4x — Stage-controlled 2-D outlet** | Current branch | Added scalar, cross-channel, constant, or time-varying downstream water-surface elevation to 2-D Saint-Venant. The boundary permits backflow, lands on forcing breakpoints, preserves non-flat still water, and classifies signed boundary volume consistently. | A transmissive outlet cannot represent tailwater, tides, reservoirs, or downstream backwater. Feeding measured stage prevents the model from forcing those effects into terrain, inflow, or roughness. |
 | **4y — Dry-shoreline equilibrium gate** | Current branch | Added a partially dry, non-flat lake-at-rest verification case with an exposed shoreline. The acceptance gate requires zero shoreline advance, zero depth error, negligible momentum, and no mass-adding floor correction. | Wet/dry dam breaks and fully wet equilibria test different pieces of the scheme. Their combination verifies that topographic balancing does not create water or motion at a stationary dry shoreline. |
+| **4z — Saved 1-D flow histories** | Current branch | The unified runner now writes every recorded 1-D Saint-Venant discharge field to `<run>_discharge.csv`, records its path and units in the run summary, and keeps its time/station grid aligned with depth. | Event calibration and validation target observed gauge flow. Persisting modeled flow makes NSE and correlation scoring reproducible without rerunning the solver or reaching into internal result objects. |
 
 ---
 
@@ -225,6 +226,12 @@ python src/rivers/simulations/run_simulation.py \
     --left-inflow 0.0006 \
     --run-name hanford_sv
 ```
+
+This writes both `<run>_timeseries.csv` (depth) and
+`<run>_discharge.csv` (flow). With reviewed channel geometry, discharge is
+whole-channel m³/min; without it, discharge is unit-width m²/min. The summary
+records the artifact path and unit so validation tools do not have to infer
+them.
 
 **Example — 2-D Saint-Venant on a terrain-backed channel and floodplain:**
 ```bash
@@ -557,4 +564,3 @@ channel/floodplain terrain.
   compound cross-sections or reviewed elevation models.
 - Estimate basin-specific joint uncertainty distributions and test ensemble
   coverage on a future event or untouched third river.
-- Save Saint-Venant discharge histories through the unified CLI alongside depth.

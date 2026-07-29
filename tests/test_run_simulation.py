@@ -353,6 +353,47 @@ def test_runner_applies_reviewed_geometry_to_1d_solvers(tmp_path, solver):
     ]
 
 
+def test_runner_saves_saint_venant_discharge_history(tmp_path):
+    output_dir = tmp_path / "runs"
+    run_simulation.main(
+        [
+            PROFILE_PATH,
+            "--solver",
+            "saint_venant",
+            "--hydraulic-geometry",
+            GEOMETRY_PATH,
+            "--left-inflow",
+            "0.6",
+            "--t-final",
+            "0.01",
+            "--output-dir",
+            str(output_dir),
+            "--run-name",
+            "flow",
+        ]
+    )
+
+    discharge_path = output_dir / "flow_discharge.csv"
+    with discharge_path.open(newline="") as f:
+        rows = list(csv.reader(f))
+    assert rows[0] == [
+        "t_min",
+        "0.000000",
+        "1000.000000",
+        "2000.000000",
+        "3000.000000",
+        "4000.000000",
+    ]
+    assert len(rows) == 3
+    assert float(rows[1][1]) == pytest.approx(0.6)
+
+    summary = json.loads(
+        (output_dir / "flow_summary.json").read_text(encoding="utf-8")
+    )
+    assert summary["discharge_path"] == str(discharge_path)
+    assert summary["discharge_unit"] == "m3_per_min"
+
+
 def test_runner_builds_trapezoidal_1d_geometry_and_balances_volume(tmp_path):
     output_dir = tmp_path / "runs"
     run_simulation.main(

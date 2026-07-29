@@ -591,6 +591,21 @@ def main(argv=None):
         for t, row in zip(result.times, csv_depth):
             writer.writerow([f"{t:.6f}"] + [f"{d:.10g}" for d in row])
 
+    discharge_path = None
+    if not is_2d and "discharge_history" in result.extra:
+        discharge_path = out / f"{args.run_name}_discharge.csv"
+        with discharge_path.open("w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(
+                ["t_min"] + [f"{x:.6f}" for x in result.domain.x_m]
+            )
+            for t, row in zip(
+                result.times, result.extra["discharge_history"]
+            ):
+                writer.writerow(
+                    [f"{t:.6f}"] + [f"{q:.10g}" for q in row]
+                )
+
     fields_path = None
     if is_2d:
         fields_path = out / f"{args.run_name}_fields.npz"
@@ -648,6 +663,18 @@ def main(argv=None):
         "profile": str(args.profile),
         "t_final_min": args.t_final,
         "timeseries_path": str(csv_path),
+        "discharge_path": (
+            None if discharge_path is None else str(discharge_path)
+        ),
+        "discharge_unit": (
+            None
+            if discharge_path is None
+            else (
+                "m3_per_min"
+                if result.domain.channel_width_m is not None
+                else "m2_per_min"
+            )
+        ),
         "fields_path": None if fields_path is None else str(fields_path),
         "mass_inflow": result.mass_inflow,
         "mass_source": result.mass_source,
@@ -731,7 +758,13 @@ def main(argv=None):
     json_path.write_text(json.dumps(summary, indent=2))
 
     artifact_text = f"  Fields: {fields_path}" if fields_path else ""
-    print(f"Done. CSV: {csv_path}{artifact_text}  Summary: {json_path}")
+    discharge_text = (
+        f"  Discharge: {discharge_path}" if discharge_path else ""
+    )
+    print(
+        f"Done. CSV: {csv_path}{discharge_text}{artifact_text}  "
+        f"Summary: {json_path}"
+    )
     print(
         f"Mass balance error: {mass_balance_error:.4e} "
         f"{'m^3' if physical_volume else 'm^2'}"
