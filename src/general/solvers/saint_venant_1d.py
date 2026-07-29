@@ -100,6 +100,72 @@ def _hydrostatic_states(h_left, q_left, bed_left, h_right, q_right, bed_right):
     return depth_left, q_left * scale_left, depth_right, q_right * scale_right
 
 
+def _limited_increments(values):
+    """Minmod-limited cell increments; zero at physical boundaries."""
+    values = np.asarray(values, dtype=float)
+    increments = np.zeros_like(values)
+    backward = values[1:-1] - values[:-2]
+    forward = values[2:] - values[1:-1]
+    same_sign = backward * forward > 0.0
+    increments[1:-1] = np.where(
+        same_sign,
+        np.sign(backward) * np.minimum(np.abs(backward), np.abs(forward)),
+        0.0,
+    )
+    return increments
+
+
+def _interior_face_states(h, discharge, bed, width, spatial_order):
+    """Return left/right raw states at the n-1 interior faces."""
+    if spatial_order == 1:
+        return (
+            h[:-1].copy(),
+            discharge[:-1].copy(),
+            bed[:-1].copy(),
+            width[:-1].copy(),
+            h[1:].copy(),
+            discharge[1:].copy(),
+            bed[1:].copy(),
+            width[1:].copy(),
+        )
+
+    surface = h + bed
+    unit_discharge = discharge / width
+    surface_increment = _limited_increments(surface)
+    bed_increment = _limited_increments(bed)
+    width_increment = _limited_increments(width)
+    discharge_increment = _limited_increments(unit_discharge)
+
+    surface_left = surface[:-1] + 0.5 * surface_increment[:-1]
+    surface_right = surface[1:] - 0.5 * surface_increment[1:]
+    bed_left = bed[:-1] + 0.5 * bed_increment[:-1]
+    bed_right = bed[1:] - 0.5 * bed_increment[1:]
+    width_left = width[:-1] + 0.5 * width_increment[:-1]
+    width_right = width[1:] - 0.5 * width_increment[1:]
+    if np.any(width_left <= 0.0) or np.any(width_right <= 0.0):
+        raise FloatingPointError("Limited reconstruction produced non-positive width")
+    h_left = np.maximum(surface_left - bed_left, 0.0)
+    h_right = np.maximum(surface_right - bed_right, 0.0)
+    q_left = (
+        unit_discharge[:-1] + 0.5 * discharge_increment[:-1]
+    ) * width_left
+    q_right = (
+        unit_discharge[1:] - 0.5 * discharge_increment[1:]
+    ) * width_right
+    q_left[h_left <= H_FLOOR] = 0.0
+    q_right[h_right <= H_FLOOR] = 0.0
+    return (
+        h_left,
+        q_left,
+        bed_left,
+        width_left,
+        h_right,
+        q_right,
+        bed_right,
+        width_right,
+    )
+
+
 def _rusanov_fluxes(
     h,
     discharge,
@@ -109,6 +175,7 @@ def _rusanov_fluxes(
     t,
     downstream_boundary,
     downstream_stage_m,
+    spatial_order,
 ):
     inflow = _left_discharge(left_inflow, t)
     right_h, right_q = _downstream_ghost(
@@ -129,10 +196,27 @@ def _rusanov_fluxes(
     )
     bed_ext = np.concatenate(([bed[0]], bed, [bed[-1]]))
     width_ext = np.concatenate(([width[0]], width, [width[-1]]))
-    h_left, h_right = h_ext[:-1], h_ext[1:]
-    q_left, q_right = q_ext[:-1], q_ext[1:]
-    bed_left, bed_right = bed_ext[:-1], bed_ext[1:]
-    width_left, width_right = width_ext[:-1], width_ext[1:]
+    center_h_left, center_h_right = h_ext[:-1], h_ext[1:]
+    center_width_left, center_width_right = width_ext[:-1], width_ext[1:]
+    h_left, h_right = center_h_left.copy(), center_h_right.copy()
+    q_left, q_right = q_ext[:-1].copy(), q_ext[1:].copy()
+    bed_left, bed_right = bed_ext[:-1].copy(), bed_ext[1:].copy()
+    width_left, width_right = (
+        center_width_left.copy(),
+        center_width_right.copy(),
+    )
+    (
+        h_left[1:-1],
+        q_left[1:-1],
+        bed_left[1:-1],
+        width_left[1:-1],
+        h_right[1:-1],
+        q_right[1:-1],
+        bed_right[1:-1],
+        width_right[1:-1],
+    ) = _interior_face_states(
+        h, discharge, bed, width, spatial_order
+    )
     face_width = 0.5 * (width_left + width_right)
 
     hs_left, qs_left, hs_right, qs_right = _hydrostatic_states(
@@ -153,8 +237,12 @@ def _rusanov_fluxes(
         area_right - area_left
     )
     flux_q = 0.5 * (flux_q_left + flux_q_right) - 0.5 * alpha * (qs_right - qs_left)
-    correction_left = 0.5 * g * width_left * (h_left**2 - hs_left**2)
-    correction_right = 0.5 * g * width_right * (h_right**2 - hs_right**2)
+    correction_left = 0.5 * g * center_width_left * (
+        center_h_left**2 - hs_left**2
+    )
+    correction_right = 0.5 * g * center_width_right * (
+        center_h_right**2 - hs_right**2
+    )
     geometry_balance = 0.5 * g * (
         (face_width[1:] - width) * hs_left[1:] ** 2
         - (face_width[:-1] - width) * hs_right[:-1] ** 2
@@ -287,6 +375,7 @@ def run_model(
     channel_width_m=None,
     downstream_boundary="outflow",
     downstream_stage_m=None,
+    spatial_order=1,
     cfl=None,
 ):
     """Run the 1D Saint-Venant equations on a uniform or supplied cell grid.
@@ -319,6 +408,8 @@ def run_model(
     cfl_value = CFL if cfl is None else float(cfl)
     if not np.isfinite(cfl_value) or not (0 < cfl_value <= 1):
         raise ValueError("cfl must be finite and in the interval (0, 1]")
+    if spatial_order not in (1, 2):
+        raise ValueError("spatial_order must be 1 or 2")
     _downstream_ghost(
         np.ones(n_cells),
         np.zeros(n_cells),
@@ -377,6 +468,7 @@ def run_model(
             t_current,
             downstream_boundary,
             downstream_stage_m,
+            spatial_order,
         )
         cell_speed = np.maximum(interface_speed[:-1], interface_speed[1:])
         moving = cell_speed > 1e-12
@@ -468,6 +560,7 @@ def run_model(
         "channel_width_m": width,
         "uses_cross_section": uses_cross_section,
         "downstream_boundary": downstream_boundary,
+        "spatial_order": spatial_order,
         "times": np.array(times),
         "h_history": np.array(h_history),
         "q_history": np.array(q_history),
@@ -504,6 +597,7 @@ class _SaintVenantSolver:
             "cfl",
             "downstream_boundary",
             "downstream_stage",
+            "spatial_order",
         }
     )
 
@@ -538,6 +632,7 @@ class _SaintVenantSolver:
             channel_width_m=getattr(domain, "channel_width_m", None),
             downstream_boundary=scenario.downstream_boundary,
             downstream_stage_m=scenario.downstream_stage_m,
+            spatial_order=scenario.spatial_order,
             cfl=scenario.cfl,
         )
         return SimulationResult(

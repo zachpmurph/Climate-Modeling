@@ -200,12 +200,72 @@ def _hydrostatic_states(h_left, mom_x_left, mom_y_left, bed_left,
     )
 
 
-def _rusanov_x(h, hu, hv, bed, boundary, inflow):
+def _limited_increments(values, axis, periodic):
+    backward = values - np.roll(values, 1, axis=axis)
+    forward = np.roll(values, -1, axis=axis) - values
+    same_sign = backward * forward > 0.0
+    increments = np.where(
+        same_sign,
+        np.sign(backward) * np.minimum(np.abs(backward), np.abs(forward)),
+        0.0,
+    )
+    if not periodic:
+        boundary_slice = [slice(None)] * values.ndim
+        boundary_slice[axis] = 0
+        increments[tuple(boundary_slice)] = 0.0
+        boundary_slice[axis] = -1
+        increments[tuple(boundary_slice)] = 0.0
+    return increments
+
+
+def _reconstructed_fields(h, hu, hv, bed, axis, periodic):
+    surface = h + bed
+    u = _velocity(h, hu)
+    v = _velocity(h, hv)
+    return tuple(
+        (values, _limited_increments(values, axis, periodic))
+        for values in (surface, u, v, bed)
+    )
+
+
+def _rusanov_x(h, hu, hv, bed, boundary, inflow, spatial_order=1):
     h_ext, hu_ext, hv_ext, bed_ext = _extend_x(h, hu, hv, bed, boundary, inflow)
-    h_l, h_r = h_ext[:-1, :], h_ext[1:, :]
-    hu_l, hu_r = hu_ext[:-1, :], hu_ext[1:, :]
-    hv_l, hv_r = hv_ext[:-1, :], hv_ext[1:, :]
-    bed_l, bed_r = bed_ext[:-1, :], bed_ext[1:, :]
+    center_h_l, center_h_r = h_ext[:-1, :], h_ext[1:, :]
+    h_l, h_r = center_h_l.copy(), center_h_r.copy()
+    hu_l, hu_r = hu_ext[:-1, :].copy(), hu_ext[1:, :].copy()
+    hv_l, hv_r = hv_ext[:-1, :].copy(), hv_ext[1:, :].copy()
+    bed_l, bed_r = bed_ext[:-1, :].copy(), bed_ext[1:, :].copy()
+    if spatial_order == 2:
+        fields = _reconstructed_fields(
+            h, hu, hv, bed, axis=0, periodic=boundary == "periodic"
+        )
+        (surface, ds), (u, du), (v, dv), (bed_cell, db) = fields
+        surface_l = surface[:-1, :] + 0.5 * ds[:-1, :]
+        surface_r = surface[1:, :] - 0.5 * ds[1:, :]
+        bed_l[1:-1, :] = bed_cell[:-1, :] + 0.5 * db[:-1, :]
+        bed_r[1:-1, :] = bed_cell[1:, :] - 0.5 * db[1:, :]
+        h_l[1:-1, :] = np.maximum(surface_l - bed_l[1:-1, :], 0.0)
+        h_r[1:-1, :] = np.maximum(surface_r - bed_r[1:-1, :], 0.0)
+        hu_l[1:-1, :] = (u[:-1, :] + 0.5 * du[:-1, :]) * h_l[1:-1, :]
+        hu_r[1:-1, :] = (u[1:, :] - 0.5 * du[1:, :]) * h_r[1:-1, :]
+        hv_l[1:-1, :] = (v[:-1, :] + 0.5 * dv[:-1, :]) * h_l[1:-1, :]
+        hv_r[1:-1, :] = (v[1:, :] - 0.5 * dv[1:, :]) * h_r[1:-1, :]
+        if boundary == "periodic":
+            periodic_bed_l = bed_cell[-1, :] + 0.5 * db[-1, :]
+            periodic_bed_r = bed_cell[0, :] - 0.5 * db[0, :]
+            periodic_h_l = np.maximum(
+                surface[-1, :] + 0.5 * ds[-1, :] - periodic_bed_l, 0.0
+            )
+            periodic_h_r = np.maximum(
+                surface[0, :] - 0.5 * ds[0, :] - periodic_bed_r, 0.0
+            )
+            for face in (0, -1):
+                bed_l[face, :], bed_r[face, :] = periodic_bed_l, periodic_bed_r
+                h_l[face, :], h_r[face, :] = periodic_h_l, periodic_h_r
+                hu_l[face, :] = (u[-1, :] + 0.5 * du[-1, :]) * periodic_h_l
+                hu_r[face, :] = (u[0, :] - 0.5 * du[0, :]) * periodic_h_r
+                hv_l[face, :] = (v[-1, :] + 0.5 * dv[-1, :]) * periodic_h_l
+                hv_r[face, :] = (v[0, :] - 0.5 * dv[0, :]) * periodic_h_r
     hs_l, hus_l, hvs_l, hs_r, hus_r, hvs_r = _hydrostatic_states(
         h_l, hu_l, hv_l, bed_l, h_r, hu_r, hv_r, bed_r
     )
@@ -218,17 +278,49 @@ def _rusanov_x(h, hu, hv, bed, boundary, inflow):
             left_flux, right_flux, (hs_l, hus_l, hvs_l), (hs_r, hus_r, hvs_r)
         )
     )
-    correction_left = 0.5 * g * (h_l**2 - hs_l**2)
-    correction_right = 0.5 * g * (h_r**2 - hs_r**2)
+    correction_left = 0.5 * g * (center_h_l**2 - hs_l**2)
+    correction_right = 0.5 * g * (center_h_r**2 - hs_r**2)
     return (*flux, correction_left, correction_right)
 
 
-def _rusanov_y(h, hu, hv, bed, boundary):
+def _rusanov_y(h, hu, hv, bed, boundary, spatial_order=1):
     h_ext, hu_ext, hv_ext, bed_ext = _extend_y(h, hu, hv, bed, boundary)
-    h_b, h_t = h_ext[:, :-1], h_ext[:, 1:]
-    hu_b, hu_t = hu_ext[:, :-1], hu_ext[:, 1:]
-    hv_b, hv_t = hv_ext[:, :-1], hv_ext[:, 1:]
-    bed_b, bed_t = bed_ext[:, :-1], bed_ext[:, 1:]
+    center_h_b, center_h_t = h_ext[:, :-1], h_ext[:, 1:]
+    h_b, h_t = center_h_b.copy(), center_h_t.copy()
+    hu_b, hu_t = hu_ext[:, :-1].copy(), hu_ext[:, 1:].copy()
+    hv_b, hv_t = hv_ext[:, :-1].copy(), hv_ext[:, 1:].copy()
+    bed_b, bed_t = bed_ext[:, :-1].copy(), bed_ext[:, 1:].copy()
+    if spatial_order == 2:
+        fields = _reconstructed_fields(
+            h, hu, hv, bed, axis=1, periodic=boundary == "periodic"
+        )
+        (surface, ds), (u, du), (v, dv), (bed_cell, db) = fields
+        surface_b = surface[:, :-1] + 0.5 * ds[:, :-1]
+        surface_t = surface[:, 1:] - 0.5 * ds[:, 1:]
+        bed_b[:, 1:-1] = bed_cell[:, :-1] + 0.5 * db[:, :-1]
+        bed_t[:, 1:-1] = bed_cell[:, 1:] - 0.5 * db[:, 1:]
+        h_b[:, 1:-1] = np.maximum(surface_b - bed_b[:, 1:-1], 0.0)
+        h_t[:, 1:-1] = np.maximum(surface_t - bed_t[:, 1:-1], 0.0)
+        hu_b[:, 1:-1] = (u[:, :-1] + 0.5 * du[:, :-1]) * h_b[:, 1:-1]
+        hu_t[:, 1:-1] = (u[:, 1:] - 0.5 * du[:, 1:]) * h_t[:, 1:-1]
+        hv_b[:, 1:-1] = (v[:, :-1] + 0.5 * dv[:, :-1]) * h_b[:, 1:-1]
+        hv_t[:, 1:-1] = (v[:, 1:] - 0.5 * dv[:, 1:]) * h_t[:, 1:-1]
+        if boundary == "periodic":
+            periodic_bed_b = bed_cell[:, -1] + 0.5 * db[:, -1]
+            periodic_bed_t = bed_cell[:, 0] - 0.5 * db[:, 0]
+            periodic_h_b = np.maximum(
+                surface[:, -1] + 0.5 * ds[:, -1] - periodic_bed_b, 0.0
+            )
+            periodic_h_t = np.maximum(
+                surface[:, 0] - 0.5 * ds[:, 0] - periodic_bed_t, 0.0
+            )
+            for face in (0, -1):
+                bed_b[:, face], bed_t[:, face] = periodic_bed_b, periodic_bed_t
+                h_b[:, face], h_t[:, face] = periodic_h_b, periodic_h_t
+                hu_b[:, face] = (u[:, -1] + 0.5 * du[:, -1]) * periodic_h_b
+                hu_t[:, face] = (u[:, 0] - 0.5 * du[:, 0]) * periodic_h_t
+                hv_b[:, face] = (v[:, -1] + 0.5 * dv[:, -1]) * periodic_h_b
+                hv_t[:, face] = (v[:, 0] - 0.5 * dv[:, 0]) * periodic_h_t
     hs_b, hus_b, hvs_b, hs_t, hus_t, hvs_t = _hydrostatic_states(
         h_b, hu_b, hv_b, bed_b, h_t, hu_t, hv_t, bed_t
     )
@@ -241,8 +333,8 @@ def _rusanov_y(h, hu, hv, bed, boundary):
             bottom_flux, top_flux, (hs_b, hus_b, hvs_b), (hs_t, hus_t, hvs_t)
         )
     )
-    correction_bottom = 0.5 * g * (h_b**2 - hs_b**2)
-    correction_top = 0.5 * g * (h_t**2 - hs_t**2)
+    correction_bottom = 0.5 * g * (center_h_b**2 - hs_b**2)
+    correction_top = 0.5 * g * (center_h_t**2 - hs_t**2)
     return (*flux, correction_bottom, correction_top)
 
 
@@ -311,6 +403,7 @@ def run_model(
     bed_elevation_m=None,
     momentum_source=None,
     cfl=CFL,
+    spatial_order=1,
     boundary_x="inflow_outflow",
     boundary_y="wall",
 ):
@@ -320,6 +413,8 @@ def run_model(
         raise ValueError("record_interval must be finite and positive")
     if not np.isfinite(cfl) or not (0 < cfl <= 0.5):
         raise ValueError("2-D cfl must be finite and in (0, 0.5]")
+    if spatial_order not in (1, 2):
+        raise ValueError("spatial_order must be 1 or 2")
     if boundary_x not in {"inflow_outflow", "periodic"}:
         raise ValueError("boundary_x must be 'inflow_outflow' or 'periodic'")
     if boundary_y not in {"wall", "periodic"}:
@@ -415,8 +510,10 @@ def run_model(
             raise FloatingPointError(f"Invalid time step {dt!r} at t={t_current}")
 
         inflow = _inflow_values(left_inflow, t_current, ny)
-        x_raw = _rusanov_x(h, hu, hv, bed, boundary_x, inflow)
-        y_raw = _rusanov_y(h, hu, hv, bed, boundary_y)
+        x_raw = _rusanov_x(
+            h, hu, hv, bed, boundary_x, inflow, spatial_order
+        )
+        y_raw = _rusanov_y(h, hu, hv, bed, boundary_y, spatial_order)
         source_value = r(t_current) if rainfall_function is None else rainfall_function(x, y, t_current)
         source = _field(source_value, 0.0, shape, "rainfall")
         if np.any(source < 0):
@@ -512,6 +609,7 @@ def run_model(
         "mass_outflow": mass_outflow,
         "mass_source": mass_source,
         "mass_floor_correction": mass_floor_correction,
+        "spatial_order": spatial_order,
     }
 
 
@@ -527,6 +625,7 @@ class _SaintVenant2DSolver:
         "cfl",
         "boundary_x",
         "boundary_y",
+        "spatial_order",
     })
 
     def run(self, domain: Domain2D, scenario: Scenario) -> SimulationResult:
@@ -573,6 +672,7 @@ class _SaintVenant2DSolver:
             manning_n=domain.manning_n,
             bed_elevation_m=domain.bed_elevation_m,
             cfl=scenario.cfl,
+            spatial_order=scenario.spatial_order,
             boundary_x=scenario.boundary_x,
             boundary_y=scenario.boundary_y,
         )

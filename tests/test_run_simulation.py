@@ -495,6 +495,28 @@ def test_runner_records_prescribed_downstream_stage(tmp_path):
     }
 
 
+def test_runner_records_second_order_reconstruction(tmp_path):
+    run_simulation.main(
+        [
+            PROFILE_PATH,
+            "--solver",
+            "saint_venant",
+            "--spatial-order",
+            "2",
+            "--t-final",
+            "0",
+            "--output-dir",
+            str(tmp_path),
+            "--run-name",
+            "second_order",
+        ]
+    )
+    summary = json.loads(
+        (tmp_path / "second_order_summary.json").read_text(encoding="utf-8")
+    )
+    assert summary["spatial_order"] == 2
+
+
 def test_runner_records_portable_map_inputs(tmp_path):
     output_dir = tmp_path / "runs"
     markers = "real_world_rivers/tools/example_markers.csv"

@@ -55,6 +55,7 @@ class Scenario:
     boundary_y: str = "wall"
     downstream_boundary: str = "outflow"
     downstream_stage_m: float | Callable[[float], float] | None = None
+    spatial_order: int = 1
 
 
 @dataclass

@@ -121,6 +121,7 @@ The rationale for each transition is given alongside the change.
 | **4l — Provenance-safe solver grids** | Current branch | Added optional longitudinal resampling that linearly interpolates reviewed fields onto a derived numerical grid while preserving reach length and labeling the source/solver cell counts in every summary. | A five-station measurement profile is too coarse for routing, but silently treating interpolated cells as observations overstates the evidence. |
 | **4m — Conservative dry kinematic states** | Current branch | Removed the artificial minimum depth from profile loading and kinematic updates, added a conservative draining limiter, retained time-varying hydrographs, and exposed any roundoff floor correction in mass accounting. | A hidden depth floor creates water in every dry cell and can make a mass balance appear better than it is. |
 | **4n — Downstream hydraulic boundaries** | Current branch | Added free-outflow, reflecting-wall, and prescribed-stage downstream boundaries to 1-D Saint-Venant, including stage-driven backflow and signed boundary mass accounting. | A zero-gradient outlet cannot represent a dam, closed gate, lake level, tide, or downstream backwater control. |
+| **4o — Limited second-order reconstruction** | Current branch | Added optional minmod-limited second-order reconstruction of water surface, bed, and velocity/momentum to both Saint-Venant solvers (plus width and unit discharge in 1-D). It retains hydrostatic well-balancing and conservative draining limiters while reducing smooth-wave diffusion. | First-order piecewise-constant Rusanov fluxes smear hydrographs and wetting fronts, especially on long reaches. |
 
 ---
 
@@ -173,6 +174,7 @@ python src/rivers/simulations/run_simulation.py PROFILE --solver SOLVER --t-fina
 | `--rainfall-series` | — | CSV with `t_min,rainfall_rate_m_per_min`; added to profile and constant rainfall |
 | `--downstream-boundary` | `outflow` | 1-D Saint-Venant: `outflow`, `wall`, or `stage` |
 | `--downstream-stage` | — | Fixed water-surface elevation for a `stage` boundary |
+| `--spatial-order` | `1` | Saint-Venant reconstruction order: robust first-order or less-diffusive second-order |
 | `--cfl` | `0.5` | CFL target (0 < CFL ≤ 1) |
 | `--longitudinal-cells` | — | Derived solver-cell count; linearly interpolates reviewed fields without creating observations |
 | `--width` | — | Total channel-plus-floodplain domain width in metres; required for `saint_venant_2d` |

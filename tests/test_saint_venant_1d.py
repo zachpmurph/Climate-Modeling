@@ -271,6 +271,67 @@ def test_varying_rectangular_width_preserves_nonflat_lake_at_rest():
     assert result["uses_cross_section"] is True
 
 
+def test_second_order_reconstruction_preserves_varying_width_lake():
+    x_m = np.linspace(0.0, 1000.0, 101)
+    dx_m = np.full_like(x_m, 1000.0 / len(x_m))
+    slope = np.full_like(x_m, 0.001)
+    bed = -slope * x_m
+    depth = 2.0 - bed
+    width = 20.0 + 10.0 * np.sin(np.linspace(0.0, np.pi, len(x_m)))
+
+    result = sv.run_model(
+        1000.0,
+        0.1,
+        h_init=depth,
+        q_init=np.zeros_like(depth),
+        left_inflow=0.0,
+        rainfall=lambda x, t: np.zeros_like(x),
+        x_m=x_m,
+        dx_m=dx_m,
+        slope=slope,
+        manning_n=np.full_like(x_m, 0.001),
+        bed_elevation_m=bed,
+        channel_width_m=width,
+        spatial_order=2,
+        cfl=0.4,
+    )
+
+    assert np.max(np.abs(result["h_final"] - depth)) < 1e-12
+    assert np.max(np.abs(result["q_final"])) < 1e-10
+
+
+def test_second_order_reconstruction_reduces_smooth_wave_error():
+    def smooth_run(cells, order):
+        x_m = np.linspace(0.0, 10.0, cells)
+        dx_m = np.full(cells, 10.0 / cells)
+        depth = 1.0 + 0.01 * np.exp(-((x_m - 5.0) / 0.5) ** 2)
+        return sv.run_model(
+            10.0,
+            0.01,
+            record_interval=0.01,
+            h_init=depth,
+            q_init=np.zeros(cells),
+            left_inflow=0.0,
+            rainfall=lambda x, t: np.zeros_like(x),
+            x_m=x_m,
+            dx_m=dx_m,
+            slope=np.zeros(cells),
+            manning_n=np.full(cells, 1e-12),
+            bed_elevation_m=np.zeros(cells),
+            spatial_order=order,
+            cfl=0.2,
+        )
+
+    reference = smooth_run(401, 2)
+    first = smooth_run(101, 1)
+    second = smooth_run(101, 2)
+    target = np.interp(first["x"], reference["x"], reference["h_final"])
+    first_error = np.sqrt(np.mean((first["h_final"] - target) ** 2))
+    second_error = np.sqrt(np.mean((second["h_final"] - target) ** 2))
+
+    assert second_error < 0.75 * first_error
+
+
 def test_rectangular_width_gives_volumetric_rainfall_mass_balance():
     x_m = np.array([0.0, 100.0, 250.0])
     dx_m = np.array([50.0, 125.0, 100.0])

@@ -113,6 +113,13 @@ def parse_args(argv=None):
         type=float,
         help="Fixed water-surface elevation in metres for --downstream-boundary stage",
     )
+    p.add_argument(
+        "--spatial-order",
+        type=int,
+        choices=(1, 2),
+        default=1,
+        help="Saint-Venant reconstruction order (default: 1)",
+    )
     p.add_argument("--cfl", type=float, default=0.5)
     p.add_argument(
         "--longitudinal-cells",
@@ -178,6 +185,13 @@ def main(argv=None):
     ):
         raise SystemExit(
             "error: downstream boundary options currently require --solver saint_venant"
+        )
+    if (
+        args.solver not in {"saint_venant", "saint_venant_2d"}
+        and args.spatial_order != 1
+    ):
+        raise SystemExit(
+            "error: --spatial-order requires a Saint-Venant solver"
         )
     if (args.downstream_boundary == "stage") != (
         args.downstream_stage is not None
@@ -319,12 +333,14 @@ def main(argv=None):
         if hasattr(inflow, "breakpoints_min"):
             distributed_inflow.breakpoints_min = inflow.breakpoints_min
         scenario.left_inflow = distributed_inflow
+        scenario.spatial_order = args.spatial_order
     elif args.solver == "saint_venant":
         scenario.initial_discharge = np.full(
             len(domain.x_m), _forcing_value(inflow, 0.0)
         )
         scenario.downstream_boundary = args.downstream_boundary
         scenario.downstream_stage_m = args.downstream_stage
+        scenario.spatial_order = args.spatial_order
 
     result = dispatch(args.solver, domain, scenario)
 
@@ -423,6 +439,7 @@ def main(argv=None):
             "type": args.downstream_boundary,
             "stage_m": args.downstream_stage,
         },
+        "spatial_order": args.spatial_order,
     }
     if is_2d:
         summary["grid"] = {
