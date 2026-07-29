@@ -356,10 +356,153 @@ def _geometry_source(config_path, reach, key):
     return source
 
 
-def load_field_measurement_geometry(path, x_m):
-    """Interpolate active width and effective bed from USGS field visits."""
+def _select_field_geometry_rows(
+    rows,
+    *,
+    event_start=None,
+    time_policy=None,
+    max_age_days=None,
+):
+    if time_policy is None:
+        return rows, {"policy": "configured_static_rows"}
+    if time_policy != "latest_not_after_event_start":
+        raise ValueError(
+            "field_measurement_time_policy must be "
+            "'latest_not_after_event_start'"
+        )
+    if event_start is None:
+        raise ValueError(
+            "Event start is required for time-selected field geometry"
+        )
+    if event_start.tzinfo is None:
+        raise ValueError("Event start must include a timezone")
+    if max_age_days is not None:
+        max_age_days = float(max_age_days)
+        if not math.isfinite(max_age_days) or max_age_days < 0.0:
+            raise ValueError(
+                "field_measurement_max_age_days must be finite and non-negative"
+            )
+
+    parsed_rows = []
+    for row in rows:
+        try:
+            station = float(row["station_m"])
+            measured_at = _timestamp(row["measured_at"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(
+                "Time-selected field geometry requires numeric station_m and "
+                "ISO-8601 measured_at"
+            ) from exc
+        if measured_at.tzinfo is None:
+            raise ValueError(
+                "Time-selected field geometry measured_at must include a timezone"
+            )
+        parsed_rows.append((station, measured_at, row))
+
+    snapshot_names = {
+        str(row.get("geometry_snapshot", "")).strip()
+        for _, _, row in parsed_rows
+        if str(row.get("geometry_snapshot", "")).strip()
+    }
+    selected_snapshot = None
+    if len(snapshot_names) > 1:
+        snapshots = {}
+        for station, measured_at, row in parsed_rows:
+            snapshot = str(row.get("geometry_snapshot", "")).strip()
+            if not snapshot:
+                raise ValueError(
+                    "Every catalog row needs geometry_snapshot when multiple "
+                    "snapshots are present"
+                )
+            snapshots.setdefault(snapshot, []).append(
+                (station, measured_at, row)
+            )
+        eligible_snapshots = [
+            (max(item[1] for item in items), snapshot, items)
+            for snapshot, items in snapshots.items()
+            if all(item[1] <= event_start for item in items)
+        ]
+        if not eligible_snapshots:
+            raise ValueError(
+                "No complete field-geometry snapshot is available at or "
+                "before event start"
+            )
+        _, selected_snapshot, selected_rows = max(
+            eligible_snapshots, key=lambda item: item[0]
+        )
+        stations = [item[0] for item in selected_rows]
+        if len(stations) != len(set(stations)):
+            raise ValueError(
+                f"Geometry snapshot {selected_snapshot!r} has duplicate stations"
+            )
+        selected_items = sorted(selected_rows, key=lambda item: item[0])
+        selection_mode = "latest_complete_snapshot"
+    else:
+        rows_by_station = {}
+        for station, measured_at, row in parsed_rows:
+            rows_by_station.setdefault(station, []).append(
+                (station, measured_at, row)
+            )
+        selected_items = []
+        for station in sorted(rows_by_station):
+            eligible = [
+                item
+                for item in rows_by_station[station]
+                if item[1] <= event_start
+            ]
+            if not eligible:
+                raise ValueError(
+                    "No field geometry is available at or before event start "
+                    f"for station {station:g} m"
+                )
+            selected_items.append(max(eligible, key=lambda item: item[1]))
+        selection_mode = "latest_row_per_station"
+
+    selected = []
+    selections = []
+    for station, measured_at, row in selected_items:
+        age_days = (event_start - measured_at).total_seconds() / 86400.0
+        if max_age_days is not None and age_days > max_age_days:
+            raise ValueError(
+                f"Field geometry at station {station:g} m is "
+                f"{age_days:.3f} days old, exceeding "
+                f"field_measurement_max_age_days={max_age_days:g}"
+            )
+        selected.append(row)
+        selections.append(
+            {
+                "station_m": station,
+                "measured_at": measured_at.isoformat(),
+                "age_days_at_event_start": age_days,
+            }
+        )
+    return selected, {
+        "policy": time_policy,
+        "selection_mode": selection_mode,
+        "selected_snapshot": selected_snapshot,
+        "event_start": event_start.isoformat(),
+        "max_age_days": max_age_days,
+        "selected_rows": selections,
+    }
+
+
+def load_field_measurement_geometry(
+    path,
+    x_m,
+    *,
+    event_start=None,
+    time_policy=None,
+    max_age_days=None,
+):
+    """Select and interpolate active width, effective bed, and roughness."""
     with Path(path).open(newline="", encoding="utf-8-sig") as handle:
         rows = list(csv.DictReader(handle))
+    rows, selection = _select_field_geometry_rows(
+        rows,
+        event_start=event_start,
+        time_policy=time_policy,
+        max_age_days=max_age_days,
+    )
     if len(rows) < 2:
         raise ValueError(
             "Field-measurement geometry needs at least two station rows"
@@ -413,10 +556,11 @@ def load_field_measurement_geometry(path, x_m):
         np.interp(target, stations, widths),
         interpolated_bed,
         np.interp(target, stations, inferred_manning),
+        selection,
     )
 
 
-def load_validation_geometry(config_path, reach, x_m):
+def load_validation_geometry(config_path, reach, x_m, *, event_start=None):
     """Load the configured cross-section model onto validation cells."""
     shape = reach.get("cross_section_shape", "rectangular")
     geometry = {
@@ -446,12 +590,18 @@ def load_validation_geometry(config_path, reach, x_m):
                 geometry["channel_width_m"],
                 geometry["bed_elevation_m"],
                 geometry["field_manning_n"],
+                field_selection,
             ) = load_field_measurement_geometry(
-                source, x_m
+                source,
+                x_m,
+                event_start=event_start,
+                time_policy=reach.get("field_measurement_time_policy"),
+                max_age_days=reach.get("field_measurement_max_age_days"),
             )
             provenance.update(
                 {
                     "field_measurement_geometry": str(field_source),
+                    "field_measurement_selection": field_selection,
                     "modeled_width_m_range": {
                         "minimum": float(
                             np.min(geometry["channel_width_m"])
@@ -575,8 +725,9 @@ def run_validation_case(config_path, *, output_path=None, overrides=None):
     dx_m = np.full(cells, length_m / cells)
     bed_slope = np.full(cells, slope)
     roughness = np.full(cells, manning_n)
+    event_start = _timestamp(config["case"]["observation_window"][0])
     geometry, geometry_provenance = load_validation_geometry(
-        config_path, reach, x_m
+        config_path, reach, x_m, event_start=event_start
     )
     if geometry["bed_elevation_m"] is not None:
         bed_slope = -np.gradient(geometry["bed_elevation_m"], x_m)
@@ -603,7 +754,6 @@ def run_validation_case(config_path, *, output_path=None, overrides=None):
         raise ValueError(
             "Observed warm-up requires upstream observations through the warm-up start"
         )
-    event_start = _timestamp(config["case"]["observation_window"][0])
     point_flow_source = config.get("point_flow_series")
     if point_flow_source is not None and lateral_fraction != 0.0:
         raise ValueError(

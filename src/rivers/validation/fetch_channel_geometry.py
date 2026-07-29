@@ -28,6 +28,7 @@ FIELD_URL = (
 FT_TO_M = 0.3048
 FT2_TO_M2 = FT_TO_M**2
 FIELDNAMES = (
+    "geometry_snapshot",
     "station_m",
     "monitoring_location_id",
     "field_visit_id",
@@ -186,6 +187,9 @@ def collect_channel_geometry_rows(config, *, requester=request_json):
         )
         rows.append(
             {
+                "geometry_snapshot": str(
+                    source.get("geometry_snapshot", "static")
+                ),
                 "station_m": f"{float(source['station_m']):.6f}",
                 "monitoring_location_id": gauge_id,
                 "field_visit_id": visit_id,
@@ -216,47 +220,68 @@ def collect_channel_geometry_rows(config, *, requester=request_json):
                 "published_channel_count": len(features),
             }
         )
-        resolved_urls[f"{gauge_id}:channel"] = url
-        resolved_urls[f"{gauge_id}:field"] = field_url
-    rows.sort(key=lambda row: float(row["station_m"]))
-    stations = [float(row["station_m"]) for row in rows]
-    if any(
-        right <= left for left, right in zip(stations, stations[1:])
-    ):
-        raise ValueError(
-            "Field-measurement geometry stations must be strictly increasing"
-        )
-    upstream_bed_ft = float(rows[0]["effective_bed_elevation_ft"])
-    downstream_bed_ft = float(rows[-1]["effective_bed_elevation_ft"])
-    reach_length_m = stations[-1] - stations[0]
-    inferred_slope = (
-        (upstream_bed_ft - downstream_bed_ft) * FT_TO_M / reach_length_m
-    )
-    if not math.isfinite(inferred_slope) or inferred_slope <= 0.0:
-        raise ValueError(
-            "Field measurements must imply a positive downstream bed slope"
-        )
+        url_key = f"{gauge_id}:{visit_id}"
+        resolved_urls[f"{url_key}:channel"] = url
+        resolved_urls[f"{url_key}:field"] = field_url
+
+    snapshots = {}
     for row in rows:
-        width_m = float(row["active_width_m"])
-        area_m2 = float(row["channel_area_m2"])
-        mean_depth_m = float(row["hydraulic_mean_depth_m"])
-        discharge = float(row["represented_discharge_m3_per_min"])
-        hydraulic_radius = area_m2 / (
-            width_m + 2.0 * mean_depth_m
+        snapshots.setdefault(row["geometry_snapshot"], []).append(row)
+    for snapshot, snapshot_rows in snapshots.items():
+        snapshot_rows.sort(key=lambda row: float(row["station_m"]))
+        stations = [float(row["station_m"]) for row in snapshot_rows]
+        if len(stations) < 2 or any(
+            right <= left for left, right in zip(stations, stations[1:])
+        ):
+            raise ValueError(
+                f"Geometry snapshot {snapshot!r} needs at least two strictly "
+                "increasing field-measurement stations"
+            )
+        upstream_bed_ft = float(
+            snapshot_rows[0]["effective_bed_elevation_ft"]
         )
-        manning_model = (
-            area_m2
-            * hydraulic_radius ** (2.0 / 3.0)
-            * math.sqrt(inferred_slope)
-            / discharge
+        downstream_bed_ft = float(
+            snapshot_rows[-1]["effective_bed_elevation_ft"]
         )
-        row["inferred_manning_n_model"] = f"{manning_model:.15f}"
-        row["inferred_manning_n_si"] = f"{manning_model * 60.0:.12f}"
-        row["roughness_assumption"] = (
-            "Manning inversion with rectangular wetted perimeter, "
-            "field-measured area and represented discharge, and reach-average "
-            "effective-bed slope"
+        reach_length_m = stations[-1] - stations[0]
+        inferred_slope = (
+            (upstream_bed_ft - downstream_bed_ft)
+            * FT_TO_M
+            / reach_length_m
         )
+        if not math.isfinite(inferred_slope) or inferred_slope <= 0.0:
+            raise ValueError(
+                f"Geometry snapshot {snapshot!r} must imply a positive "
+                "downstream bed slope"
+            )
+        for row in snapshot_rows:
+            width_m = float(row["active_width_m"])
+            area_m2 = float(row["channel_area_m2"])
+            mean_depth_m = float(row["hydraulic_mean_depth_m"])
+            discharge = float(row["represented_discharge_m3_per_min"])
+            hydraulic_radius = area_m2 / (
+                width_m + 2.0 * mean_depth_m
+            )
+            manning_model = (
+                area_m2
+                * hydraulic_radius ** (2.0 / 3.0)
+                * math.sqrt(inferred_slope)
+                / discharge
+            )
+            row["inferred_manning_n_model"] = f"{manning_model:.15f}"
+            row["inferred_manning_n_si"] = f"{manning_model * 60.0:.12f}"
+            row["roughness_assumption"] = (
+                "Manning inversion with rectangular wetted perimeter, "
+                "field-measured area and represented discharge, and "
+                "snapshot-specific reach-average effective-bed slope"
+            )
+    rows.sort(
+        key=lambda row: (
+            float(row["station_m"]),
+            row["measured_at"],
+            row["geometry_snapshot"],
+        )
+    )
     return rows, resolved_urls
 
 

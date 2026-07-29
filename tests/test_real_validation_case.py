@@ -9,6 +9,7 @@ from rivers.validation.run_case import (
     _require_control_coverage,
     discharge_boundary,
     load_event_control_series,
+    load_field_measurement_geometry,
     load_two_gauge_observations,
     run_validation_case,
     shifted_boundary,
@@ -608,11 +609,158 @@ def test_fetch_channel_geometry_aggregates_only_represented_channels():
         60.0 * float(rows[0]["inferred_manning_n_model"])
     )
     assert set(urls) == {
-        "USGS-1:channel",
-        "USGS-1:field",
-        "USGS-2:channel",
-        "USGS-2:field",
+        "USGS-1:a:channel",
+        "USGS-1:a:field",
+        "USGS-2:b:channel",
+        "USGS-2:b:field",
     }
+
+
+def test_fetch_channel_geometry_builds_multiple_dated_snapshots():
+    config = {
+        "field_measurement_sources": [
+            {
+                "station_m": station,
+                "gauge": gauge,
+                "field_visit_id": f"{snapshot}-{role}",
+                "gage_datum_ft": datum,
+                "geometry_snapshot": snapshot,
+            }
+            for snapshot in ("old", "new")
+            for station, gauge, datum, role in (
+                (0.0, "USGS-1", 90.0, "up"),
+                (100.0, "USGS-2", 80.0, "down"),
+            )
+        ]
+    }
+
+    def requester(url, params=None):
+        visit = params["field_visit_id"]
+        snapshot, role = visit.split("-")
+        if "field-measurements" in url:
+            gage_height = 12.0 if snapshot == "old" else 14.0
+            return {
+                "features": [
+                    {
+                        "properties": {
+                            "field_visit_id": visit,
+                            "parameter_code": "00065",
+                            "reading_type": "MeanGageHeight",
+                            "value": str(gage_height),
+                            "unit_of_measure": "ft",
+                            "approval_status": "Approved",
+                        }
+                    }
+                ]
+            }, f"https://example.test/{visit}/field"
+        width = {
+            ("old", "up"): 20.0,
+            ("old", "down"): 30.0,
+            ("new", "up"): 40.0,
+            ("new", "down"): 60.0,
+        }[(snapshot, role)]
+        depth = 2.0 if snapshot == "old" else 3.0
+        return {
+            "features": [
+                {
+                    "properties": {
+                        "field_visit_id": visit,
+                        "time": (
+                            "2019-01-01T00:00:00+00:00"
+                            if snapshot == "old"
+                            else "2021-01-01T00:00:00+00:00"
+                        ),
+                        "channel_flow": "100",
+                        "channel_flow_unit": "ft^3/s",
+                        "channel_width": str(width),
+                        "channel_width_unit": "ft",
+                        "channel_area": str(width * depth),
+                        "channel_area_unit": "ft^2",
+                    }
+                }
+            ]
+        }, f"https://example.test/{visit}/channel"
+
+    rows, _ = collect_channel_geometry_rows(config, requester=requester)
+
+    assert len(rows) == 4
+    assert {row["geometry_snapshot"] for row in rows} == {"old", "new"}
+    assert [float(row["station_m"]) for row in rows] == [
+        0.0,
+        0.0,
+        100.0,
+        100.0,
+    ]
+    assert all(float(row["inferred_manning_n_model"]) > 0.0 for row in rows)
+
+
+def test_field_geometry_catalog_selects_latest_pre_event_snapshot(tmp_path):
+    catalog = tmp_path / "geometry_catalog.csv"
+    catalog.write_text(
+        "geometry_snapshot,station_m,measured_at,active_width_m,"
+        "effective_bed_elevation_ft,inferred_manning_n_model\n"
+        "old,0,2019-01-01T00:00:00Z,20,100,0.0005\n"
+        "new,0,2021-01-01T00:00:00Z,40,101,0.0007\n"
+        "old,100,2019-02-01T00:00:00Z,30,90,0.0006\n"
+        "new,100,2021-02-01T00:00:00Z,50,91,0.0008\n",
+        encoding="utf-8",
+    )
+
+    width, bed, roughness, selection = load_field_measurement_geometry(
+        catalog,
+        [0.0, 50.0, 100.0],
+        event_start=datetime.fromisoformat("2020-01-01T00:00:00+00:00"),
+        time_policy="latest_not_after_event_start",
+    )
+
+    assert width == pytest.approx([20.0, 25.0, 30.0])
+    assert bed == pytest.approx([0.0, -1.524, -3.048])
+    assert roughness == pytest.approx([0.0005, 0.00055, 0.0006])
+    assert selection["policy"] == "latest_not_after_event_start"
+    assert selection["selection_mode"] == "latest_complete_snapshot"
+    assert selection["selected_snapshot"] == "old"
+    assert [
+        row["measured_at"] for row in selection["selected_rows"]
+    ] == [
+        "2019-01-01T00:00:00+00:00",
+        "2019-02-01T00:00:00+00:00",
+    ]
+
+
+def test_field_geometry_catalog_rejects_future_only_or_stale_state(tmp_path):
+    catalog = tmp_path / "geometry_catalog.csv"
+    catalog.write_text(
+        "station_m,measured_at,active_width_m,"
+        "effective_bed_elevation_ft,inferred_manning_n_model\n"
+        "0,2019-01-01T00:00:00Z,20,100,0.0005\n"
+        "100,2021-01-01T00:00:00Z,30,90,0.0006\n",
+        encoding="utf-8",
+    )
+    event_start = datetime.fromisoformat("2020-01-01T00:00:00+00:00")
+
+    with pytest.raises(ValueError, match="at or before event start"):
+        load_field_measurement_geometry(
+            catalog,
+            [0.0, 100.0],
+            event_start=event_start,
+            time_policy="latest_not_after_event_start",
+        )
+
+    catalog.write_text(
+        "station_m,measured_at,active_width_m,"
+        "effective_bed_elevation_ft,inferred_manning_n_model\n"
+        "0,2018-01-01T00:00:00Z,20,100,0.0005\n"
+        "100,2018-01-01T00:00:00Z,30,90,0.0006\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="exceeding"):
+        load_field_measurement_geometry(
+            catalog,
+            [0.0, 100.0],
+            event_start=event_start,
+            time_policy="latest_not_after_event_start",
+            max_age_days=30.0,
+        )
 
 
 def test_suite_summary_uses_event_ranges_and_medians():

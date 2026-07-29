@@ -176,6 +176,32 @@ This fetcher requires approved mean gage height for the same visit, records the
 resolved provider URLs, and rejects geometry that does not imply a positive
 downstream effective-bed slope.
 
+For repeated surveys, give every upstream/downstream set the same
+`geometry_snapshot` value in `field_measurement_sources`. The generated catalog
+retains all dates. An event can then select only information that existed before
+its start:
+
+```json
+{
+  "reach": {
+    "field_measurement_geometry": "channel_geometry_catalog.csv",
+    "field_measurement_time_policy": "latest_not_after_event_start",
+    "field_measurement_max_age_days": 365
+  }
+}
+```
+
+When multiple named snapshots are present, selection uses the newest complete
+snapshot whose last visit predates the event; it never mixes stations from
+different snapshots. For catalogs without snapshot names, selection falls back
+to the newest pre-event row at each station. The result records the selected
+snapshot, every chosen timestamp, and its age at event start. A station with no
+pre-event measurement, or only a measurement older than the configured limit,
+causes the run to fail rather than silently borrowing future or stale geometry.
+The committed Rio Grande geometry experiment is explicitly retrospective: its
+first available visits occurred after the event, so it remains a separate
+post-baseline structural experiment and does not claim prospective selection.
+
 Run the committed one-at-a-time structural sensitivity matrix with:
 
 ```bash

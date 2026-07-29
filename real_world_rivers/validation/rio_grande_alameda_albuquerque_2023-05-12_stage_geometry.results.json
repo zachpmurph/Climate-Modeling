@@ -41,6 +41,9 @@
     "gage_datum_upstream_ft_navd88": 4984.18,
     "gage_datum_downstream_ft_navd88": 4948.92,
     "cross_section_shape": "rectangular",
+    "field_measurement_selection": {
+      "policy": "configured_static_rows"
+    },
     "modeled_width_m_range": {
       "minimum": 68.2752,
       "maximum": 102.4128
