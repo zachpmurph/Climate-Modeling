@@ -16,6 +16,7 @@ from general.solvers.profile import (
     domain_from_profile,
     load_channel_geometry,
     load_profile,
+    resample_profile,
 )
 from rivers.simulations.ingest_to_simulate import scenario_from_profile
 from rivers.simulations.registry import SOLVERS, dispatch
@@ -103,6 +104,14 @@ def parse_args(argv=None):
     )
     p.add_argument("--cfl", type=float, default=0.5)
     p.add_argument(
+        "--longitudinal-cells",
+        type=int,
+        help=(
+            "Linearly interpolate reviewed profile fields onto this many "
+            "derived solver cells"
+        ),
+    )
+    p.add_argument(
         "--width",
         type=float,
         help="Channel width in metres (required by saint_venant_2d)",
@@ -172,7 +181,16 @@ def main(argv=None):
     except ValueError as exc:
         raise SystemExit(f"error: {exc}") from exc
 
-    profile = load_profile(args.profile)
+    source_profile = load_profile(args.profile)
+    source_cells = len(source_profile.station_m)
+    try:
+        profile = (
+            source_profile
+            if args.longitudinal_cells is None
+            else resample_profile(source_profile, args.longitudinal_cells)
+        )
+    except ValueError as exc:
+        raise SystemExit(f"error: {exc}") from exc
     if args.solver == "saint_venant_2d":
         if args.width is None:
             raise SystemExit("error: --width is required for saint_venant_2d")
@@ -353,6 +371,16 @@ def main(argv=None):
         "mass_correction": result.mass_correction,
         "mass_balance_error": mass_balance_error,
         "mass_unit": "m3" if physical_volume else "m2",
+        "profile_resolution": {
+            "source_observation_stations": source_cells,
+            "solver_cells": len(profile.station_m),
+            "method": (
+                "source_grid"
+                if args.longitudinal_cells is None
+                else "linear_interpolation_derived_grid"
+            ),
+            "creates_observations": False,
+        },
         "forcing_inputs": {
             "inflow_series": (
                 None

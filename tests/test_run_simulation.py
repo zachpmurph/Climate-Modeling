@@ -1,5 +1,6 @@
 """Tests for the unified run_simulation dispatch harness."""
 
+import csv
 import json
 
 import pytest
@@ -128,6 +129,55 @@ def test_profile_optional_fields_transfer_to_scenario():
         scenario.rainfall(domain.x_m, 0.0),
         profile.rainfall_rate_m_per_min + 0.000003,
     )
+
+
+def test_profile_resampling_preserves_length_and_observation_identity():
+    from general.solvers.profile import load_profile, resample_profile
+
+    source = load_profile(PROFILE_PATH)
+    derived = resample_profile(source, 9)
+
+    assert len(derived.station_m) == 9
+    assert np.sum(derived.dx_m) == pytest.approx(np.sum(source.dx_m))
+    assert derived.station_m[[0, -1]].tolist() == [0.0, 4000.0]
+    assert derived.slope[1] == pytest.approx(0.0011)
+    assert derived.manning_n[1] == pytest.approx(0.0365)
+    assert derived.labels[0] == "upstream"
+    assert derived.labels[1] == ""
+    assert derived.labels[2] == "upper_mid"
+
+
+def test_runner_records_derived_grid_without_claiming_new_observations(tmp_path):
+    run_simulation.main(
+        [
+            PROFILE_PATH,
+            "--solver",
+            "saint_venant",
+            "--longitudinal-cells",
+            "21",
+            "--t-final",
+            "0",
+            "--output-dir",
+            str(tmp_path),
+            "--run-name",
+            "resampled",
+        ]
+    )
+
+    summary = json.loads(
+        (tmp_path / "resampled_summary.json").read_text(encoding="utf-8")
+    )
+    assert summary["profile_resolution"] == {
+        "source_observation_stations": 5,
+        "solver_cells": 21,
+        "method": "linear_interpolation_derived_grid",
+        "creates_observations": False,
+    }
+    with (tmp_path / "resampled_timeseries.csv").open(
+        newline="", encoding="utf-8"
+    ) as handle:
+        header = next(csv.reader(handle))
+    assert len(header) == 22
 
 
 def test_both_solvers_use_spatial_rainfall_function():

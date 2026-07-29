@@ -167,6 +167,53 @@ def load_profile(path):
     raise ValueError(f"Unsupported river profile format: {suffix}")
 
 
+def resample_profile(profile: RiverProfile, cells: int) -> RiverProfile:
+    """Interpolate reviewed profile fields onto a derived numerical grid.
+
+    The source observations are not modified or relabeled. Existing labels are
+    retained only where a derived station coincides with a reviewed station.
+    Total modeled reach length is preserved in the finite-volume cell widths.
+    """
+    if not isinstance(cells, (int, np.integer)) or cells < 2:
+        raise ValueError("cells must be an integer of at least 2")
+    if len(profile.station_m) < 2:
+        raise ValueError("A profile needs at least two stations to be resampled")
+
+    station_m = np.linspace(
+        float(profile.station_m[0]),
+        float(profile.station_m[-1]),
+        int(cells),
+    )
+
+    def interpolate(values):
+        if values is None:
+            return None
+        return np.interp(station_m, profile.station_m, values)
+
+    labels = []
+    for station in station_m:
+        matches = np.flatnonzero(
+            np.isclose(profile.station_m, station, rtol=0.0, atol=1e-9)
+        )
+        labels.append(
+            profile.labels[matches[0]]
+            if len(matches) and len(profile.labels) == len(profile.station_m)
+            else ""
+        )
+
+    return RiverProfile(
+        station_m=station_m,
+        dx_m=np.full(int(cells), profile.length_m / int(cells)),
+        slope=interpolate(profile.slope),
+        manning_n=interpolate(profile.manning_n),
+        initial_depth_m=interpolate(profile.initial_depth_m),
+        rainfall_rate_m_per_min=interpolate(
+            profile.rainfall_rate_m_per_min
+        ),
+        labels=tuple(labels),
+    )
+
+
 def domain_from_profile(
     profile: RiverProfile,
     *,

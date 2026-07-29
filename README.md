@@ -118,6 +118,7 @@ The rationale for each transition is given alongside the change.
 | **4i — Observed baseline and well-balanced 1-D dynamics** | Current branch | Added an approved-USGS two-gauge validation case and rebuilt 1-D Saint-Venant bed coupling with hydrostatic reconstruction and a conservative draining limiter. | Exact flat-bed and synthetic tests hid spurious currents over real topography. The observed case now quantifies field error, while the 1-D solver preserves a non-flat lake at rest without mass-adding depth floors. |
 | **4j — Hydraulic cross-sections** | Current branch | Added reviewed per-cell channel width and bankfull depth to the 1-D domain. Both 1-D solvers now conserve whole-channel volume and discharge when geometry is supplied; Saint-Venant includes rectangular hydraulic radius and a well-balanced non-prismatic width source. | Unit-width flow cannot reproduce real storage, wetted perimeter, friction, rainfall volume, or gauge discharge without ad hoc conversions. |
 | **4k — Event forcing and consistent startup** | Current branch | Added linearly interpolated inflow/rainfall CSV forcing, preserved callable hydrographs in every solver, aligned time steps with forcing knots, and initialized dynamic-wave discharge from the boundary flow. Whole-channel 2-D flow is distributed only across initially wet upstream cells. | Collapsing a hydrograph to its first value and starting a flowing boundary from zero momentum create physically false transients and erase the event being simulated. |
+| **4l — Provenance-safe solver grids** | Current branch | Added optional longitudinal resampling that linearly interpolates reviewed fields onto a derived numerical grid while preserving reach length and labeling the source/solver cell counts in every summary. | A five-station measurement profile is too coarse for routing, but silently treating interpolated cells as observations overstates the evidence. |
 
 ---
 
@@ -169,6 +170,7 @@ python src/rivers/simulations/run_simulation.py PROFILE --solver SOLVER --t-fina
 | `--rainfall-rate` | `0.0` | Uniform rainfall rate, m/min |
 | `--rainfall-series` | — | CSV with `t_min,rainfall_rate_m_per_min`; added to profile and constant rainfall |
 | `--cfl` | `0.5` | CFL target (0 < CFL ≤ 1) |
+| `--longitudinal-cells` | — | Derived solver-cell count; linearly interpolates reviewed fields without creating observations |
 | `--width` | — | Total channel-plus-floodplain domain width in metres; required for `saint_venant_2d` |
 | `--cross-cells` | `10` | Number of cells across a 2-D domain |
 | `--hydraulic-geometry` | — | Reviewed `station_m,width_m,bankfull_depth_m` CSV; optional for physical 1-D sections and required for 2-D |
@@ -243,6 +245,12 @@ increasing times, and have finite non-negative values. Values are linearly
 interpolated between rows and held constant outside the supplied range. Solver
 time steps land exactly on every forcing row, preventing a sharp forcing change
 from being skipped. The summary records portable paths to both forcing files.
+
+Use `--longitudinal-cells` when a reviewed profile is too sparse for numerical
+routing. The source CSV/JSON remains unchanged. Slope, roughness, optional
+depth, rainfall, and hydraulic geometry are interpolated onto a derived grid;
+labels survive only at exact reviewed stations. Every summary records both
+counts, the interpolation method, and `creates_observations: false`.
 
 ### Reporting saved flood outcomes
 
