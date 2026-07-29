@@ -200,12 +200,15 @@ def parameter_overrides(config, parameters):
     width_scale = float(parameters["width_scale"])
     lateral_fraction = float(parameters["lateral_inflow_fraction"])
     cross_section_shape = reach.get("cross_section_shape", "rectangular")
-    if cross_section_shape != "rectangular" and not math.isclose(
-        width_scale, 1.0
-    ):
+    has_reviewed_width = (
+        cross_section_shape != "rectangular"
+        or reach.get("field_measurement_geometry") is not None
+    )
+    if has_reviewed_width and not math.isclose(width_scale, 1.0):
         raise ValueError(
-            "width_scale cannot modify reviewed stage-dependent geometry; "
-            "use width_scale=[1.0] for trapezoidal, compound, or surveyed cases"
+            "width_scale cannot modify reviewed field or stage-dependent "
+            "geometry; use width_scale=[1.0] for measured, trapezoidal, "
+            "compound, or surveyed cases"
         )
     if config.get("point_flow_series") is not None and not math.isclose(
         lateral_fraction, 0.0
@@ -223,7 +226,7 @@ def parameter_overrides(config, parameters):
         },
         "lateral_inflow_fraction": lateral_fraction,
     }
-    if cross_section_shape == "rectangular":
+    if cross_section_shape == "rectangular" and not has_reviewed_width:
         overrides["reach"].update(
             {
                 "upstream_width_m": (

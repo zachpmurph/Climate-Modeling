@@ -1,0 +1,96 @@
+{
+  "case": {
+    "name": "Rio Grande Alameda to Albuquerque — 2023-05-12 measured-stage and width experiment",
+    "river": "Rio Grande",
+    "upstream_gauge": "USGS-08329918",
+    "downstream_gauge": "USGS-08330000",
+    "observation_window": [
+      "2023-05-12T00:00:00Z",
+      "2023-05-14T00:00:00Z"
+    ],
+    "purpose": "Post-baseline structural experiment using observed downstream stage and independently measured active-channel widths while retaining downstream discharge only as the score target.",
+    "comparison_baselines": [
+      "rio_grande_alameda_albuquerque_2023-05-12.results.json",
+      "rio_grande_alameda_albuquerque_2023-05-12_stage.results.json"
+    ],
+    "interpretation": "This is stage- and geometry-conditioned discharge validation, not an independent forecast and not a calibration event."
+  },
+  "validation_status": "post_baseline_measured_stage_geometry_experiment",
+  "observations": "rio_grande_alameda_albuquerque_2023-05-12.csv",
+  "downstream_stage_series": "rio_grande_alameda_albuquerque_2023-05-12_stage.csv",
+  "downstream_stage_source": {
+    "role": "downstream_boundary",
+    "provider": "U.S. Geological Survey Water Data APIs",
+    "parameter": "00065",
+    "gauge": "USGS-08330000",
+    "url": "https://api.waterdata.usgs.gov/ogcapi/v0/collections/continuous/items?f=json&monitoring_location_id=USGS-08330000&parameter_code=00065&datetime=2023-05-11T12%3A00%3A00Z%2F2023-05-14T00%3A00%3A00Z&limit=50000",
+    "approval_status": "Approved",
+    "gage_datum_ft": 4948.92,
+    "gage_datum_reference": "NAVD88",
+    "model_vertical_datum_ft": 4984.18,
+    "model_vertical_datum_reference": "Upstream USGS-08329918 NAVD88 gage datum",
+    "conversion": "(gage_datum_ft + gage_height_ft - model_vertical_datum_ft) * 0.3048"
+  },
+  "field_measurement_sources": [
+    {
+      "station_m": 0.0,
+      "gauge": "USGS-08329918",
+      "field_visit_id": "d9669aa1-6bdc-4175-8074-924a3d20efeb",
+      "measured_at": "2023-05-15T18:43:18Z",
+      "url": "https://api.waterdata.usgs.gov/ogcapi/v0/collections/channel-measurements/items?f=json&monitoring_location_id=USGS-08329918&field_visit_id=d9669aa1-6bdc-4175-8074-924a3d20efeb&limit=50000",
+      "selection": "First published field visit after the event; widths and areas are summed only across channels where both were reported."
+    },
+    {
+      "station_m": 14645.571,
+      "gauge": "USGS-08330000",
+      "field_visit_id": "5b46431c-ce5c-47fe-97a2-066585c9768b",
+      "measured_at": "2023-05-17T16:39:35Z",
+      "url": "https://api.waterdata.usgs.gov/ogcapi/v0/collections/channel-measurements/items?f=json&monitoring_location_id=USGS-08330000&field_visit_id=5b46431c-ce5c-47fe-97a2-066585c9768b&limit=50000",
+      "selection": "First published field visit after the event."
+    }
+  ],
+  "sources": [
+    {
+      "role": "upstream",
+      "provider": "U.S. Geological Survey Water Data APIs",
+      "parameter": "00060 continuous discharge",
+      "gauge": "USGS-08329918",
+      "url": "https://api.waterdata.usgs.gov/ogcapi/v0/collections/continuous/items?f=json&monitoring_location_id=USGS-08329918&parameter_code=00060&datetime=2023-05-11T12%3A00%3A00Z%2F2023-05-14T00%3A00%3A00Z&limit=50000",
+      "approval_status": "Approved"
+    },
+    {
+      "role": "downstream",
+      "provider": "U.S. Geological Survey Water Data APIs",
+      "parameter": "00060 continuous discharge",
+      "gauge": "USGS-08330000",
+      "url": "https://api.waterdata.usgs.gov/ogcapi/v0/collections/continuous/items?f=json&monitoring_location_id=USGS-08330000&parameter_code=00060&datetime=2023-05-12T00%3A00%3A00Z%2F2023-05-14T00%3A00%3A00Z&limit=50000",
+      "approval_status": "Approved"
+    }
+  ],
+  "retrieved_at": "2026-07-29",
+  "reach": {
+    "length_m": 14645.571,
+    "cells": 101,
+    "slope": 0.0007338224,
+    "manning_n": 0.0005833333333333334,
+    "upstream_width_m": 102.4128,
+    "downstream_width_m": 68.2752,
+    "field_measurement_geometry": "rio_grande_alameda_albuquerque_2023-05-12_channel_geometry.csv",
+    "geometry_classification": "measured_active_width_with_rectangular_shape_assumption",
+    "roughness_origin": "Generic SI Manning n 0.035 divided by 60; unchanged from the predeclared baseline",
+    "width_source": "USGS channel-measurement field visits immediately after the event; linearly interpolated between gauges",
+    "shape_assumption": "Rectangular area model; field measurements constrain active width but do not define the full cross-section polyline.",
+    "length_source": "USGS NLDI NHDPlusV2 routed centerline from USGS-08329918 to USGS-08330000",
+    "slope_source": "Difference between published NAVD88 gage datums divided by routed length",
+    "gage_datum_upstream_ft_navd88": 4984.18,
+    "gage_datum_downstream_ft_navd88": 4948.92
+  },
+  "warmup": {
+    "duration_min": 720.0,
+    "upstream_forcing": "observed"
+  },
+  "lateral_inflow_fraction": 0.0,
+  "record_interval_min": 5.0,
+  "spatial_order": 1,
+  "cfl": 0.4
+}

@@ -14,6 +14,9 @@ from rivers.validation.run_case import (
     shifted_boundary,
 )
 from rivers.validation.fetch_event import collect_event_rows
+from rivers.validation.fetch_channel_geometry import (
+    collect_channel_geometry_rows,
+)
 from rivers.validation.fetch_stage_control import collect_stage_rows
 from rivers.validation.run_sensitivity import build_variants
 from rivers.validation.run_suite import summarize_results
@@ -451,6 +454,64 @@ def test_fetch_stage_control_converts_gage_height_to_model_datum():
         3.0 * 0.3048
     )
     assert {row["approval_status"] for row in rows} == {"Approved"}
+
+
+def test_fetch_channel_geometry_aggregates_only_represented_channels():
+    config = {
+        "field_measurement_sources": [
+            {"station_m": 0.0, "gauge": "USGS-1", "field_visit_id": "a"},
+            {"station_m": 100.0, "gauge": "USGS-2", "field_visit_id": "b"},
+        ]
+    }
+
+    def requester(url, params=None):
+        visit = params["field_visit_id"]
+        features = [
+            {
+                "properties": {
+                    "field_visit_id": visit,
+                    "time": "2020-01-01T00:00:00+00:00",
+                    "channel_flow": "100",
+                    "channel_flow_unit": "ft^3/s",
+                    "channel_width": "20",
+                    "channel_width_unit": "ft",
+                    "channel_area": "40",
+                    "channel_area_unit": "ft^2",
+                }
+            },
+            {
+                "properties": {
+                    "field_visit_id": visit,
+                    "time": "2020-01-01T00:00:00+00:00",
+                    "channel_flow": "5",
+                    "channel_flow_unit": "ft^3/s",
+                    "channel_width": "",
+                    "channel_width_unit": "",
+                    "channel_area": "",
+                    "channel_area_unit": "",
+                }
+            },
+        ]
+        return {"features": features}, f"https://example.test/{visit}"
+
+    rows, urls = collect_channel_geometry_rows(
+        config, requester=requester
+    )
+
+    assert len(rows) == 2
+    assert float(rows[0]["active_width_m"]) == pytest.approx(20 * 0.3048)
+    assert float(rows[0]["channel_area_m2"]) == pytest.approx(
+        40 * 0.3048**2
+    )
+    assert float(rows[0]["hydraulic_mean_depth_m"]) == pytest.approx(
+        2 * 0.3048
+    )
+    assert float(rows[0]["represented_flow_fraction"]) == pytest.approx(
+        100 / 105
+    )
+    assert rows[0]["represented_channel_count"] == 1
+    assert rows[0]["published_channel_count"] == 2
+    assert set(urls) == {"USGS-1", "USGS-2"}
 
 
 def test_suite_summary_uses_event_ranges_and_medians():

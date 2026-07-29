@@ -130,7 +130,9 @@ def test_calibration_does_not_scale_reviewed_stage_geometry():
         "lateral_inflow_fraction": 0.0,
     }
 
-    with pytest.raises(ValueError, match="reviewed stage-dependent geometry"):
+    with pytest.raises(
+        ValueError, match="reviewed field or stage-dependent geometry"
+    ):
         calibration.parameter_overrides(config, parameters)
 
 

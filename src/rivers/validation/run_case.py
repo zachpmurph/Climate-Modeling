@@ -356,6 +356,44 @@ def _geometry_source(config_path, reach, key):
     return source
 
 
+def load_field_measurement_width(path, x_m):
+    """Interpolate aggregated USGS active-channel widths onto model cells."""
+    with Path(path).open(newline="", encoding="utf-8-sig") as handle:
+        rows = list(csv.DictReader(handle))
+    if len(rows) < 2:
+        raise ValueError(
+            "Field-measurement geometry needs at least two station rows"
+        )
+    try:
+        stations = np.asarray(
+            [float(row["station_m"]) for row in rows], dtype=float
+        )
+        widths = np.asarray(
+            [float(row["active_width_m"]) for row in rows], dtype=float
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError(
+            "Field-measurement geometry requires numeric station_m and "
+            "active_width_m"
+        ) from exc
+    target = np.asarray(x_m, dtype=float)
+    if (
+        np.any(~np.isfinite(stations))
+        or np.any(~np.isfinite(widths))
+        or np.any(np.diff(stations) <= 0.0)
+        or np.any(widths <= 0.0)
+    ):
+        raise ValueError(
+            "Field-measurement stations must increase strictly and widths "
+            "must be finite and positive"
+        )
+    if stations[0] > target[0] or stations[-1] < target[-1]:
+        raise ValueError(
+            "Field-measurement geometry must cover the full validation reach"
+        )
+    return np.interp(target, stations, widths)
+
+
 def load_validation_geometry(config_path, reach, x_m):
     """Load the configured cross-section model onto validation cells."""
     shape = reach.get("cross_section_shape", "rectangular")
@@ -369,11 +407,21 @@ def load_validation_geometry(config_path, reach, x_m):
     }
     provenance = {"cross_section_shape": shape}
     if shape == "rectangular":
-        geometry["channel_width_m"] = np.linspace(
-            float(reach["upstream_width_m"]),
-            float(reach["downstream_width_m"]),
-            len(x_m),
-        )
+        field_source = reach.get("field_measurement_geometry")
+        if field_source is None:
+            geometry["channel_width_m"] = np.linspace(
+                float(reach["upstream_width_m"]),
+                float(reach["downstream_width_m"]),
+                len(x_m),
+            )
+        else:
+            source = _geometry_source(
+                config_path, reach, "field_measurement_geometry"
+            )
+            geometry["channel_width_m"] = load_field_measurement_width(
+                source, x_m
+            )
+            provenance["field_measurement_geometry"] = str(field_source)
         return geometry, provenance
     if shape == "trapezoidal":
         source = _geometry_source(config_path, reach, "hydraulic_geometry")
