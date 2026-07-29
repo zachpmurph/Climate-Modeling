@@ -134,6 +134,7 @@ The rationale for each transition is given alongside the change.
 | **4t — Stage-dependent 1-D geometry** | Current branch | Added per-cell trapezoidal cross-sections to 1-D Saint-Venant, including depth-dependent area, top width, pressure, hydraulic radius, wave speed, rainfall capture, and conservative geometry transitions. The CLI derives side slopes from reviewed bankfull width/depth and an explicit bottom-width fraction. | A fixed rectangular width cannot represent storage, wetted perimeter, pressure, or rainfall collection changing as river stage rises. Trapezoids are a controlled first step toward measured compound cross-sections while retaining exact rectangular backward compatibility. |
 | **4u — Measured hydraulic controls** | Current branch | Added time-varying downstream-stage boundaries and spatially located point-inflow series for tributaries or return flows. Point discharges are mapped conservatively to the nearest reach cell, and summaries retain their source paths. | A free outlet and a calibrated uniform reach-gain fraction can hide backwater and missing-flow errors. Direct observations make those controls explicit and prevent roughness or geometry from absorbing their effects. |
 | **4v — Independent-river transfer tests** | Current branch | Added two approved-USGS Truckee River events between Reno and Sparks, with a routed 5.49 km reach and assumptions held fixed between events. The six-event evidence suite now spans two rivers; the Colorado calibration remains separate. | Repeated events on one regulated reach cannot establish spatial transfer. A second river tests whether the solver structure works outside the reach used to develop and calibrate the workflow. |
+| **4w — Probabilistic 2-D outcomes** | Current branch | Added seeded Latin-hypercube ensembles over roughness, longitudinal slope, channel width, bankfull depth, floodplain slope, inflow, and rainfall. Saved evidence includes depth, terrain, and water-surface quantiles, wet probability, wet-area bands, every sampled parameter set, and member mass residuals, plus a self-contained uncertainty report. | A single inundation map hides uncertainty in estimated terrain, geometry, forcing, and roughness. Conditional outcome bands expose where those inputs materially change the modeled flood footprint without presenting them as calibrated forecast probabilities. |
 
 ---
 
@@ -242,6 +243,40 @@ so higher bank and floodplain cells start dry. It writes a full
 compatibility with 1-D tools. This synthetic cross-section is safer than a flat
 extrusion but is not a DEM or surveyed cross-section; build measured terrain
 cases programmatically by passing a `Domain2D` directly.
+
+### Reproducible 2-D uncertainty ensembles
+
+Run a conditional ensemble with explicit input ranges:
+
+```bash
+python src/rivers/simulations/run_2d_ensemble.py \
+    real_world_rivers/tools/example_river_profile.csv \
+    --hydraulic-geometry real_world_rivers/tools/example_geometry.csv \
+    --ensemble-config real_world_rivers/tools/example_2d_uncertainty.json \
+    --width 100 \
+    --cross-cells 20 \
+    --t-final 10 \
+    --run-name example_uncertainty
+
+python src/rivers/reporting/generate_uncertainty_report.py \
+    data/ensembles/example_uncertainty_ensemble.npz
+```
+
+The configuration controls sample count, random seed, quantiles, wet-depth
+threshold, and multiplicative ranges for Manning roughness, longitudinal slope,
+channel width, bankfull depth, floodplain slope, inflow, and rainfall. Sampling is stratified
+Latin hypercube and exactly reproducible for a fixed seed. The NPZ retains
+member parameters and mass diagnostics together with time-dependent depth and
+water-surface quantiles, peak bands, wet probability, and maximum-wet-area
+quantiles. The included ranges are illustrative screening ranges, not inferred
+probability distributions; replace them with basin-specific evidence before
+interpreting the resulting probabilities.
+
+When parameters are correlated, replace `parameter_scales` with
+`parameter_samples`: a list of joint scale objects from an empirical,
+posterior, or otherwise justified distribution. This preserves width/depth,
+roughness/slope, or forcing dependencies that independent marginal ranges
+would destroy.
 
 Each solver declares which `Scenario` knobs it supports. Passing a knob a solver
 doesn't support raises `UnsupportedScenario` immediately rather than silently
@@ -458,6 +493,7 @@ src/general/verification/verify_saint_venant_2d.py # quantitative benchmark matr
 src/general/viz/animate_depth.py               # animates a saved depth-vs-time table
 src/rivers/simulations/registry.py             # name → Solver mapping
 src/rivers/simulations/run_simulation.py       # unified CLI dispatcher
+src/rivers/simulations/run_2d_ensemble.py      # conditional 2-D uncertainty bands
 src/rivers/simulations/ingest_to_simulate.py   # profile_path → (Domain, Scenario) helper
 src/rivers/validation/run_case.py              # held-out two-gauge field validation
 src/rivers/validation/run_sensitivity.py       # one-at-a-time structural sensitivity
@@ -465,6 +501,7 @@ src/rivers/validation/fetch_event.py            # reproducible approved-USGS eve
 src/rivers/validation/run_suite.py              # fixed-parameter multi-event evidence
 src/rivers/validation/calibrate_suite.py        # constrained global multi-event optimizer
 src/rivers/reporting/generate_flood_report.py  # saved artifacts → HTML + outcomes JSON
+src/rivers/reporting/generate_uncertainty_report.py # ensemble NPZ → spatial HTML report
 src/rivers/visualization/animate_flood_map.py  # saved time series → geographic HTML animation
 src/rivers/ingest/run_ingestion.py             # config-driven ingestion CLI (one reach or --all)
 src/rivers/ingest/orchestrator.py              # runs a curated reach definition end to end
@@ -508,7 +545,9 @@ channel/floodplain terrain.
 
 ## Next steps
 
-- Extend rectangular 1-D sections to surveyed compound/trapezoidal geometry.
+- Replace parameterized trapezoids and synthetic 2-D terrain with surveyed
+  compound cross-sections or reviewed elevation models.
+- Add observed-stage/open downstream controls to the 2-D solver.
+- Estimate basin-specific joint uncertainty distributions and test ensemble
+  coverage on a future event or untouched third river.
 - Save Saint-Venant discharge histories through the unified CLI alongside depth.
-- Extend the data pipeline to additional river systems beyond the Columbia River
-  Hanford reach.

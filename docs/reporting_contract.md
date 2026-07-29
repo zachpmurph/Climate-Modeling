@@ -72,6 +72,30 @@ These are screening outcomes. A 1-D result is not an inundation boundary, and a
 2-D result is only as reliable as its terrain, boundary conditions, roughness,
 forcing, calibration, and validation.
 
+## 2-D uncertainty artifact
+
+`run_2d_ensemble.py` writes `<run>_ensemble.npz` and
+`<run>_ensemble_summary.json`. The numeric artifact contains:
+
+- sampled parameter names and scales, plus every member mass residual;
+- requested quantile probabilities;
+- time-dependent depth and water-surface-elevation quantiles;
+- terrain, peak-depth, and peak-water-surface quantiles;
+- probability that each cell exceeds the configured wet-depth threshold; and
+- member and quantile maximum wet areas.
+
+`generate_uncertainty_report.py` consumes those saved artifacts without
+importing a solver and writes a self-contained spatial report. Its probabilities
+are conditional on the configured parameter ranges and model structure. They
+must not be described as forecast probabilities unless the input distributions
+have been independently estimated and the ensemble has been probabilistically
+validated.
+
+The ensemble configuration accepts either reproducible Latin-hypercube marginal
+ranges or explicit joint parameter samples. Use joint samples when inputs are
+correlated; independent ranges can otherwise create physically inconsistent
+cross-sections or forcing combinations.
+
 ## Command
 
 With reviewed bankfull geometry:

@@ -182,21 +182,22 @@ current documented method.
    - The 1-D solver now supports transmissive outflow, wall, and prescribed-stage
      downstream boundaries with regression tests. The 2-D solver still uses its
      simpler boundary set and needs case-specific open-boundary justification.
-   - The committed four-event, two-gauge suite, global calibration split, and
-     one-at-a-time sensitivity matrix establish development evidence on one
-     regulated reach, not transferable predictive skill. A future prospective
-     event and another river remain required.
+   - The committed six-event suite now includes a second river, but all events
+     are historical and have been inspected during development. A future event
+     or untouched third river is still required for prospective evidence.
 
 2. **Add partially dry non-flat shoreline equilibria.**
    - This would strengthen the coupling between well-balanced topography and
      wet/dry reconstruction beyond the existing separate tests.
    - Estimated effort: 2–4 focused engineering days.
 
-3. **Add independent events and uncertainty distributions.**
-   - Numerical verification and four observed events on one reach do not establish correct
-     terrain, roughness, forcing, boundary data, or flood outcomes elsewhere.
-   - Calibrate only on separate events, then report out-of-sample performance
-     and probabilistic input uncertainty.
+3. **Continue independent events and validate uncertainty distributions.**
+   - The committed suite now covers six events on two rivers, and the 2-D
+     ensemble propagates explicit uncertainty ranges into depth, wet-area, and
+     inundation-probability bands.
+   - The example ranges remain illustrative rather than inferred distributions.
+     Add another independent river or future event, estimate basin-specific
+     input distributions, and evaluate probabilistic calibration and coverage.
 
 ## Recommendation
 
