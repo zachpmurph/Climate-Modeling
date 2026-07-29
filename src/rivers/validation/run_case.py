@@ -113,13 +113,33 @@ def run_validation_case(config_path, *, output_path=None):
     boundary = discharge_boundary(upstream_times, upstream_flow, upstream_width)
     initial_q = boundary(0.0)
     normal_depth = (initial_q * manning_n / math.sqrt(slope)) ** (3.0 / 5.0)
+    warmup_min = float(config.get("warmup_min", 0.0))
+    initial_depth = np.full(cells, normal_depth)
+    initial_discharge = np.full(cells, initial_q)
+    if warmup_min > 0:
+        warmup = saint_venant_1d.run_model(
+            length_m,
+            warmup_min,
+            record_interval=warmup_min,
+            h_init=initial_depth,
+            q_init=initial_discharge,
+            left_inflow=initial_q,
+            rainfall=lambda x, time: np.zeros_like(x),
+            x_m=x_m,
+            dx_m=dx_m,
+            slope=bed_slope,
+            manning_n=roughness,
+            cfl=float(config.get("cfl", 0.4)),
+        )
+        initial_depth = warmup["h_final"]
+        initial_discharge = warmup["q_final"]
 
     result = saint_venant_1d.run_model(
         length_m,
         duration,
         record_interval=float(config.get("record_interval_min", 5.0)),
-        h_init=np.full(cells, normal_depth),
-        q_init=np.full(cells, initial_q),
+        h_init=initial_depth,
+        q_init=initial_discharge,
         left_inflow=boundary,
         rainfall=lambda x, time: np.zeros_like(x),
         x_m=x_m,
@@ -152,7 +172,12 @@ def run_validation_case(config_path, *, output_path=None):
         },
         "assumptions": {
             **reach,
-            "initial_condition": "uniform Manning normal depth and upstream unit discharge",
+            "initial_condition": (
+                "constant-boundary hydraulic warm-up from uniform Manning normal flow"
+                if warmup_min > 0
+                else "uniform Manning normal depth and upstream unit discharge"
+            ),
+            "warmup_min": warmup_min,
             "lateral_inflow": "zero",
             "rainfall": "zero",
         },

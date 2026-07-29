@@ -43,7 +43,27 @@ def _left_discharge(left_inflow, t):
     return value
 
 
-def _rusanov_fluxes(h, q, left_inflow, t):
+def _bed_from_slope(x, slope):
+    bed = np.zeros_like(x, dtype=float)
+    if len(x) > 1:
+        bed[1:] = -np.cumsum(
+            0.5 * (slope[:-1] + slope[1:]) * np.diff(x)
+        )
+    return bed
+
+
+def _hydrostatic_states(h_left, q_left, bed_left, h_right, q_right, bed_right):
+    face_bed = np.maximum(bed_left, bed_right)
+    depth_left = np.maximum(0.0, h_left + bed_left - face_bed)
+    depth_right = np.maximum(0.0, h_right + bed_right - face_bed)
+    scale_left = np.zeros_like(h_left)
+    scale_right = np.zeros_like(h_right)
+    np.divide(depth_left, h_left, out=scale_left, where=h_left > H_FLOOR)
+    np.divide(depth_right, h_right, out=scale_right, where=h_right > H_FLOOR)
+    return depth_left, q_left * scale_left, depth_right, q_right * scale_right
+
+
+def _rusanov_fluxes(h, q, bed, left_inflow, t):
     inflow = _left_discharge(left_inflow, t)
 
     # Equal ghost/interior depths remove numerical mass diffusion at each
@@ -51,18 +71,38 @@ def _rusanov_fluxes(h, q, left_inflow, t):
     # mass flux exactly equal to that prescribed discharge.
     h_ext = np.concatenate(([h[0]], h, [h[-1]]))
     q_ext = np.concatenate(([2.0 * inflow - q[0]], q, [q[-1]]))
+    bed_ext = np.concatenate(([bed[0]], bed, [bed[-1]]))
     h_left, h_right = h_ext[:-1], h_ext[1:]
     q_left, q_right = q_ext[:-1], q_ext[1:]
+    bed_left, bed_right = bed_ext[:-1], bed_ext[1:]
 
-    flux_h_left, flux_q_left = _physical_flux(h_left, q_left)
-    flux_h_right, flux_q_right = _physical_flux(h_right, q_right)
-    speed_left = np.abs(_velocity(h_left, q_left)) + np.sqrt(g * h_left)
-    speed_right = np.abs(_velocity(h_right, q_right)) + np.sqrt(g * h_right)
+    hs_left, qs_left, hs_right, qs_right = _hydrostatic_states(
+        h_left, q_left, bed_left, h_right, q_right, bed_right
+    )
+    flux_h_left, flux_q_left = _physical_flux(hs_left, qs_left)
+    flux_h_right, flux_q_right = _physical_flux(hs_right, qs_right)
+    speed_left = np.abs(_velocity(hs_left, qs_left)) + np.sqrt(g * hs_left)
+    speed_right = np.abs(_velocity(hs_right, qs_right)) + np.sqrt(g * hs_right)
     alpha = np.maximum(speed_left, speed_right)
 
-    flux_h = 0.5 * (flux_h_left + flux_h_right) - 0.5 * alpha * (h_right - h_left)
-    flux_q = 0.5 * (flux_q_left + flux_q_right) - 0.5 * alpha * (q_right - q_left)
-    return flux_h, flux_q, alpha
+    flux_h = 0.5 * (flux_h_left + flux_h_right) - 0.5 * alpha * (hs_right - hs_left)
+    flux_q = 0.5 * (flux_q_left + flux_q_right) - 0.5 * alpha * (qs_right - qs_left)
+    correction_left = 0.5 * g * (h_left**2 - hs_left**2)
+    correction_right = 0.5 * g * (h_right**2 - hs_right**2)
+    return flux_h, flux_q, alpha, correction_left, correction_right
+
+
+def _limit_draining_fluxes(h, source, dt, dx, flux_h, flux_q):
+    outgoing = np.maximum(flux_h[1:], 0.0) + np.maximum(-flux_h[:-1], 0.0)
+    available = (h + dt * source) * dx
+    theta = np.ones_like(h)
+    draining = dt * outgoing > available
+    np.divide(available, dt * outgoing, out=theta, where=draining)
+    theta = np.clip(theta, 0.0, 1.0)
+    donor_left = np.concatenate(([1.0], theta))
+    donor_right = np.concatenate((theta, [1.0]))
+    factor = np.where(flux_h >= 0.0, donor_left, donor_right)
+    return flux_h * factor, flux_q * factor
 
 
 def _cell_values(values, default, n_cells, name):
@@ -157,6 +197,7 @@ def run_model(
     dx_m=None,
     slope=None,
     manning_n=None,
+    bed_elevation_m=None,
     cfl=None,
 ):
     """Run the 1D Saint-Venant equations on a uniform or supplied cell grid.
@@ -175,6 +216,11 @@ def run_model(
         manning_n,
     )
     n_cells = len(x)
+    bed = (
+        _bed_from_slope(x, bed_slope)
+        if bed_elevation_m is None
+        else _cell_values(bed_elevation_m, 0.0, n_cells, "bed_elevation_m")
+    )
     _validate_inputs(T_final, record_interval, n_cells, h_init, q_init)
     cfl_value = CFL if cfl is None else float(cfl)
     if not np.isfinite(cfl_value) or not (0 < cfl_value <= 1):
@@ -186,7 +232,7 @@ def run_model(
         h = 0.01 * np.exp(-((x - center) ** 2) / 0.2)
     else:
         h = np.asarray(h_init, dtype=float).copy()
-    h = np.maximum(h, H_FLOOR)
+    h = np.maximum(h, 0.0)
 
     if q_init is None:
         q = np.zeros(n_cells)
@@ -209,7 +255,9 @@ def run_model(
     t_current = 0.0
 
     while t_current < T_final - 1e-12:
-        flux_h, flux_q, interface_speed = _rusanov_fluxes(h, q, left_inflow, t_current)
+        flux_h, flux_q, interface_speed, correction_left, correction_right = (
+            _rusanov_fluxes(h, q, bed, left_inflow, t_current)
+        )
         cell_speed = np.maximum(interface_speed[:-1], interface_speed[1:])
         moving = cell_speed > 1e-12
         if np.any(moving):
@@ -223,25 +271,36 @@ def run_model(
         h_previous = h.copy()
         q_previous = q.copy()
         source = _evaluate_rainfall(rainfall_function, x, t_current)
+        flux_h, flux_q = _limit_draining_fluxes(
+            h, source, dt, dx, flux_h, flux_q
+        )
 
         h_new = h - (dt / dx) * (flux_h[1:] - flux_h[:-1]) + dt * source
-        q_new = q - (dt / dx) * (flux_q[1:] - flux_q[:-1])
+        q_new = q - (dt / dx) * (
+            (flux_q + correction_left)[1:]
+            - (flux_q + correction_right)[:-1]
+        )
 
-        floor_addition = np.maximum(H_FLOOR - h_new, 0.0)
+        floor_addition = np.maximum(-h_new, 0.0)
         mass_floor_correction += float(np.sum(floor_addition * dx))
-        h_new = np.maximum(h_new, H_FLOOR)
+        h_new = np.maximum(h_new, 0.0)
 
         velocity_new = _velocity(h_new, q_new)
-        friction_coeff = roughness**2 * np.abs(velocity_new) / h_new ** (4.0 / 3.0)
-        q_new = (q_new + dt * g * h_new * bed_slope) / (
-            1.0 + dt * g * friction_coeff
+        friction_coeff = np.zeros_like(h_new)
+        wet = h_new > H_FLOOR
+        friction_coeff[wet] = (
+            roughness[wet] ** 2
+            * np.abs(velocity_new[wet])
+            / h_new[wet] ** (4.0 / 3.0)
         )
+        q_new = q_new / (1.0 + dt * g * friction_coeff)
         q_new[h_new <= H_FLOOR] = 0.0
 
         mass_inflow += float(flux_h[0] * dt)
         mass_outflow += float(flux_h[-1] * dt)
         mass_source += float(np.sum(source * dx) * dt)
 
+        h, q = h_new, q_new
         t_next = t_current + dt
         while (
             next_record_idx < len(record_times)
@@ -254,8 +313,6 @@ def run_model(
             h_history.append(h_previous + fraction * (h_new - h_previous))
             q_history.append(q_previous + fraction * (q_new - q_previous))
             next_record_idx += 1
-
-        h, q = h_new, q_new
         t_current = t_next
 
     return {
@@ -263,6 +320,7 @@ def run_model(
         "dx_m": dx,
         "slope": bed_slope,
         "manning_n": roughness,
+        "bed_elevation_m": bed,
         "times": np.array(times),
         "h_history": np.array(h_history),
         "q_history": np.array(q_history),
@@ -321,6 +379,7 @@ class _SaintVenantSolver:
             dx_m=domain.dx_m,
             slope=domain.slope,
             manning_n=domain.manning_n,
+            bed_elevation_m=getattr(domain, "bed_elevation_m", None),
             cfl=scenario.cfl,
         )
         return SimulationResult(
@@ -332,7 +391,9 @@ class _SaintVenantSolver:
             mass_inflow=raw["mass_inflow"],
             mass_source=raw["mass_source"],
             mass_outflow=raw["mass_outflow"],
+            mass_correction=raw["mass_floor_correction"],
             extra={
+                "bed_elevation_m": raw["bed_elevation_m"],
                 "discharge_history": raw["q_history"],
                 "discharge_initial": raw["q_initial"],
                 "discharge_final": raw["q_final"],

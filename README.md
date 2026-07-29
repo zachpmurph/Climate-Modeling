@@ -43,10 +43,12 @@ forces and flow inertia that the kinematic approximation omits — important nea
 transients, steep wetting fronts, and backwater effects.
 
 **Numerical scheme:** Rusanov (local Lax-Friedrichs) face fluxes over a conservative
-finite-volume stencil, ghost-cell boundaries, explicit forward Euler time stepping,
-operator-split Manning friction (semi-implicit in a single-step sense), adaptive CFL
-time step. The solver runs on the supplied profile grid and applies bed slope,
-Manning roughness, and rainfall independently in every cell.
+finite-volume stencil, hydrostatic reconstruction for well-balanced non-flat beds,
+a conservative draining limiter for wet/dry cells, ghost-cell boundaries, explicit
+forward Euler time stepping, operator-split Manning friction (semi-implicit in a
+single-step sense), and adaptive CFL time steps. The solver runs on the supplied
+profile grid and applies bed elevation, Manning roughness, and rainfall independently
+in every cell.
 
 **Units:** meters and minutes throughout (Manning's $n$ is converted from the
 conventional s/m$^{1/3}$ units before use).
@@ -105,6 +107,7 @@ The rationale for each transition is given alongside the change.
 | **4f — Integrated 2-D shallow water** | Current branch | Added `Domain2D` and a registered `saint_venant_2d` solver. The unified runner extrudes a profile across a requested width, applies spatial terrain, roughness, and rainfall, saves complete fields to NPZ, and produces plan-view area-based flood reports. | The standalone 2-D solver could not consume ingested profiles or participate in shared simulation and reporting workflows. |
 | **4g — Tier 3 numerical verification** | Current branch | Added explicit bed elevation, hydrostatic reconstruction, a conservative draining limiter, finite-state diagnostics, periodic verification boundaries, analytic convergence, non-flat equilibrium, 1-D reduction, radial symmetry, strict mass, and wet/dry gates. Pinned dependencies and clean-checkout CI preserve evidence. | Stability and visual plausibility do not establish PDE accuracy. The solver now has quantitative, reproducible evidence for first-order convergence, well-balancedness, positivity, multidimensional symmetry, and machine-precision conservation within its documented scope. |
 | **4h — Geographic flood screening** | Current branch | Added an interactive topographic map that animates canonical saved depth time series along a reviewed river centerline. The runner can record portable marker and geometry paths in its summary so the map command auto-discovers them. | Existing reports quantify outcomes but do not place a 1-D result in geographic context. The map makes scenario review easier while explicitly retaining the distinction between estimated cross-section width and a terrain-resolving 2-D inundation boundary. |
+| **4i — Observed baseline and well-balanced 1-D dynamics** | Current branch | Added an approved-USGS two-gauge validation case and rebuilt 1-D Saint-Venant bed coupling with hydrostatic reconstruction and a conservative draining limiter. | Exact flat-bed and synthetic tests hid spurious currents over real topography. The observed case now quantifies field error, while the 1-D solver preserves a non-flat lake at rest without mass-adding depth floors. |
 
 ---
 
