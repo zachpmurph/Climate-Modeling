@@ -117,12 +117,28 @@ sand-bed reach.
 A separate post-baseline experiment replaces only the free outlet with 241
 approved downstream gage-height observations converted from the Albuquerque
 NAVD88 gage datum into the model's upstream-datum coordinate system. It is
-stage-conditioned discharge validation, not an independent forecast. NSE rises
-to `0.0666`, RMSE falls from `425.0` to `209.3 m³/min`, and percent bias falls
-to `+0.49%`, while correlation declines to `0.4605`. The predicted peak moves
-from the window end to minute `1065`, still far ahead of the observed minute
-`2310` peak. This isolates the free outlet as a major volume/level error source
-but does not explain the remaining timing and shape error.
+stage-conditioned discharge validation, not an independent forecast. The
+correct gauge observable is the finite-volume downstream boundary flux, not
+`q_history[:, -1]`, which is the last cell's internal discharge and can differ
+when stage is prescribed. With the corrected observable, NSE is `-3.3217`,
+RMSE is `450.4 m³/min`, percent bias is `+4.66%`, and correlation is `0.4025`.
+The stage boundary therefore does not improve on the untouched baseline.
+
+A second post-baseline experiment uses approved USGS field visits at both
+gauges. It sums only channel measurements with reported width and area, derives
+effective bed elevation as water-surface elevation minus hydraulic mean depth,
+infers Manning roughness under an explicit rectangular wetted-perimeter
+assumption, and interpolates width, bed, and roughness between the gauges. It
+scores NSE `-3.4120`, RMSE `455.1 m³/min`, percent bias `+4.81%`, and
+correlation `0.4566`. This is negative structural evidence: independently
+derived static geometry and observed tailwater do not explain the event's
+routing dynamics.
+
+The gage datum itself is only the vertical reference used to turn gage height
+into water-surface elevation. It is not a measured bed elevation. Consequently,
+the difference between two gage datums must not be divided by reach length and
+used as bed slope. The field experiment instead estimates the bed independently
+at each visit from water surface minus measured hydraulic mean depth.
 
 The observed spin-up scores are worse than the former constant-flow warm-up.
 That is useful evidence: repeating the first event flow created an optimistic
@@ -147,6 +163,18 @@ python src/rivers/validation/fetch_stage_control.py \
 
 The stage fetcher rejects non-approved values, unsupported units, incomplete
 warm-up coverage, and provider URLs that differ from the committed source.
+
+Fetch the configured field measurements and rebuild the two-section geometry
+evidence with:
+
+```bash
+python src/rivers/validation/fetch_channel_geometry.py \
+    real_world_rivers/validation/rio_grande_alameda_albuquerque_2023-05-12_stage_geometry.json
+```
+
+This fetcher requires approved mean gage height for the same visit, records the
+resolved provider URLs, and rejects geometry that does not imply a positive
+downstream effective-bed slope.
 
 Run the committed one-at-a-time structural sensitivity matrix with:
 
@@ -271,10 +299,12 @@ uniform reach-gain fraction.
    callable together with `channel_width_m` (or use `--left-inflow` and
    `--hydraulic-geometry` for a constant approximation).
 
-3. **Extract the predicted downstream hydrograph** from the run:
-   `q_history[:, station]` is whole-channel m³/min for Saint-Venant when width is
-   supplied. For the kinematic solver, evaluate its rectangular-section Manning
-   discharge.
+3. **Extract the predicted downstream hydrograph** from the run. At a gauge on
+   the model boundary, use `downstream_flux_history`; this is the signed
+   finite-volume boundary discharge in whole-channel m³/min. For an interior
+   station, `q_history[:, station]` is whole-channel m³/min for Saint-Venant
+   when width is supplied. For the kinematic solver, evaluate its
+   rectangular-section Manning discharge.
 
 4. **Score it** against the observed downstream series:
 

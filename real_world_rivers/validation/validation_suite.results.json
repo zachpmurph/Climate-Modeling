@@ -85,10 +85,10 @@
       "status": "independent_river_structural_test",
       "scores": {
         "nse": 0.9668349182700161,
-        "rmse": 544.4610778711926,
-        "bias": 301.16117245128095,
-        "percent_bias": 9.390600102252398,
-        "pearson_r": 0.997999075427082,
+        "rmse": 544.4610778711923,
+        "bias": 301.1611724512805,
+        "percent_bias": 9.390600102252385,
+        "pearson_r": 0.9979990754270818,
         "n": 97
       },
       "observation_count": {
@@ -101,11 +101,11 @@
       "name": "Truckee River Reno to Sparks \u2014 2017-02-10 high-flow event",
       "status": "independent_river_transfer_test",
       "scores": {
-        "nse": 0.7967391618651831,
-        "rmse": 798.3175630984994,
-        "bias": 100.24744060425671,
-        "percent_bias": 0.6956343170227696,
-        "pearson_r": 0.9197511891596594,
+        "nse": 0.796739161865183,
+        "rmse": 798.3175630984995,
+        "bias": 100.24744060425668,
+        "percent_bias": 0.6956343170227695,
+        "pearson_r": 0.9197511891596589,
         "n": 97
       },
       "observation_count": {
@@ -118,11 +118,11 @@
       "name": "Rio Grande Alameda to Albuquerque \u2014 2023-05-12 event",
       "status": "predeclared_third_river_transfer_test",
       "scores": {
-        "nse": -2.848221673886378,
-        "rmse": 425.0135922028981,
-        "bias": 382.3060972165449,
+        "nse": -2.848221673886379,
+        "rmse": 425.01359220289817,
+        "bias": 382.30609721654497,
         "percent_bias": 4.552275870986581,
-        "pearson_r": 0.5701059690819273,
+        "pearson_r": 0.5701059690819278,
         "n": 193
       },
       "observation_count": {
@@ -133,29 +133,29 @@
   ],
   "score_summary": {
     "nse": {
-      "minimum": -2.848221673886378,
+      "minimum": -2.848221673886379,
       "median": 0.11884399840735205,
       "maximum": 0.9668349182700161
     },
     "rmse": {
-      "minimum": 425.0135922028981,
+      "minimum": 425.01359220289817,
       "median": 4376.91251447752,
       "maximum": 7946.342126666952
     },
     "bias": {
       "minimum": -4843.899813119393,
       "median": -3114.940745193751,
-      "maximum": 382.3060972165449
+      "maximum": 382.30609721654497
     },
     "percent_bias": {
       "minimum": -21.476965312340887,
       "median": -12.53000322289057,
-      "maximum": 9.390600102252398
+      "maximum": 9.390600102252385
     },
     "pearson_r": {
-      "minimum": 0.5701059690819273,
+      "minimum": 0.5701059690819278,
       "median": 0.7788261313541113,
-      "maximum": 0.997999075427082
+      "maximum": 0.9979990754270818
     }
   }
 }

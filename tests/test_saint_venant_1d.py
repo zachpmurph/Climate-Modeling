@@ -94,6 +94,27 @@ def test_prescribed_upstream_inflow_is_accounted(monkeypatch):
     )
 
 
+def test_outflow_boundary_flux_history_matches_transmissive_cell_discharge(monkeypatch):
+    disable_forcing(monkeypatch)
+    h0 = np.full(int(sv.L * 10), 0.2)
+    q0 = np.linspace(0.005, 0.01, h0.size)
+
+    result = sv.run_model(
+        sv.L,
+        0.01,
+        h_init=h0,
+        q_init=q0,
+        left_inflow=0.005,
+        record_interval=0.005,
+    )
+
+    assert len(result["downstream_flux_history"]) == len(result["times"])
+    assert result["downstream_flux_history"] == pytest.approx(
+        result["q_history"][:, -1],
+        abs=1e-14,
+    )
+
+
 def test_wall_downstream_boundary_has_zero_mass_flux(monkeypatch):
     disable_forcing(monkeypatch)
     h0 = np.full(int(sv.L * 10), 0.2)
@@ -110,6 +131,7 @@ def test_wall_downstream_boundary_has_zero_mass_flux(monkeypatch):
     storage_delta = np.sum((result["h_final"] - h0) * dx)
 
     assert result["mass_outflow"] == pytest.approx(0.0, abs=1e-14)
+    assert result["downstream_flux_history"] == pytest.approx(0.0, abs=1e-14)
     assert storage_delta == pytest.approx(
         result["mass_inflow"] + result["mass_floor_correction"],
         abs=1e-12,
@@ -132,6 +154,11 @@ def test_high_downstream_stage_allows_backflow(monkeypatch):
     assert result["mass_inflow"] > 0.0
     assert result["mass_outflow"] == 0.0
     assert result["h_final"][-1] > h0[-1]
+    assert np.all(result["downstream_flux_history"] < 0.0)
+    assert not np.allclose(
+        result["downstream_flux_history"],
+        result["q_history"][:, -1],
+    )
 
 
 @pytest.mark.parametrize(

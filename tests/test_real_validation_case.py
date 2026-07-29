@@ -34,6 +34,14 @@ RIO_STAGE_CASE = CASE.with_name(
 )
 RIO_STAGE_EVIDENCE = RIO_STAGE_CASE.with_suffix(".results.json")
 RIO_STAGE_SERIES = RIO_STAGE_CASE.with_suffix(".csv")
+RIO_GEOMETRY_CASE = CASE.with_name(
+    "rio_grande_alameda_albuquerque_2023-05-12_stage_geometry.json"
+)
+RIO_GEOMETRY_EVIDENCE = RIO_GEOMETRY_CASE.with_suffix(".results.json")
+RIO_GEOMETRY_SERIES = RIO_GEOMETRY_CASE.with_suffix(".csv")
+RIO_CHANNEL_GEOMETRY = CASE.with_name(
+    "rio_grande_alameda_albuquerque_2023-05-12_channel_geometry.csv"
+)
 
 
 def test_committed_two_gauge_observations_are_complete_and_ordered():
@@ -189,11 +197,64 @@ def test_measured_stage_experiment_reproduces_without_replacing_baseline(
         assert actual["scores"][metric] == pytest.approx(
             tracked["scores"][metric], rel=1e-10, abs=1e-10
         )
-    assert actual["scores"]["nse"] > baseline["scores"]["nse"]
-    assert actual["scores"]["rmse"] < baseline["scores"]["rmse"]
-    assert abs(actual["scores"]["percent_bias"]) < abs(
-        baseline["scores"]["percent_bias"]
+    assert actual["assumptions"]["downstream_score_observable"] == (
+        "finite-volume downstream boundary discharge flux"
     )
+    assert actual["scores"]["nse"] < baseline["scores"]["nse"]
+    assert actual["scores"]["rmse"] > baseline["scores"]["rmse"]
+
+
+def test_measured_field_geometry_experiment_is_reproducible(tmp_path):
+    tracked = json.loads(
+        RIO_GEOMETRY_EVIDENCE.read_text(encoding="utf-8")
+    )
+    actual = run_validation_case(
+        RIO_GEOMETRY_CASE,
+        output_path=tmp_path / "rio-stage-geometry-results.json",
+    )
+    with RIO_GEOMETRY_SERIES.open(newline="", encoding="utf-8") as handle:
+        stage_rows = list(csv.DictReader(handle))
+    with RIO_CHANNEL_GEOMETRY.open(
+        newline="", encoding="utf-8"
+    ) as handle:
+        geometry_rows = list(csv.DictReader(handle))
+
+    assert len(stage_rows) == 241
+    assert len(geometry_rows) == 2
+    assert [float(row["active_width_m"]) for row in geometry_rows] == (
+        pytest.approx([102.4128, 68.2752])
+    )
+    assert [float(row["effective_bed_elevation_ft"]) for row in geometry_rows] == (
+        pytest.approx([4995.030357142858, 4950.407142857143])
+    )
+    assert all(
+        float(row["inferred_manning_n_model"]) > 0.0
+        for row in geometry_rows
+    )
+    assert actual["status"] == (
+        "post_baseline_measured_stage_geometry_experiment"
+    )
+    assert actual["assumptions"]["downstream_boundary"] == "stage"
+    assert actual["assumptions"]["field_measurement_geometry"] == (
+        RIO_CHANNEL_GEOMETRY.name
+    )
+    assert actual["assumptions"]["modeled_manning_n_range"] == pytest.approx(
+        {
+            "minimum": 0.000472853714174,
+            "maximum": 0.000526252232655,
+        }
+    )
+    assert "not used" in actual["assumptions"][
+        "configured_manning_n_role"
+    ]
+    for metric in ("nse", "rmse", "bias", "percent_bias", "pearson_r"):
+        assert actual["scores"][metric] == pytest.approx(
+            tracked["scores"][metric], rel=1e-10, abs=1e-10
+        )
+
+    manifest = json.loads(SUITE.read_text(encoding="utf-8"))
+    assert RIO_STAGE_CASE.name not in manifest["cases"]
+    assert RIO_GEOMETRY_CASE.name not in manifest["cases"]
 
 
 def test_validation_case_uses_surveyed_stage_dependent_geometry(tmp_path):
@@ -459,13 +520,38 @@ def test_fetch_stage_control_converts_gage_height_to_model_datum():
 def test_fetch_channel_geometry_aggregates_only_represented_channels():
     config = {
         "field_measurement_sources": [
-            {"station_m": 0.0, "gauge": "USGS-1", "field_visit_id": "a"},
-            {"station_m": 100.0, "gauge": "USGS-2", "field_visit_id": "b"},
+            {
+                "station_m": 0.0,
+                "gauge": "USGS-1",
+                "field_visit_id": "a",
+                "gage_datum_ft": 90.0,
+            },
+            {
+                "station_m": 100.0,
+                "gauge": "USGS-2",
+                "field_visit_id": "b",
+                "gage_datum_ft": 80.0,
+            },
         ]
     }
 
     def requester(url, params=None):
         visit = params["field_visit_id"]
+        if "field-measurements" in url:
+            return {
+                "features": [
+                    {
+                        "properties": {
+                            "field_visit_id": visit,
+                            "parameter_code": "00065",
+                            "reading_type": "MeanGageHeight",
+                            "value": "12",
+                            "unit_of_measure": "ft",
+                            "approval_status": "Approved",
+                        }
+                    }
+                ]
+            }, f"https://example.test/{visit}/field"
         features = [
             {
                 "properties": {
@@ -509,9 +595,24 @@ def test_fetch_channel_geometry_aggregates_only_represented_channels():
     assert float(rows[0]["represented_flow_fraction"]) == pytest.approx(
         100 / 105
     )
+    assert float(rows[0]["water_surface_elevation_ft"]) == pytest.approx(
+        102.0
+    )
+    assert float(rows[0]["effective_bed_elevation_ft"]) == pytest.approx(
+        100.0
+    )
     assert rows[0]["represented_channel_count"] == 1
     assert rows[0]["published_channel_count"] == 2
-    assert set(urls) == {"USGS-1", "USGS-2"}
+    assert float(rows[0]["inferred_manning_n_model"]) > 0.0
+    assert float(rows[0]["inferred_manning_n_si"]) == pytest.approx(
+        60.0 * float(rows[0]["inferred_manning_n_model"])
+    )
+    assert set(urls) == {
+        "USGS-1:channel",
+        "USGS-1:field",
+        "USGS-2:channel",
+        "USGS-2:field",
+    }
 
 
 def test_suite_summary_uses_event_ranges_and_medians():

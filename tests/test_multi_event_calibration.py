@@ -136,6 +136,38 @@ def test_calibration_does_not_scale_reviewed_stage_geometry():
         calibration.parameter_overrides(config, parameters)
 
 
+@pytest.mark.parametrize(
+    ("parameter", "message"),
+    [
+        ("width_scale", "reviewed field"),
+        ("manning_scale", "field-inferred roughness"),
+        ("slope_scale", "field-inferred bed elevation"),
+    ],
+)
+def test_calibration_does_not_scale_field_measurement_geometry(
+    parameter, message
+):
+    config = {
+        "reach": {
+            "manning_n": 0.001,
+            "slope": 0.002,
+            "upstream_width_m": 20.0,
+            "downstream_width_m": 30.0,
+            "field_measurement_geometry": "field_geometry.csv",
+        }
+    }
+    parameters = {
+        "manning_scale": 1.0,
+        "width_scale": 1.0,
+        "slope_scale": 1.0,
+        "lateral_inflow_fraction": 0.0,
+    }
+    parameters[parameter] = 1.2
+
+    with pytest.raises(ValueError, match=message):
+        calibration.parameter_overrides(config, parameters)
+
+
 def test_calibration_does_not_double_count_measured_point_flows():
     config = {
         "point_flow_series": "measured.csv",

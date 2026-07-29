@@ -149,7 +149,8 @@ The rationale for each transition is given alongside the change.
 | **4ah — Measured event controls and withdrawals** | Current branch | Added timestamped downstream-stage and signed point-flow controls to observed-event validation, including warm-up coverage gates and provenance. Point withdrawals now remove proportional momentum, are capped by available water, and work through the production CLI as well as validation. | A free outlet and zero reach exchange force backwater, tributaries, returns, and diversions into fitted width or roughness. Supplying those observations directly reduces compensating parameters and makes cross-event NSE/correlation optimization more physically interpretable. |
 | **4ai — River-balanced calibration** | Current branch | Added optional equal-per-river aggregation of event NSE and correlation plus leave-one-river-out refits that exclude every event from the held river before scoring it. Existing event-balanced manifests retain their original behavior. | Directly averaging all events gives the best-sampled river the most influence and leave-one-event-out can leak reach-specific geometry and bias through sister events. River-balanced fitting measures spatial transfer rather than event count. |
 | **4aj — Multi-river transfer evidence** | Current branch | Precommitted a historical Colorado/Truckee training and validation split with Rio Grande test-only, then retained the complete river-balanced fit and leave-one-river-out evidence. The fit improves training but sharply degrades the second Truckee and Rio Grande events. | A global multiplier can look successful on averaged training scores while failing spatially. The retained negative result shows that estimated width, slope, roughness, and uniform reach gain are not transferable substitutes for measured reach structure and controls. |
-| **4ak — Observed-stage boundary experiment** | Current branch | Added a reproducible approved-USGS gage-height fetch with explicit NAVD88-to-model datum conversion, then ran a separate Rio Grande stage-conditioned discharge experiment without replacing the predeclared baseline. | The free outlet was a suspected structural error. Observed stage halves RMSE and nearly removes bias but does not fix correlation or peak timing, separating boundary-level error from remaining geometry and reach-exchange error. |
+| **4ak — Observed-stage boundary experiment** | Current branch | Added a reproducible approved-USGS gage-height fetch with explicit NAVD88-to-model datum conversion, then ran a separate Rio Grande stage-conditioned discharge experiment without replacing the predeclared baseline. Validation now scores the finite-volume boundary flux rather than the last cell's internal discharge. | Gauge discharge is a boundary flux. The earlier last-cell score made the measured-stage experiment look artificially successful; the corrected result is slightly worse than the free-outlet baseline and rules out tailwater alone as the explanation. |
+| **4al — Field-derived reach geometry experiment** | Current branch | Added reproducible USGS channel- and field-measurement ingestion for active width, area, mean gage height, effective bed elevation, and Manning roughness inferred at both Rio Grande gauges. Width, bed, and roughness are interpolated per cell and protected from calibration scaling. | A gage datum is a vertical reference, not the streambed. Using measured water surface minus hydraulic mean depth prevents datum drop from masquerading as bed slope and tests whether independently derived geometry transfers without fitting downstream discharge. |
 
 ---
 
@@ -569,11 +570,18 @@ the weak dynamics: the model attenuates the observed range and misses the peak
 timing. No Rio Grande parameter was adjusted after seeing this result.
 
 Using approved downstream stage as a measured boundary in a separate
-post-baseline experiment raises Rio Grande NSE to `0.067`, reduces RMSE from
-`425` to `209 m³/min`, and reduces percent bias to `+0.49%`. Correlation falls
-to `0.461`, and the predicted peak remains badly mistimed. This indicates that
-the free outlet explains much of the level/volume error but not the hydrograph
-shape.
+post-baseline experiment produces NSE `-3.322`, RMSE `450 m³/min`, percent bias
+`+4.66%`, and correlation `0.403`. These are finite-volume downstream-boundary
+flux scores. The earlier last-cell discharge comparison was not the gauge
+observable and overstated the benefit of the stage boundary.
+
+A second post-baseline experiment uses USGS field visits at both gauges to
+derive active width, effective bed elevation, and Manning roughness without
+looking at the scored hydrograph. It produces NSE `-3.412`, RMSE `455 m³/min`,
+percent bias `+4.81%`, and correlation `0.457`. The result does not justify
+tuning those measured quantities. It shows that static two-section geometry
+plus observed tailwater is still missing the reach-scale storage, exchange, or
+time-varying sand-bed behavior needed to reproduce this event.
 
 The constrained global calibration selects roughness `0.8×`, width `1.2×`, slope
 `1.2×`, and distributed reach gain `7.5%`. It produces training NSE

@@ -204,6 +204,9 @@ def parameter_overrides(config, parameters):
         cross_section_shape != "rectangular"
         or reach.get("field_measurement_geometry") is not None
     )
+    has_field_measurement_geometry = (
+        reach.get("field_measurement_geometry") is not None
+    )
     if has_reviewed_width and not math.isclose(width_scale, 1.0):
         raise ValueError(
             "width_scale cannot modify reviewed field or stage-dependent "
@@ -217,6 +220,20 @@ def parameter_overrides(config, parameters):
             "lateral_inflow_fraction cannot be fitted when measured "
             "point_flow_series are present; use "
             "lateral_inflow_fraction=[0.0]"
+        )
+    if has_field_measurement_geometry and not math.isclose(
+        float(parameters["manning_scale"]), 1.0
+    ):
+        raise ValueError(
+            "manning_scale cannot modify field-inferred roughness; use "
+            "manning_scale=[1.0] for measured geometry cases"
+        )
+    if has_field_measurement_geometry and not math.isclose(
+        float(parameters["slope_scale"]), 1.0
+    ):
+        raise ValueError(
+            "slope_scale cannot modify field-inferred bed elevation; use "
+            "slope_scale=[1.0] for measured geometry cases"
         )
     overrides = {
         "reach": {

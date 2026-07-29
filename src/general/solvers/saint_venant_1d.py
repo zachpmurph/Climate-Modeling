@@ -901,10 +901,33 @@ def run_model(
 
     h_initial = h.copy()
     q_initial = q.copy()
+
+    def boundary_fluxes(h_state, q_state, time):
+        flux_h = _rusanov_fluxes(
+            h_state,
+            q_state,
+            bed,
+            bottom_width,
+            side_slope,
+            left_inflow,
+            time,
+            downstream_boundary,
+            downstream_stage_m,
+            spatial_order,
+            table_depth,
+            table_width,
+        )[0]
+        return float(flux_h[0]), float(flux_h[-1])
+
     record_times = _record_times(T_final, record_interval)
     times = [0.0]
     h_history = [h.copy()]
     q_history = [q.copy()]
+    initial_upstream_flux, initial_downstream_flux = boundary_fluxes(
+        h, q, 0.0
+    )
+    upstream_flux_history = [initial_upstream_flux]
+    downstream_flux_history = [initial_downstream_flux]
     next_record_idx = 1
 
     mass_inflow = 0.0
@@ -1154,9 +1177,16 @@ def run_model(
             record_time = record_times[next_record_idx]
             fraction = 1.0 if dt == 0 else (record_time - t_current) / dt
             fraction = min(max(fraction, 0.0), 1.0)
+            record_h = h_previous + fraction * (h_new - h_previous)
+            record_q = q_previous + fraction * (q_new - q_previous)
+            upstream_flux, downstream_flux = boundary_fluxes(
+                record_h, record_q, record_time
+            )
             times.append(record_time)
-            h_history.append(h_previous + fraction * (h_new - h_previous))
-            q_history.append(q_previous + fraction * (q_new - q_previous))
+            h_history.append(record_h)
+            q_history.append(record_q)
+            upstream_flux_history.append(upstream_flux)
+            downstream_flux_history.append(downstream_flux)
             next_record_idx += 1
         t_current = t_next
 
@@ -1193,6 +1223,8 @@ def run_model(
         "times": np.array(times),
         "h_history": np.array(h_history),
         "q_history": np.array(q_history),
+        "upstream_flux_history": np.array(upstream_flux_history),
+        "downstream_flux_history": np.array(downstream_flux_history),
         "h_initial": h_initial,
         "h_final": h,
         "q_initial": q_initial,
@@ -1309,6 +1341,10 @@ class _SaintVenantSolver:
                     "cross_section_area_history"
                 ],
                 "discharge_history": raw["q_history"],
+                "upstream_flux_history": raw["upstream_flux_history"],
+                "downstream_flux_history": raw[
+                    "downstream_flux_history"
+                ],
                 "discharge_initial": raw["q_initial"],
                 "discharge_final": raw["q_final"],
                 "mass_rainfall": raw["mass_rainfall"],

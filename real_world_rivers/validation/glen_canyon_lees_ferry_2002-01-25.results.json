@@ -40,6 +40,7 @@
     "point_flow_count": 0,
     "downstream_boundary": "outflow",
     "downstream_stage_series": null,
+    "downstream_score_observable": "finite-volume downstream boundary discharge flux",
     "rainfall": "zero"
   },
   "scores": {

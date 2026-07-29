@@ -356,8 +356,8 @@ def _geometry_source(config_path, reach, key):
     return source
 
 
-def load_field_measurement_width(path, x_m):
-    """Interpolate aggregated USGS active-channel widths onto model cells."""
+def load_field_measurement_geometry(path, x_m):
+    """Interpolate active width and effective bed from USGS field visits."""
     with Path(path).open(newline="", encoding="utf-8-sig") as handle:
         rows = list(csv.DictReader(handle))
     if len(rows) < 2:
@@ -371,17 +371,29 @@ def load_field_measurement_width(path, x_m):
         widths = np.asarray(
             [float(row["active_width_m"]) for row in rows], dtype=float
         )
+        bed_ft = np.asarray(
+            [float(row["effective_bed_elevation_ft"]) for row in rows],
+            dtype=float,
+        )
+        inferred_manning = np.asarray(
+            [float(row["inferred_manning_n_model"]) for row in rows],
+            dtype=float,
+        )
     except (KeyError, TypeError, ValueError) as exc:
         raise ValueError(
             "Field-measurement geometry requires numeric station_m and "
-            "active_width_m"
+            "active_width_m, effective_bed_elevation_ft, and "
+            "inferred_manning_n_model"
         ) from exc
     target = np.asarray(x_m, dtype=float)
     if (
         np.any(~np.isfinite(stations))
         or np.any(~np.isfinite(widths))
+        or np.any(~np.isfinite(bed_ft))
+        or np.any(~np.isfinite(inferred_manning))
         or np.any(np.diff(stations) <= 0.0)
         or np.any(widths <= 0.0)
+        or np.any(inferred_manning <= 0.0)
     ):
         raise ValueError(
             "Field-measurement stations must increase strictly and widths "
@@ -391,7 +403,17 @@ def load_field_measurement_width(path, x_m):
         raise ValueError(
             "Field-measurement geometry must cover the full validation reach"
         )
-    return np.interp(target, stations, widths)
+    bed_m = (bed_ft - bed_ft[0]) * 0.3048
+    interpolated_bed = np.interp(target, stations, bed_m)
+    if np.any(np.diff(interpolated_bed) >= 0.0):
+        raise ValueError(
+            "Effective field-measurement bed must decrease downstream"
+        )
+    return (
+        np.interp(target, stations, widths),
+        interpolated_bed,
+        np.interp(target, stations, inferred_manning),
+    )
 
 
 def load_validation_geometry(config_path, reach, x_m):
@@ -404,6 +426,8 @@ def load_validation_geometry(config_path, reach, x_m):
         "cross_section_depth_m": None,
         "cross_section_top_width_m": None,
         "cross_section_wetted_perimeter_m": None,
+        "bed_elevation_m": None,
+        "field_manning_n": None,
     }
     provenance = {"cross_section_shape": shape}
     if shape == "rectangular":
@@ -418,10 +442,47 @@ def load_validation_geometry(config_path, reach, x_m):
             source = _geometry_source(
                 config_path, reach, "field_measurement_geometry"
             )
-            geometry["channel_width_m"] = load_field_measurement_width(
+            (
+                geometry["channel_width_m"],
+                geometry["bed_elevation_m"],
+                geometry["field_manning_n"],
+            ) = load_field_measurement_geometry(
                 source, x_m
             )
-            provenance["field_measurement_geometry"] = str(field_source)
+            provenance.update(
+                {
+                    "field_measurement_geometry": str(field_source),
+                    "modeled_width_m_range": {
+                        "minimum": float(
+                            np.min(geometry["channel_width_m"])
+                        ),
+                        "maximum": float(
+                            np.max(geometry["channel_width_m"])
+                        ),
+                    },
+                    "modeled_effective_bed_elevation_m_range": {
+                        "minimum": float(
+                            np.min(geometry["bed_elevation_m"])
+                        ),
+                        "maximum": float(
+                            np.max(geometry["bed_elevation_m"])
+                        ),
+                    },
+                    "modeled_manning_n_range": {
+                        "minimum": float(
+                            np.min(geometry["field_manning_n"])
+                        ),
+                        "maximum": float(
+                            np.max(geometry["field_manning_n"])
+                        ),
+                    },
+                    "configured_manning_n_role": (
+                        "fallback required by the generic validation schema; "
+                        "not used when field_measurement_geometry supplies "
+                        "per-cell roughness"
+                    ),
+                }
+            )
         return geometry, provenance
     if shape == "trapezoidal":
         source = _geometry_source(config_path, reach, "hydraulic_geometry")
@@ -517,6 +578,14 @@ def run_validation_case(config_path, *, output_path=None, overrides=None):
     geometry, geometry_provenance = load_validation_geometry(
         config_path, reach, x_m
     )
+    if geometry["bed_elevation_m"] is not None:
+        bed_slope = -np.gradient(geometry["bed_elevation_m"], x_m)
+        if np.any(~np.isfinite(bed_slope)) or np.any(bed_slope <= 0.0):
+            raise ValueError(
+                "Effective field-measurement bed must define positive slope"
+            )
+    if geometry["field_manning_n"] is not None:
+        roughness = geometry["field_manning_n"]
     channel_width = geometry["channel_width_m"]
     boundary = discharge_boundary(upstream_times, upstream_flow)
     lateral_fraction = float(config.get("lateral_inflow_fraction", 0.0))
@@ -621,7 +690,9 @@ def run_validation_case(config_path, *, output_path=None, overrides=None):
     )
     initial_discharge = np.full(cells, initial_q)
     geometry_arguments = {
-        key: value for key, value in geometry.items() if value is not None
+        key: value
+        for key, value in geometry.items()
+        if value is not None and key != "field_manning_n"
     }
     if warmup_min > 0:
         warmup_boundary = (
@@ -686,7 +757,7 @@ def run_validation_case(config_path, *, output_path=None, overrides=None):
     target = (downstream_times >= 0.0) & (downstream_times <= duration)
     target_times = downstream_times[target]
     target_flow = downstream_flow[target]
-    predicted_flow = result["q_history"][:, -1]
+    predicted_flow = result["downstream_flux_history"]
     scores = evaluate_series(
         target_times,
         target_flow,
@@ -742,6 +813,9 @@ def run_validation_case(config_path, *, output_path=None, overrides=None):
                 None
                 if downstream_stage_path is None
                 else str(downstream_stage_source)
+            ),
+            "downstream_score_observable": (
+                "finite-volume downstream boundary discharge flux"
             ),
             "rainfall": "zero",
         },
