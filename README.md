@@ -139,6 +139,7 @@ The rationale for each transition is given alongside the change.
 | **4x — Stage-controlled 2-D outlet** | Current branch | Added scalar, cross-channel, constant, or time-varying downstream water-surface elevation to 2-D Saint-Venant. The boundary permits backflow, lands on forcing breakpoints, preserves non-flat still water, and classifies signed boundary volume consistently. | A transmissive outlet cannot represent tailwater, tides, reservoirs, or downstream backwater. Feeding measured stage prevents the model from forcing those effects into terrain, inflow, or roughness. |
 | **4y — Dry-shoreline equilibrium gate** | Current branch | Added a partially dry, non-flat lake-at-rest verification case with an exposed shoreline. The acceptance gate requires zero shoreline advance, zero depth error, negligible momentum, and no mass-adding floor correction. | Wet/dry dam breaks and fully wet equilibria test different pieces of the scheme. Their combination verifies that topographic balancing does not create water or motion at a stationary dry shoreline. |
 | **4z — Saved 1-D flow histories** | Current branch | The unified runner now writes every recorded 1-D Saint-Venant discharge field to `<run>_discharge.csv`, records its path and units in the run summary, and keeps its time/station grid aligned with depth. | Event calibration and validation target observed gauge flow. Persisting modeled flow makes NSE and correlation scoring reproducible without rerunning the solver or reaching into internal result objects. |
+| **4aa — Compound stage–width sections** | Current branch | Added reviewed, per-cell piecewise-linear stage–width curves to 1-D Saint-Venant. Area, pressure, top width, symmetric-bank wetted perimeter, hydraulic radius, rainfall capture, and depth-from-area are evaluated from the full curve; longitudinal interpolation, provenance, mass balance, and lake-at-rest gates are included. | One trapezoid cannot represent benches or rapid floodplain widening. Stage–width curves let storage and conveyance change at multiple surveyed elevations without fitting those changes into Manning roughness. |
 
 ---
 
@@ -201,7 +202,8 @@ python src/rivers/simulations/run_simulation.py PROFILE --solver SOLVER --t-fina
 | `--width` | — | Total channel-plus-floodplain domain width in metres; required for `saint_venant_2d` |
 | `--cross-cells` | `10` | Number of cells across a 2-D domain |
 | `--hydraulic-geometry` | — | Reviewed `station_m,width_m,bankfull_depth_m` CSV; optional for physical 1-D sections and required for 2-D |
-| `--cross-section-shape` | `rectangular` | 1-D Saint-Venant section shape; `trapezoidal` requires reviewed hydraulic geometry |
+| `--cross-section-shape` | `rectangular` | 1-D Saint-Venant section shape: `rectangular`, `trapezoidal`, or `compound` |
+| `--compound-cross-sections` | — | Reviewed `station_m,depth_m,top_width_m` CSV; required for `--cross-section-shape compound` |
 | `--bottom-width-fraction` | `0.5` | Trapezoid bottom width divided by reviewed bankfull width, in `(0, 1]` |
 | `--floodplain-slope` | `0.02` | Lateral rise/run outside the reviewed bankfull channel |
 | `--output-dir` | `data/real_world_rivers/runs/` | Output directory |
@@ -232,6 +234,23 @@ This writes both `<run>_timeseries.csv` (depth) and
 whole-channel m³/min; without it, discharge is unit-width m²/min. The summary
 records the artifact path and unit so validation tools do not have to infer
 them.
+
+To use multi-bench stage-dependent geometry:
+
+```bash
+python src/rivers/simulations/run_simulation.py \
+    real_world_rivers/tools/example_river_profile.csv \
+    --solver saint_venant \
+    --cross-section-shape compound \
+    --compound-cross-sections \
+      real_world_rivers/tools/example_compound_cross_sections.csv \
+    --t-final 10 \
+    --left-inflow 0.6 \
+    --run-name compound_sv
+```
+
+See [the compound cross-section contract](docs/compound_cross_sections.md)
+before converting survey products.
 
 **Example — 2-D Saint-Venant on a terrain-backed channel and floodplain:**
 ```bash
@@ -560,7 +579,7 @@ channel/floodplain terrain.
 
 ## Next steps
 
-- Replace parameterized trapezoids and synthetic 2-D terrain with surveyed
-  compound cross-sections or reviewed elevation models.
+- Replace symmetric stage–width curves and synthetic 2-D terrain with raw
+  asymmetric cross-section coordinates and reviewed elevation models.
 - Estimate basin-specific joint uncertainty distributions and test ensemble
   coverage on a future event or untouched third river.

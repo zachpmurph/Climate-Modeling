@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 
 from general.solvers.contract import Domain, Domain2D
+from general.solvers import cross_section as tabulated_section
 
 MIN_DEPTH = 0.0
 
@@ -221,6 +222,8 @@ def domain_from_profile(
     bankfull_depth_m=None,
     channel_bottom_width_m=None,
     side_slope_h_to_v=None,
+    cross_section_depth_m=None,
+    cross_section_top_width_m=None,
 ) -> Domain:
     """Build a Domain from a RiverProfile (uses per-cell slope and Manning n)."""
     if (channel_width_m is None) != (bankfull_depth_m is None):
@@ -243,6 +246,27 @@ def domain_from_profile(
         )
     if channel_bottom_width_m is not None and width is None:
         raise ValueError("Trapezoidal geometry requires channel_width_m")
+    if (cross_section_depth_m is None) != (
+        cross_section_top_width_m is None
+    ):
+        raise ValueError(
+            "cross_section_depth_m and cross_section_top_width_m must be "
+            "supplied together"
+        )
+    if cross_section_depth_m is not None and (
+        channel_bottom_width_m is not None or side_slope_h_to_v is not None
+    ):
+        raise ValueError(
+            "Tabulated compound geometry cannot be combined with a trapezoid"
+        )
+    section_depth = None
+    section_width = None
+    if cross_section_depth_m is not None:
+        section_depth, section_width = tabulated_section.validate_table(
+            cross_section_depth_m,
+            cross_section_top_width_m,
+            cell_count=len(profile.station_m),
+        )
     bottom_width = (
         None
         if channel_bottom_width_m is None
@@ -283,6 +307,8 @@ def domain_from_profile(
         bankfull_depth_m=bankfull,
         channel_bottom_width_m=bottom_width,
         side_slope_h_to_v=side_slope,
+        cross_section_depth_m=section_depth,
+        cross_section_top_width_m=section_width,
     )
 
 
@@ -307,6 +333,75 @@ def load_channel_geometry(path, station_m):
         np.interp(stations, geometry_stations, widths),
         np.interp(stations, geometry_stations, bankfull),
     )
+
+
+def load_compound_cross_sections(path, station_m):
+    """Interpolate reviewed stage-width curves onto model stations.
+
+    The CSV contains ``station_m,depth_m,top_width_m``. Every surveyed station
+    must provide the same strictly increasing depth levels beginning at zero.
+    Width is interpolated longitudinally at each depth level.
+    """
+    with Path(path).open(newline="", encoding="utf-8-sig") as handle:
+        rows = list(csv.DictReader(handle))
+    if not rows:
+        raise ValueError("Compound cross-section CSV is empty")
+    grouped = {}
+    try:
+        for row in rows:
+            station = float(row["station_m"])
+            depth = float(row["depth_m"])
+            width = float(row["top_width_m"])
+            grouped.setdefault(station, []).append((depth, width))
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError(
+            "Compound cross-section CSV must contain numeric station_m, "
+            "depth_m, and top_width_m columns"
+        ) from exc
+
+    survey_stations = np.asarray(sorted(grouped), dtype=float)
+    if (
+        len(survey_stations) < 2
+        or np.any(~np.isfinite(survey_stations))
+        or np.any(np.diff(survey_stations) <= 0.0)
+    ):
+        raise ValueError(
+            "Compound cross-sections require at least two finite, distinct "
+            "survey stations"
+        )
+
+    common_depth = None
+    survey_widths = []
+    for station in survey_stations:
+        samples = sorted(grouped[float(station)])
+        depths = np.asarray([sample[0] for sample in samples], dtype=float)
+        widths = np.asarray([sample[1] for sample in samples], dtype=float)
+        if len(np.unique(depths)) != len(depths):
+            raise ValueError(
+                f"Compound section at station {station:g} has duplicate depths"
+            )
+        if common_depth is None:
+            common_depth = depths
+        elif not np.array_equal(depths, common_depth):
+            raise ValueError(
+                "Every compound section must use identical depth levels"
+            )
+        survey_widths.append(widths)
+
+    survey_widths = np.asarray(survey_widths, dtype=float)
+    tabulated_section.validate_table(
+        common_depth, survey_widths, cell_count=len(survey_stations)
+    )
+    target_stations = np.asarray(station_m, dtype=float)
+    interpolated_widths = np.column_stack(
+        [
+            np.interp(
+                target_stations, survey_stations, survey_widths[:, level]
+            )
+            for level in range(len(common_depth))
+        ]
+    )
+    return common_depth, interpolated_widths
 
 
 def domain2d_from_profile(

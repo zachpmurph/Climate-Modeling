@@ -15,6 +15,7 @@ from general.solvers.profile import (
     domain2d_from_profile,
     domain_from_profile,
     load_channel_geometry,
+    load_compound_cross_sections,
     load_profile,
     resample_profile,
 )
@@ -147,8 +148,8 @@ def parse_args(argv=None):
         type=float,
         default=0.0,
         help=(
-            "Constant upstream flow: m^3/min with --hydraulic-geometry, "
-            "legacy unit-width m^2/min otherwise"
+            "Constant upstream flow: m^3/min with reviewed cross-section "
+            "geometry, legacy unit-width m^2/min otherwise"
         ),
     )
     p.add_argument(
@@ -237,9 +238,17 @@ def parse_args(argv=None):
     )
     p.add_argument(
         "--cross-section-shape",
-        choices=("rectangular", "trapezoidal"),
+        choices=("rectangular", "trapezoidal", "compound"),
         default="rectangular",
-        help="1-D channel shape used with --hydraulic-geometry (default: rectangular)",
+        help="1-D channel shape (default: rectangular)",
+    )
+    p.add_argument(
+        "--compound-cross-sections",
+        type=Path,
+        help=(
+            "Reviewed station/depth/top-width CSV for stage-dependent "
+            "compound 1-D sections"
+        ),
     )
     p.add_argument(
         "--bottom-width-fraction",
@@ -327,6 +336,30 @@ def main(argv=None):
             "error: trapezoidal cross-sections require --solver saint_venant "
             "and --hydraulic-geometry"
         )
+    if args.cross_section_shape == "compound" and (
+        args.solver != "saint_venant"
+        or args.compound_cross_sections is None
+    ):
+        raise SystemExit(
+            "error: compound cross-sections require --solver saint_venant "
+            "and --compound-cross-sections"
+        )
+    if (
+        args.compound_cross_sections is not None
+        and args.cross_section_shape != "compound"
+    ):
+        raise SystemExit(
+            "error: --compound-cross-sections requires "
+            "--cross-section-shape compound"
+        )
+    if (
+        args.compound_cross_sections is not None
+        and args.hydraulic_geometry is not None
+    ):
+        raise SystemExit(
+            "error: use compound cross-sections or parameterized hydraulic "
+            "geometry, not both"
+        )
     if not np.isfinite(args.bottom_width_fraction) or not (
         0.0 < args.bottom_width_fraction <= 1.0
     ):
@@ -363,6 +396,7 @@ def main(argv=None):
         args.lateral_inflow_series,
         args.lateral_inflow_points,
         args.downstream_stage_series,
+        args.compound_cross_sections,
     ):
         if forcing_path is not None and not forcing_path.is_file():
             raise SystemExit(f"error: forcing input does not exist: {forcing_path}")
@@ -437,7 +471,21 @@ def main(argv=None):
             raise SystemExit(
                 "error: --width is only valid with saint_venant_2d"
             )
-        if args.hydraulic_geometry is None:
+        if args.compound_cross_sections is not None:
+            try:
+                section_depth, section_width = (
+                    load_compound_cross_sections(
+                        args.compound_cross_sections, profile.station_m
+                    )
+                )
+            except ValueError as exc:
+                raise SystemExit(f"error: {exc}") from exc
+            domain = domain_from_profile(
+                profile,
+                cross_section_depth_m=section_depth,
+                cross_section_top_width_m=section_width,
+            )
+        elif args.hydraulic_geometry is None:
             domain = domain_from_profile(profile)
         else:
             if not args.hydraulic_geometry.is_file():
@@ -627,9 +675,14 @@ def main(argv=None):
         )
 
     # Mass balance error
-    physical_volume = is_2d or (
-        not is_2d and result.domain.channel_width_m is not None
+    has_physical_section = (
+        not is_2d
+        and (
+            result.domain.channel_width_m is not None
+            or result.domain.cross_section_top_width_m is not None
+        )
     )
+    physical_volume = is_2d or has_physical_section
     if is_2d:
         storage_change = float(
             np.sum(
@@ -671,7 +724,7 @@ def main(argv=None):
             if discharge_path is None
             else (
                 "m3_per_min"
-                if result.domain.channel_width_m is not None
+                if has_physical_section
                 else "m2_per_min"
             )
         ),
@@ -735,13 +788,45 @@ def main(argv=None):
             "floodplain_slope": args.floodplain_slope,
             "bankfull_depth_m": bankfull_depth.tolist(),
         }
-    elif result.domain.channel_width_m is not None:
+    elif (
+        result.domain.channel_width_m is not None
+        or result.domain.cross_section_top_width_m is not None
+    ):
         summary["cross_section"] = {
-            "hydraulic_geometry": _portable_path(args.hydraulic_geometry),
-            "channel_width_m": result.domain.channel_width_m.tolist(),
-            "bankfull_depth_m": result.domain.bankfull_depth_m.tolist(),
             "shape": result.extra.get("cross_section_shape", "rectangular"),
         }
+        if result.domain.channel_width_m is not None:
+            summary["cross_section"].update(
+                {
+                    "hydraulic_geometry": _portable_path(
+                        args.hydraulic_geometry
+                    ),
+                    "channel_width_m": (
+                        result.domain.channel_width_m.tolist()
+                    ),
+                    "bankfull_depth_m": (
+                        result.domain.bankfull_depth_m.tolist()
+                    ),
+                }
+            )
+        if result.domain.cross_section_top_width_m is not None:
+            summary["cross_section"].update(
+                {
+                    "compound_cross_sections": _portable_path(
+                        args.compound_cross_sections
+                    ),
+                    "depth_levels_m": (
+                        result.domain.cross_section_depth_m.tolist()
+                    ),
+                    "top_width_m": (
+                        result.domain.cross_section_top_width_m.tolist()
+                    ),
+                    "above_reviewed_depth": (
+                        "vertical_wall_extrapolation"
+                    ),
+                    "bank_symmetry_assumption": True,
+                }
+            )
         if result.domain.channel_bottom_width_m is not None:
             summary["cross_section"]["channel_bottom_width_m"] = (
                 result.domain.channel_bottom_width_m.tolist()

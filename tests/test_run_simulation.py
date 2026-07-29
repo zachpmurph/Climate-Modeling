@@ -14,6 +14,9 @@ from rivers.simulations.ingest_to_simulate import profile_to_domain_scenario
 
 PROFILE_PATH = "real_world_rivers/tools/example_river_profile.csv"
 GEOMETRY_PATH = "real_world_rivers/tools/example_geometry.csv"
+COMPOUND_GEOMETRY_PATH = (
+    "real_world_rivers/tools/example_compound_cross_sections.csv"
+)
 
 
 def _make_scenario(**kwargs):
@@ -392,6 +395,45 @@ def test_runner_saves_saint_venant_discharge_history(tmp_path):
     )
     assert summary["discharge_path"] == str(discharge_path)
     assert summary["discharge_unit"] == "m3_per_min"
+
+
+def test_runner_loads_compound_cross_sections_and_records_assumptions(
+    tmp_path,
+):
+    output_dir = tmp_path / "runs"
+    run_simulation.main(
+        [
+            PROFILE_PATH,
+            "--solver",
+            "saint_venant",
+            "--cross-section-shape",
+            "compound",
+            "--compound-cross-sections",
+            COMPOUND_GEOMETRY_PATH,
+            "--left-inflow",
+            "0.6",
+            "--t-final",
+            "0.01",
+            "--output-dir",
+            str(output_dir),
+            "--run-name",
+            "compound",
+        ]
+    )
+
+    summary = json.loads(
+        (output_dir / "compound_summary.json").read_text(encoding="utf-8")
+    )
+    section = summary["cross_section"]
+    assert section["shape"] == "compound_tabulated"
+    assert section["compound_cross_sections"] == COMPOUND_GEOMETRY_PATH
+    assert section["depth_levels_m"] == [0.0, 1.0, 2.0, 4.0]
+    assert section["top_width_m"][1] == [9.0, 15.0, 35.0, 75.0]
+    assert section["above_reviewed_depth"] == "vertical_wall_extrapolation"
+    assert section["bank_symmetry_assumption"] is True
+    assert summary["mass_unit"] == "m3"
+    assert summary["discharge_unit"] == "m3_per_min"
+    assert abs(summary["mass_balance_error"]) < 1e-9
 
 
 def test_runner_builds_trapezoidal_1d_geometry_and_balances_volume(tmp_path):

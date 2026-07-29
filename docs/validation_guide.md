@@ -181,15 +181,19 @@ calibrated uniform reach-gain fraction.
   unit errors. Roughness is emitted in the meters-and-minutes convention
   (see [ingestion_integration_requests.md](ingestion_integration_requests.md)); a
   large bias is a signal to investigate geometry/inputs, not to re-fit *n*.
-- The 1-D solver supports rectangular and simple trapezoidal sections, but the
+- The 1-D solver supports rectangular, trapezoidal, and tabulated compound
+  stage–width sections, but the
   committed Colorado calibration remains rectangular because its bottom width
-  has not been independently measured or reviewed. Do not invent that value and
+  and stage–width curve have not been independently measured or reviewed. Do
+  not invent those values and
   rerun calibration: doing so would add another compensating parameter to an
   already boundary-limited fit.
-- Simple trapezoids still omit compound floodplain conveyance and irregular
-  surveyed geometry. Measured tributary hydrographs are also absent from the
-  committed case. The calibrated lateral-flow fraction is an effective
-  distributed gain, not a substitute for those observations.
+- Tabulated sections represent storage and conveyance transitions, but their
+  wetted perimeter currently assumes symmetric banks and they do not retain raw
+  asymmetric survey coordinates or disconnected floodplain pools. Measured
+  tributary hydrographs are also absent from the committed Colorado case. The
+  calibrated lateral-flow fraction is an effective distributed gain, not a
+  substitute for those observations.
 - USGS parameter `00065` is gage height, but it becomes a model water-surface
   elevation only after applying the station's gage datum consistently with the
   model bed datum. Never pass raw gage height as absolute stage without that

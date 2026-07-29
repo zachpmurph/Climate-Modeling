@@ -410,6 +410,91 @@ def test_trapezoidal_rainfall_and_lateral_inflow_conserve_volume():
     )
 
 
+def test_varying_compound_sections_preserve_nonflat_lake_at_rest():
+    x_m = np.linspace(0.0, 1000.0, 101)
+    dx_m = np.full_like(x_m, 1000.0 / len(x_m))
+    slope = np.full_like(x_m, 0.001)
+    bed = -slope * x_m
+    depth = 2.0 - bed
+    levels = np.array([0.0, 0.5, 1.5, 3.5])
+    phase = np.sin(np.linspace(0.0, np.pi, len(x_m)))
+    width = np.column_stack(
+        (
+            8.0 + phase,
+            12.0 + 2.0 * phase,
+            30.0 + 5.0 * phase,
+            70.0 + 8.0 * phase,
+        )
+    )
+
+    result = sv.run_model(
+        1000.0,
+        0.1,
+        h_init=depth,
+        q_init=np.zeros_like(depth),
+        left_inflow=0.0,
+        rainfall=lambda x, t: np.zeros_like(x),
+        x_m=x_m,
+        dx_m=dx_m,
+        slope=slope,
+        manning_n=np.full_like(x_m, 0.001),
+        bed_elevation_m=bed,
+        cross_section_depth_m=levels,
+        cross_section_top_width_m=width,
+        spatial_order=2,
+        cfl=0.4,
+    )
+
+    assert np.max(np.abs(result["h_final"] - depth)) < 1e-12
+    assert np.max(np.abs(result["q_final"])) < 1e-10
+    assert result["cross_section_shape"] == "compound_tabulated"
+
+
+def test_compound_section_rainfall_and_lateral_inflow_conserve_volume():
+    x_m = np.array([0.0, 100.0, 250.0])
+    dx_m = np.array([50.0, 125.0, 100.0])
+    levels = np.array([0.0, 0.5, 1.0, 2.0])
+    widths = np.array(
+        [
+            [8.0, 10.0, 20.0, 40.0],
+            [9.0, 13.0, 25.0, 45.0],
+            [12.0, 14.0, 30.0, 50.0],
+        ]
+    )
+    rainfall = 1e-5
+    lateral = 0.1
+    duration = 0.02
+
+    result = sv.run_model(
+        float(np.sum(dx_m)),
+        duration,
+        h_init=np.full(3, 0.75),
+        q_init=np.zeros(3),
+        left_inflow=0.0,
+        rainfall=lambda x, t: np.full_like(x, rainfall),
+        lateral_inflow=lambda x, t: np.full_like(x, lateral),
+        x_m=x_m,
+        dx_m=dx_m,
+        slope=np.zeros(3),
+        manning_n=np.full(3, 0.001),
+        bed_elevation_m=np.zeros(3),
+        cross_section_depth_m=levels,
+        cross_section_top_width_m=widths,
+        downstream_boundary="wall",
+    )
+
+    areas = result["cross_section_area_history"]
+    storage_delta = float(np.sum((areas[-1] - areas[0]) * dx_m))
+    assert storage_delta == pytest.approx(
+        result["mass_inflow"]
+        + result["mass_source"]
+        - result["mass_outflow"]
+        + result["mass_floor_correction"],
+        rel=1e-10,
+        abs=1e-11,
+    )
+
+
 def test_second_order_reconstruction_preserves_varying_width_lake():
     x_m = np.linspace(0.0, 1000.0, 101)
     dx_m = np.full_like(x_m, 1000.0 / len(x_m))

@@ -23,6 +23,8 @@ class Domain:
     bankfull_depth_m: np.ndarray | None = None  # reviewed reference depth, shape (nx,)
     channel_bottom_width_m: np.ndarray | None = None  # trapezoid bottom width, shape (nx,)
     side_slope_h_to_v: np.ndarray | None = None  # trapezoid side slope per bank, shape (nx,)
+    cross_section_depth_m: np.ndarray | None = None  # common stage-curve depths, shape (nlevel,)
+    cross_section_top_width_m: np.ndarray | None = None  # compound width curves, shape (nx, nlevel)
 
 
 @dataclass(frozen=True)
