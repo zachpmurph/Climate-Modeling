@@ -158,6 +158,16 @@ objective is `0.7 × mean NSE + 0.3 × mean correlation`, less penalties of
 `0.15 × (mean NSE - worst-event NSE)`. Event-specific parameter fitting is
 prohibited.
 
+For a multi-river manifest, set `objective.balance_by` to `river` and identify
+each event with `case.river`. The objective first averages NSE and correlation
+within each river, then weights the river means equally. This prevents a reach
+with many conveniently available events from dominating a reach with only one.
+Set `cross_group_validation.enabled` to `true` for leave-one-river-out refits:
+all events from one river are removed from parameter selection, the remaining
+rivers are fitted, and every event from the omitted river is scored once.
+This is a stronger transfer test than leave-one-event-out when events on the
+same reach share geometry, controls, and measurement biases.
+
 The selected effective parameters are Manning roughness `0.8×`, rectangular
 width `1.2×`, slope `1.2×`, and uniformly distributed reach gain equal to `7.5%`
 of observed upstream flow. Scores are:

@@ -57,6 +57,32 @@ def test_objective_reports_worst_event_and_correlation_penalties():
     ) == pytest.approx(components["objective"])
 
 
+def test_group_balanced_objective_gives_each_river_equal_weight():
+    scores = [
+        {"nse": 1.0, "pearson_r": 0.8},
+        {"nse": 1.0, "pearson_r": 0.8},
+        {"nse": -1.0, "pearson_r": 0.4},
+    ]
+
+    components = calibration.objective_components(
+        scores,
+        group_labels=["River A", "River A", "River B"],
+        nse_weight=1.0,
+        correlation_weight=0.0,
+        robustness_penalty=0.0,
+    )
+
+    assert components["mean_nse"] == pytest.approx(0.0)
+    assert components["aggregation"] == "equal_weight_per_group"
+    assert components["group_count"] == 2
+    assert components["group_summary"][0] == {
+        "group": "River A",
+        "event_count": 2,
+        "mean_nse": 1.0,
+        "mean_correlation": 0.8,
+    }
+
+
 def test_parameter_overrides_apply_one_global_physical_scaling():
     config = {
         "reach": {
@@ -352,6 +378,103 @@ def test_leave_one_event_out_refits_without_held_event(
     ] == pytest.approx(0.1)
     assert folds["train-b.json"]["fit_events"] == ["train-a.json"]
     assert folds["train-b.json"]["selected_parameters"][
+        "lateral_inflow_fraction"
+    ] == pytest.approx(0.0)
+
+
+def test_leave_one_group_out_refits_without_any_held_river(
+    tmp_path, monkeypatch
+):
+    reach = {
+        "manning_n": 0.001,
+        "slope": 0.002,
+        "upstream_width_m": 20.0,
+        "downstream_width_m": 20.0,
+    }
+    rivers = {
+        "a-1.json": "River A",
+        "a-2.json": "River A",
+        "b-1.json": "River B",
+        "b-2.json": "River B",
+    }
+    for name, river in rivers.items():
+        path = tmp_path / name
+        path.write_text(
+            json.dumps({"case": {"river": river}, "reach": reach}),
+            encoding="utf-8",
+        )
+        path.with_suffix(".results.json").write_text(
+            json.dumps(
+                {
+                    "scores": {
+                        "nse": 0.0,
+                        "rmse": 1.0,
+                        "bias": 0.0,
+                        "percent_bias": 0.0,
+                        "pearson_r": 0.5,
+                        "n": 2,
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+    manifest = {
+        "suite": {"name": "river transfer"},
+        "split_policy": "training only",
+        "split": {
+            "training": list(rivers),
+            "validation": [],
+            "test": [],
+        },
+        "objective": {
+            "nse_weight": 1.0,
+            "correlation_weight": 0.0,
+            "robustness_penalty": 0.0,
+            "balance_by": "river",
+        },
+        "cross_group_validation": {"enabled": True, "passes": 1},
+        "parameter_grid": {
+            "manning_scale": [1.0],
+            "width_scale": [1.0],
+            "slope_scale": [1.0],
+            "lateral_inflow_fraction": [0.0, 0.1],
+        },
+    }
+    manifest_path = tmp_path / "calibration.json"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    def fake_run(config_path, *, output_path, overrides):
+        fraction = overrides["lateral_inflow_fraction"]
+        river = rivers[config_path.name]
+        nse = 1.0 - fraction if river == "River A" else 10.0 * fraction
+        return {
+            "scores": {
+                "nse": nse,
+                "rmse": 1.0,
+                "bias": 0.0,
+                "percent_bias": 0.0,
+                "pearson_r": 0.5,
+                "n": 2,
+            }
+        }
+
+    monkeypatch.setattr(calibration, "run_validation_case", fake_run)
+    evidence = calibration.calibrate_suite(
+        manifest_path,
+        output_path=tmp_path / "result.json",
+        passes=1,
+    )
+
+    diagnostics = evidence["leave_one_group_out"]
+    assert diagnostics["balance_by"] == "river"
+    assert diagnostics["fold_count"] == 2
+    folds = {fold["held_out_group"]: fold for fold in diagnostics["folds"]}
+    assert folds["River A"]["fit_events"] == ["b-1.json", "b-2.json"]
+    assert folds["River A"]["selected_parameters"][
+        "lateral_inflow_fraction"
+    ] == pytest.approx(0.1)
+    assert folds["River B"]["fit_events"] == ["a-1.json", "a-2.json"]
+    assert folds["River B"]["selected_parameters"][
         "lateral_inflow_fraction"
     ] == pytest.approx(0.0)
 

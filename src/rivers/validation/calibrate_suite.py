@@ -29,6 +29,7 @@ PARAMETER_DEFAULTS = {
 def composite_objective(
     event_scores,
     *,
+    group_labels=None,
     nse_weight=0.7,
     correlation_weight=0.3,
     robustness_penalty=0.1,
@@ -38,6 +39,7 @@ def composite_objective(
     """Reward event skill while penalizing inconsistent or weak events."""
     return objective_components(
         event_scores,
+        group_labels=group_labels,
         nse_weight=nse_weight,
         correlation_weight=correlation_weight,
         robustness_penalty=robustness_penalty,
@@ -51,6 +53,7 @@ def composite_objective(
 def objective_components(
     event_scores,
     *,
+    group_labels=None,
     nse_weight=0.7,
     correlation_weight=0.3,
     robustness_penalty=0.1,
@@ -70,15 +73,80 @@ def objective_components(
         raise ValueError("Objective weights must be non-negative")
     if not math.isclose(nse_weight + correlation_weight, 1.0):
         raise ValueError("NSE and correlation weights must sum to 1")
-    nse = np.asarray([score["nse"] for score in event_scores], dtype=float)
-    correlation = np.asarray(
+    event_nse = np.asarray(
+        [score["nse"] for score in event_scores], dtype=float
+    )
+    event_correlation = np.asarray(
         [score["pearson_r"] for score in event_scores], dtype=float
     )
-    if not np.all(np.isfinite(nse)) or not np.all(np.isfinite(correlation)):
+    if not np.all(np.isfinite(event_nse)) or not np.all(
+        np.isfinite(event_correlation)
+    ):
         return {
             "objective": -math.inf,
             "finite": False,
         }
+    group_summary = None
+    if group_labels is None:
+        nse = event_nse
+        correlation = event_correlation
+    else:
+        if len(group_labels) != len(event_scores):
+            raise ValueError(
+                "group_labels must contain one label per event score"
+            )
+        groups = []
+        for label in group_labels:
+            label = str(label).strip()
+            if label not in groups:
+                groups.append(label)
+        if not groups or any(not label for label in groups):
+            raise ValueError("group_labels must be non-empty")
+        nse = np.asarray(
+            [
+                np.mean(
+                    event_nse[
+                        np.asarray(
+                            [
+                                str(value).strip() == group
+                                for value in group_labels
+                            ]
+                        )
+                    ]
+                )
+                for group in groups
+            ],
+            dtype=float,
+        )
+        correlation = np.asarray(
+            [
+                np.mean(
+                    event_correlation[
+                        np.asarray(
+                            [
+                                str(value).strip() == group
+                                for value in group_labels
+                            ]
+                        )
+                    ]
+                )
+                for group in groups
+            ],
+            dtype=float,
+        )
+        group_summary = [
+            {
+                "group": group,
+                "event_count": sum(
+                    str(value).strip() == group for value in group_labels
+                ),
+                "mean_nse": float(group_nse),
+                "mean_correlation": float(group_correlation),
+            }
+            for group, group_nse, group_correlation in zip(
+                groups, nse, correlation
+            )
+        ]
     mean_nse = float(np.mean(nse))
     mean_correlation = float(np.mean(correlation))
     nse_spread = float(np.std(nse))
@@ -94,7 +162,7 @@ def objective_components(
         correlation_robustness_penalty * correlation_spread
     )
     worst_event_penalty = worst_event_weight * worst_event_gap
-    return {
+    components = {
         "objective": float(
             mean_skill
             - nse_spread_penalty
@@ -115,6 +183,15 @@ def objective_components(
         ),
         "worst_event_penalty": float(worst_event_penalty),
     }
+    if group_summary is not None:
+        components.update(
+            {
+                "aggregation": "equal_weight_per_group",
+                "group_count": len(group_summary),
+                "group_summary": group_summary,
+            }
+        )
+    return components
 
 
 def parameter_overrides(config, parameters):
@@ -305,6 +382,22 @@ def _improvement(baseline, calibrated):
     return comparison
 
 
+def _group_labels(configs, paths, balance_by):
+    if balance_by is None:
+        return None
+    labels = []
+    for path in paths:
+        case = configs[path].get("case", {})
+        label = case.get(balance_by)
+        if label is None or not str(label).strip():
+            raise ValueError(
+                f"{path} is missing case.{balance_by} required by the "
+                "balanced objective"
+            )
+        labels.append(str(label))
+    return labels
+
+
 def _leave_one_training_event_out(
     *,
     manifest,
@@ -312,6 +405,7 @@ def _leave_one_training_event_out(
     training_paths,
     configs,
     objective_config,
+    balance_by,
     temp_root,
 ):
     """Refit on all-but-one training event and score the omitted event."""
@@ -367,6 +461,9 @@ def _leave_one_training_event_out(
                 )
             components = objective_components(
                 [event["scores"] for event in events],
+                group_labels=_group_labels(
+                    configs, fold_training, balance_by
+                ),
                 **objective_config,
             )
             evaluation = {
@@ -430,6 +527,147 @@ def _leave_one_training_event_out(
     }
 
 
+def _leave_one_group_out(
+    *,
+    manifest,
+    manifest_path,
+    training_paths,
+    configs,
+    objective_config,
+    balance_by,
+    temp_root,
+):
+    """Refit without one river/group, then score that group once."""
+    settings = manifest.get("cross_group_validation", {})
+    enabled = bool(settings.get("enabled", False))
+    if not enabled:
+        return {
+            "enabled": False,
+            "interpretation": "Leave-one-group-out refits were not requested.",
+            "folds": [],
+        }
+    if balance_by is None:
+        raise ValueError(
+            "cross_group_validation requires objective.balance_by"
+        )
+    labels = _group_labels(configs, training_paths, balance_by)
+    groups = list(dict.fromkeys(labels))
+    if len(groups) < 2:
+        raise ValueError(
+            "Leave-one-group-out validation needs at least two training groups"
+        )
+    passes = int(settings.get("passes", 1))
+    if passes < 1:
+        raise ValueError("cross_group_validation passes must be at least 1")
+
+    folds = []
+    for fold_index, held_out_group in enumerate(groups):
+        fit_paths = [
+            path
+            for path, label in zip(training_paths, labels)
+            if label != held_out_group
+        ]
+        held_out_paths = [
+            path
+            for path, label in zip(training_paths, labels)
+            if label == held_out_group
+        ]
+        cache = {}
+
+        def evaluate_fold(parameters):
+            key = tuple(sorted(parameters.items()))
+            if key in cache:
+                return cache[key]
+            events = []
+            for event_index, relative_path in enumerate(fit_paths):
+                result = run_validation_case(
+                    manifest_path.parent / relative_path,
+                    output_path=(
+                        temp_root
+                        / f"logo-{fold_index}-train-{len(cache)}-"
+                        f"{event_index}.json"
+                    ),
+                    overrides=parameter_overrides(
+                        configs[relative_path], parameters
+                    ),
+                )
+                events.append(
+                    {
+                        "config": relative_path,
+                        "scores": result["scores"],
+                    }
+                )
+            components = objective_components(
+                [event["scores"] for event in events],
+                group_labels=_group_labels(
+                    configs, fit_paths, balance_by
+                ),
+                **objective_config,
+            )
+            evaluation = {
+                "parameters": dict(parameters),
+                "objective": components["objective"],
+                "objective_components": components,
+                "training_events": events,
+            }
+            cache[key] = evaluation
+            return evaluation
+
+        selected, trace = coordinate_search(
+            evaluate_fold,
+            manifest["parameter_grid"],
+            passes=passes,
+        )
+        held_out_events = []
+        for event_index, relative_path in enumerate(held_out_paths):
+            result = run_validation_case(
+                manifest_path.parent / relative_path,
+                output_path=(
+                    temp_root
+                    / f"logo-{fold_index}-held-{event_index}.json"
+                ),
+                overrides=parameter_overrides(
+                    configs[relative_path], selected["parameters"]
+                ),
+            )
+            held_out_events.append(
+                {
+                    "config": relative_path,
+                    "scores": result["scores"],
+                }
+            )
+        folds.append(
+            {
+                "held_out_group": held_out_group,
+                "held_out_events": held_out_events,
+                "fit_events": fit_paths,
+                "selected_parameters": selected["parameters"],
+                "fit_objective": selected["objective"],
+                "fit_objective_components": selected[
+                    "objective_components"
+                ],
+                "held_out_summary": _score_summary(held_out_events),
+                "parameter_diagnostics": parameter_diagnostics(
+                    manifest["parameter_grid"],
+                    selected["parameters"],
+                ),
+                "unique_parameter_sets_evaluated": len(cache),
+                "trace": trace,
+            }
+        )
+    return {
+        "enabled": True,
+        "balance_by": balance_by,
+        "passes": passes,
+        "fold_count": len(folds),
+        "interpretation": (
+            "Each fold selected global parameters without any event from the "
+            "reported group, then scored every held-out event once."
+        ),
+        "folds": folds,
+    }
+
+
 def calibrate_suite(manifest_path, *, output_path=None, passes=2):
     """Optimize global parameters on training events and evaluate untouched splits."""
     manifest_path = Path(manifest_path)
@@ -449,7 +687,8 @@ def calibrate_suite(manifest_path, *, output_path=None, passes=2):
         path = manifest_path.parent / relative_path
         configs[relative_path] = json.loads(path.read_text(encoding="utf-8"))
 
-    objective_config = manifest["objective"]
+    objective_config = dict(manifest["objective"])
+    balance_by = objective_config.pop("balance_by", None)
     cache = {}
     with tempfile.TemporaryDirectory(prefix="climate-model-calibration-") as temp_dir:
         temp_root = Path(temp_dir)
@@ -476,6 +715,9 @@ def calibrate_suite(manifest_path, *, output_path=None, passes=2):
                 )
             components = objective_components(
                 [event["scores"] for event in events],
+                group_labels=_group_labels(
+                    configs, training_paths, balance_by
+                ),
                 **objective_config,
             )
             evaluation = {
@@ -521,6 +763,16 @@ def calibrate_suite(manifest_path, *, output_path=None, passes=2):
             training_paths=training_paths,
             configs=configs,
             objective_config=objective_config,
+            balance_by=balance_by,
+            temp_root=temp_root,
+        )
+        leave_one_group_out = _leave_one_group_out(
+            manifest=manifest,
+            manifest_path=manifest_path,
+            training_paths=training_paths,
+            configs=configs,
+            objective_config=objective_config,
+            balance_by=balance_by,
             temp_root=temp_root,
         )
 
@@ -533,7 +785,14 @@ def calibrate_suite(manifest_path, *, output_path=None, passes=2):
             "passes_requested": int(passes),
             "global_parameters_only": True,
             "event_specific_fitting": False,
-            "objective": objective_config,
+            "objective": {
+                **objective_config,
+                **(
+                    {}
+                    if balance_by is None
+                    else {"balance_by": balance_by}
+                ),
+            },
             "parameter_grid": manifest["parameter_grid"],
             "parameter_interpretation": manifest.get(
                 "parameter_interpretation", {}
@@ -554,6 +813,8 @@ def calibrate_suite(manifest_path, *, output_path=None, passes=2):
         "improvement": _improvement(baseline_splits, evaluated_splits),
         "trace": trace,
     }
+    if leave_one_group_out["enabled"]:
+        evidence["leave_one_group_out"] = leave_one_group_out
     destination = (
         Path(output_path)
         if output_path is not None
