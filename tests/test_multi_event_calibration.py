@@ -409,6 +409,105 @@ def test_calibration_never_uses_validation_or_test_for_selection(
     assert set(calls[:-2]) == {"train-a.json", "train-b.json"}
 
 
+def test_structural_variant_is_selected_on_training_and_frozen_for_holdout(
+    tmp_path, monkeypatch
+):
+    reach = {
+        "manning_n": 0.001,
+        "slope": 0.002,
+        "upstream_width_m": 20.0,
+        "downstream_width_m": 20.0,
+    }
+    for name in ("train-a.json", "train-b.json", "validation.json"):
+        config_path = tmp_path / name
+        config_path.write_text(
+            json.dumps({"reach": reach}), encoding="utf-8"
+        )
+        config_path.with_suffix(".results.json").write_text(
+            json.dumps(
+                {
+                    "scores": {
+                        "nse": 0.0,
+                        "rmse": 1.0,
+                        "bias": 0.0,
+                        "percent_bias": 0.0,
+                        "pearson_r": 0.5,
+                        "n": 2,
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+    manifest = {
+        "suite": {"name": "structural selection"},
+        "split_policy": "training selects structure",
+        "split": {
+            "training": ["train-a.json", "train-b.json"],
+            "validation": ["validation.json"],
+            "test": [],
+        },
+        "objective": {
+            "nse_weight": 0.7,
+            "correlation_weight": 0.3,
+            "robustness_penalty": 0.0,
+        },
+        "parameter_grid": {
+            "manning_scale": [1.0],
+            "width_scale": [1.0],
+            "slope_scale": [1.0],
+            "lateral_inflow_fraction": [0.0],
+        },
+        "structural_variants": [
+            {"name": "first_order", "overrides": {"spatial_order": 1}},
+            {"name": "second_order", "overrides": {"spatial_order": 2}},
+        ],
+        "cross_event_validation": {"enabled": True, "passes": 1},
+    }
+    manifest_path = tmp_path / "calibration.json"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    def fake_run(config_path, *, output_path, overrides):
+        order = overrides["spatial_order"]
+        if config_path.name.startswith("train-"):
+            nse = 0.9 if order == 2 else 0.1
+        else:
+            nse = -1.0 if order == 2 else 1.0
+        return {
+            "scores": {
+                "nse": nse,
+                "rmse": 1.0,
+                "bias": 0.0,
+                "percent_bias": 0.0,
+                "pearson_r": 0.5,
+                "n": 2,
+            }
+        }
+
+    monkeypatch.setattr(calibration, "run_validation_case", fake_run)
+    evidence = calibration.calibrate_suite(
+        manifest_path,
+        output_path=tmp_path / "result.json",
+        passes=1,
+    )
+
+    assert evidence["selected_structural_variant"] == "second_order"
+    assert evidence["selected_structural_overrides"] == {"spatial_order": 2}
+    assert evidence["splits"]["validation"]["events"][0]["scores"][
+        "nse"
+    ] == -1.0
+    assert {
+        result["name"]
+        for result in evidence["structural_variant_training_results"]
+    } == {"first_order", "second_order"}
+    assert evidence["training_pareto_front"]["candidates"][0][
+        "structural_variant"
+    ] == "second_order"
+    assert {
+        fold["selected_structural_variant"]
+        for fold in evidence["leave_one_training_event_out"]["folds"]
+    } == {"second_order"}
+
+
 def test_leave_one_event_out_refits_without_held_event(
     tmp_path, monkeypatch
 ):

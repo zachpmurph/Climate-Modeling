@@ -253,6 +253,28 @@ unbounded claim about all possible parameters. Use it to see whether the
 weighted-objective selection trades correlation for NSE before examining any
 held-out result.
 
+Named formulations can be compared without held-out leakage by adding, for
+example:
+
+```json
+{
+  "structural_variants": [
+    {"name": "first_order", "overrides": {"spatial_order": 1}},
+    {"name": "second_order", "overrides": {"spatial_order": 2}}
+  ]
+}
+```
+
+The optimizer fits the parameter grid independently inside each variant and
+uses training objective values to select one. That name and its overrides are
+then frozen for validation and test. When leave-one-event-out or
+leave-one-river-out is enabled, each fold repeats both parameter fitting and
+structural selection after removing the held-out data. Structural overrides use
+the same shape as case overrides: top-level case settings plus an optional
+`reach` object. Every variant must remain physically defensible before it is
+listed; the mechanism is not permission to manufacture geometry candidates
+from downstream scores.
+
 For a multi-river manifest, set `objective.balance_by` to `river` and identify
 each event with `case.river`. The objective first averages NSE and correlation
 within each river, then weights the river means equally. This prevents a reach

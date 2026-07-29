@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import math
 import sys
@@ -24,6 +25,51 @@ PARAMETER_DEFAULTS = {
     "slope_scale": 1.0,
     "lateral_inflow_fraction": 0.0,
 }
+
+
+def structural_variants(manifest):
+    configured = manifest.get("structural_variants")
+    if configured is None:
+        return [{"name": "configured_baseline", "overrides": {}}]
+    if not isinstance(configured, list) or not configured:
+        raise ValueError("structural_variants must be a non-empty list")
+    variants = []
+    names = set()
+    for item in configured:
+        if not isinstance(item, dict):
+            raise ValueError("Each structural variant must be an object")
+        name = str(item.get("name", "")).strip()
+        overrides = item.get("overrides", {})
+        if not name or name in names:
+            raise ValueError(
+                "Structural variant names must be non-empty and unique"
+            )
+        if not isinstance(overrides, dict):
+            raise ValueError(
+                f"Structural variant {name!r} overrides must be an object"
+            )
+        names.add(name)
+        variants.append({"name": name, "overrides": copy.deepcopy(overrides)})
+    return variants
+
+
+def variant_parameter_overrides(config, parameters, variant):
+    """Combine one named structural model with calibrated physical scales."""
+    variant_config = copy.deepcopy(config)
+    structural = copy.deepcopy(variant["overrides"])
+    variant_config.setdefault("reach", {}).update(
+        structural.get("reach", {})
+    )
+    for key, value in structural.items():
+        if key != "reach":
+            variant_config[key] = value
+    calibrated = parameter_overrides(variant_config, parameters)
+    combined = structural
+    combined.setdefault("reach", {}).update(calibrated["reach"])
+    for key, value in calibrated.items():
+        if key != "reach":
+            combined[key] = value
+    return combined
 
 
 def composite_objective(
@@ -313,13 +359,56 @@ def coordinate_search(
     return current, trace
 
 
+def search_structural_variants(
+    evaluate,
+    parameter_grid,
+    variants,
+    *,
+    passes,
+):
+    """Fit parameters within each training-only structural variant."""
+    selections = []
+    traces = []
+    for variant_index, variant in enumerate(variants):
+        selected, trace = coordinate_search(
+            lambda parameters, current=variant: evaluate(
+                parameters, current
+            ),
+            parameter_grid,
+            passes=passes,
+        )
+        selected = {
+            **selected,
+            "structural_variant": variant["name"],
+            "structural_overrides": copy.deepcopy(variant["overrides"]),
+        }
+        selections.append(selected)
+        traces.append(
+            {
+                "structural_variant": variant["name"],
+                "structural_overrides": copy.deepcopy(
+                    variant["overrides"]
+                ),
+                "trace": trace,
+            }
+        )
+    selected_index, selected = max(
+        enumerate(selections),
+        key=lambda item: (item[1]["objective"], -item[0]),
+    )
+    return selected, selections, traces
+
+
 def training_pareto_front(evaluations, *, selected_parameters=None):
     """Retain candidates not dominated on training NSE and correlation."""
     candidates = []
     seen = set()
     for evaluation in evaluations:
         parameters = dict(evaluation["parameters"])
-        key = tuple(sorted(parameters.items()))
+        variant = evaluation.get(
+            "structural_variant", "configured_baseline"
+        )
+        key = (variant, tuple(sorted(parameters.items())))
         if key in seen:
             continue
         seen.add(key)
@@ -329,6 +418,7 @@ def training_pareto_front(evaluations, *, selected_parameters=None):
         candidates.append(
             {
                 "parameters": parameters,
+                "structural_variant": variant,
                 "mean_nse": float(components["mean_nse"]),
                 "mean_correlation": float(
                     components["mean_correlation"]
@@ -366,13 +456,20 @@ def training_pareto_front(evaluations, *, selected_parameters=None):
             item = dict(candidate)
             item["selected_by_weighted_objective"] = (
                 selected_parameters is not None
-                and item["parameters"] == selected_parameters
+                and item["parameters"] == selected_parameters.get(
+                    "parameters", selected_parameters
+                )
+                and item["structural_variant"]
+                == selected_parameters.get(
+                    "structural_variant", "configured_baseline"
+                )
             )
             front.append(item)
     front.sort(
         key=lambda item: (
             -item["mean_nse"],
             -item["mean_correlation"],
+            item["structural_variant"],
             tuple(sorted(item["parameters"].items())),
         )
     )
@@ -505,6 +602,7 @@ def _leave_one_training_event_out(
     configs,
     objective_config,
     balance_by,
+    variants,
     temp_root,
 ):
     """Refit on all-but-one training event and score the omitted event."""
@@ -535,8 +633,11 @@ def _leave_one_training_event_out(
         ]
         cache = {}
 
-        def evaluate_fold(parameters):
-            key = tuple(sorted(parameters.items()))
+        def evaluate_fold(parameters, variant):
+            key = (
+                variant["name"],
+                tuple(sorted(parameters.items())),
+            )
             if key in cache:
                 return cache[key]
             events = []
@@ -548,8 +649,8 @@ def _leave_one_training_event_out(
                         / f"loeo-{fold_index}-train-{len(cache)}-"
                         f"{event_index}.json"
                     ),
-                    overrides=parameter_overrides(
-                        configs[relative_path], parameters
+                    overrides=variant_parameter_overrides(
+                        configs[relative_path], parameters, variant
                     ),
                 )
                 events.append(
@@ -567,6 +668,7 @@ def _leave_one_training_event_out(
             )
             evaluation = {
                 "parameters": dict(parameters),
+                "structural_variant": variant["name"],
                 "objective": components["objective"],
                 "objective_components": components,
                 "training_events": events,
@@ -574,16 +676,24 @@ def _leave_one_training_event_out(
             cache[key] = evaluation
             return evaluation
 
-        selected, trace = coordinate_search(
+        selected, _, variant_traces = search_structural_variants(
             evaluate_fold,
             manifest["parameter_grid"],
+            variants,
             passes=passes,
+        )
+        selected_variant = next(
+            variant
+            for variant in variants
+            if variant["name"] == selected["structural_variant"]
         )
         held_out_result = run_validation_case(
             manifest_path.parent / held_out_path,
             output_path=temp_root / f"loeo-{fold_index}-held-out.json",
-            overrides=parameter_overrides(
-                configs[held_out_path], selected["parameters"]
+            overrides=variant_parameter_overrides(
+                configs[held_out_path],
+                selected["parameters"],
+                selected_variant,
             ),
         )
         folds.append(
@@ -591,6 +701,12 @@ def _leave_one_training_event_out(
                 "held_out_event": held_out_path,
                 "fit_events": fold_training,
                 "selected_parameters": selected["parameters"],
+                "selected_structural_variant": selected[
+                    "structural_variant"
+                ],
+                "selected_structural_overrides": selected[
+                    "structural_overrides"
+                ],
                 "fit_objective": selected["objective"],
                 "fit_objective_components": selected[
                     "objective_components"
@@ -601,7 +717,11 @@ def _leave_one_training_event_out(
                     selected["parameters"],
                 ),
                 "unique_parameter_sets_evaluated": len(cache),
-                "trace": trace,
+                "trace": (
+                    variant_traces[0]["trace"]
+                    if len(variant_traces) == 1
+                    else variant_traces
+                ),
             }
         )
     held_out_cases = [
@@ -634,6 +754,7 @@ def _leave_one_group_out(
     configs,
     objective_config,
     balance_by,
+    variants,
     temp_root,
 ):
     """Refit without one river/group, then score that group once."""
@@ -673,8 +794,11 @@ def _leave_one_group_out(
         ]
         cache = {}
 
-        def evaluate_fold(parameters):
-            key = tuple(sorted(parameters.items()))
+        def evaluate_fold(parameters, variant):
+            key = (
+                variant["name"],
+                tuple(sorted(parameters.items())),
+            )
             if key in cache:
                 return cache[key]
             events = []
@@ -686,8 +810,8 @@ def _leave_one_group_out(
                         / f"logo-{fold_index}-train-{len(cache)}-"
                         f"{event_index}.json"
                     ),
-                    overrides=parameter_overrides(
-                        configs[relative_path], parameters
+                    overrides=variant_parameter_overrides(
+                        configs[relative_path], parameters, variant
                     ),
                 )
                 events.append(
@@ -705,6 +829,7 @@ def _leave_one_group_out(
             )
             evaluation = {
                 "parameters": dict(parameters),
+                "structural_variant": variant["name"],
                 "objective": components["objective"],
                 "objective_components": components,
                 "training_events": events,
@@ -712,10 +837,16 @@ def _leave_one_group_out(
             cache[key] = evaluation
             return evaluation
 
-        selected, trace = coordinate_search(
+        selected, _, variant_traces = search_structural_variants(
             evaluate_fold,
             manifest["parameter_grid"],
+            variants,
             passes=passes,
+        )
+        selected_variant = next(
+            variant
+            for variant in variants
+            if variant["name"] == selected["structural_variant"]
         )
         held_out_events = []
         for event_index, relative_path in enumerate(held_out_paths):
@@ -725,8 +856,10 @@ def _leave_one_group_out(
                     temp_root
                     / f"logo-{fold_index}-held-{event_index}.json"
                 ),
-                overrides=parameter_overrides(
-                    configs[relative_path], selected["parameters"]
+                overrides=variant_parameter_overrides(
+                    configs[relative_path],
+                    selected["parameters"],
+                    selected_variant,
                 ),
             )
             held_out_events.append(
@@ -741,6 +874,12 @@ def _leave_one_group_out(
                 "held_out_events": held_out_events,
                 "fit_events": fit_paths,
                 "selected_parameters": selected["parameters"],
+                "selected_structural_variant": selected[
+                    "structural_variant"
+                ],
+                "selected_structural_overrides": selected[
+                    "structural_overrides"
+                ],
                 "fit_objective": selected["objective"],
                 "fit_objective_components": selected[
                     "objective_components"
@@ -751,7 +890,11 @@ def _leave_one_group_out(
                     selected["parameters"],
                 ),
                 "unique_parameter_sets_evaluated": len(cache),
-                "trace": trace,
+                "trace": (
+                    variant_traces[0]["trace"]
+                    if len(variant_traces) == 1
+                    else variant_traces
+                ),
             }
         )
     return {
@@ -788,12 +931,16 @@ def calibrate_suite(manifest_path, *, output_path=None, passes=2):
 
     objective_config = dict(manifest["objective"])
     balance_by = objective_config.pop("balance_by", None)
+    variants = structural_variants(manifest)
     cache = {}
     with tempfile.TemporaryDirectory(prefix="climate-model-calibration-") as temp_dir:
         temp_root = Path(temp_dir)
 
-        def evaluate_training(parameters):
-            key = tuple(sorted(parameters.items()))
+        def evaluate_training(parameters, variant):
+            key = (
+                variant["name"],
+                tuple(sorted(parameters.items())),
+            )
             if key in cache:
                 return cache[key]
             events = []
@@ -802,8 +949,8 @@ def calibrate_suite(manifest_path, *, output_path=None, passes=2):
                 result = run_validation_case(
                     config_path,
                     output_path=temp_root / f"train-{len(cache)}-{index}.json",
-                    overrides=parameter_overrides(
-                        configs[relative_path], parameters
+                    overrides=variant_parameter_overrides(
+                        configs[relative_path], parameters, variant
                     ),
                 )
                 events.append(
@@ -821,6 +968,7 @@ def calibrate_suite(manifest_path, *, output_path=None, passes=2):
             )
             evaluation = {
                 "parameters": dict(parameters),
+                "structural_variant": variant["name"],
                 "objective": components["objective"],
                 "objective_components": components,
                 "training_events": events,
@@ -828,14 +976,22 @@ def calibrate_suite(manifest_path, *, output_path=None, passes=2):
             cache[key] = evaluation
             return evaluation
 
-        selected, trace = coordinate_search(
+        selected, variant_selections, variant_traces = (
+            search_structural_variants(
             evaluate_training,
             manifest["parameter_grid"],
+            variants,
             passes=passes,
+            )
         )
         pareto_front = training_pareto_front(
             cache.values(),
-            selected_parameters=selected["parameters"],
+            selected_parameters=selected,
+        )
+        selected_variant = next(
+            variant
+            for variant in variants
+            if variant["name"] == selected["structural_variant"]
         )
 
         evaluated_splits = {}
@@ -846,8 +1002,10 @@ def calibrate_suite(manifest_path, *, output_path=None, passes=2):
                 result = run_validation_case(
                     config_path,
                     output_path=temp_root / f"{split_name}-{index}.json",
-                    overrides=parameter_overrides(
-                        configs[relative_path], selected["parameters"]
+                    overrides=variant_parameter_overrides(
+                        configs[relative_path],
+                        selected["parameters"],
+                        selected_variant,
                     ),
                 )
                 events.append(
@@ -867,6 +1025,7 @@ def calibrate_suite(manifest_path, *, output_path=None, passes=2):
             configs=configs,
             objective_config=objective_config,
             balance_by=balance_by,
+            variants=variants,
             temp_root=temp_root,
         )
         leave_one_group_out = _leave_one_group_out(
@@ -876,6 +1035,7 @@ def calibrate_suite(manifest_path, *, output_path=None, passes=2):
             configs=configs,
             objective_config=objective_config,
             balance_by=balance_by,
+            variants=variants,
             temp_root=temp_root,
         )
 
@@ -897,12 +1057,31 @@ def calibrate_suite(manifest_path, *, output_path=None, passes=2):
                 ),
             },
             "parameter_grid": manifest["parameter_grid"],
+            "structural_variants": variants,
             "parameter_interpretation": manifest.get(
                 "parameter_interpretation", {}
             ),
             "split_policy": manifest["split_policy"],
         },
         "selected_parameters": selected["parameters"],
+        "selected_structural_variant": selected[
+            "structural_variant"
+        ],
+        "selected_structural_overrides": selected[
+            "structural_overrides"
+        ],
+        "structural_variant_training_results": [
+            {
+                "name": item["structural_variant"],
+                "overrides": item["structural_overrides"],
+                "selected_parameters": item["parameters"],
+                "training_objective": item["objective"],
+                "training_objective_components": item[
+                    "objective_components"
+                ],
+            }
+            for item in variant_selections
+        ],
         "parameter_diagnostics": parameter_diagnostics(
             manifest["parameter_grid"], selected["parameters"]
         ),
@@ -915,7 +1094,11 @@ def calibrate_suite(manifest_path, *, output_path=None, passes=2):
         "baseline_splits": baseline_splits,
         "splits": evaluated_splits,
         "improvement": _improvement(baseline_splits, evaluated_splits),
-        "trace": trace,
+        "trace": (
+            variant_traces[0]["trace"]
+            if len(variant_traces) == 1
+            else variant_traces
+        ),
     }
     if leave_one_group_out["enabled"]:
         evidence["leave_one_group_out"] = leave_one_group_out
@@ -945,6 +1128,9 @@ def main(argv=None):
         json.dumps(
             {
                 "selected_parameters": evidence["selected_parameters"],
+                "selected_structural_variant": evidence[
+                    "selected_structural_variant"
+                ],
                 "training_objective": evidence["training_objective"],
                 "splits": {
                     name: value["summary"]
