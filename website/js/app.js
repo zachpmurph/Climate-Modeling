@@ -1,6 +1,5 @@
 /* Flood Explorer boot: tab routing + module init. */
 
-import { initAtlas } from "./atlas.js";
 import { initPlayground } from "./playground.js";
 import { initValidation } from "./validation.js";
 
@@ -20,6 +19,5 @@ function initTabs() {
 }
 
 initTabs();
-initAtlas();
 initPlayground();
 initValidation();

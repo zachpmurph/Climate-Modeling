@@ -1,5 +1,5 @@
 /* Faithful JavaScript port of the repo's verified 2-D shallow-water solver,
- * for the in-browser playground and the 2-D atlas regions.
+ * for the in-browser playground.
  *
  * Ported from src/general/solvers/saint_venant_2d.py: Rusanov fluxes with
  * hydrostatic reconstruction (well-balanced over non-flat bed) and a
@@ -510,7 +510,7 @@ export function saintVenant2D(options) {
   };
 }
 
-/* ── compound-channel helpers shared by the atlas builder and playground ── */
+/* ── compound-channel helpers for the playground ── */
 
 /**
  * Bed datum for a straight compound channel: a main channel of half-width

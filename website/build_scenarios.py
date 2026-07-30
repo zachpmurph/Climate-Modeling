@@ -1,14 +1,16 @@
 """Generate the Flood Explorer website's data artifacts using the real solvers.
 
-Two modes:
+Modes:
 
-    python website/build_scenarios.py               # atlas: data/index.json + data/scenarios/*.json
+    python website/build_scenarios.py               # default: validation data only
     python website/build_scenarios.py --references  # parity references for the JS solver ports
+    python website/build_scenarios.py --atlas       # the (retired) Regions atlas data
 
-The atlas runs the repository's actual Python solvers (kinematic wave and 1-D
-Saint-Venant) over a region x event matrix and writes the site's browsable
-scenario JSONs. The references mode runs small fixed cases whose outputs the
-Node test (website/test/solver_parity.test.mjs) compares against the JS ports.
+The Regions tab was removed from the site while the model's accuracy is being
+established, so the atlas is no longer built by default. Its builder is kept
+behind --atlas so Regions can be restored once validation supports it. The
+default now writes only data/validation.json; --references writes the small
+fixed cases the Node parity test checks against the JS ports.
 
 All quantities are meters and minutes internally (Manning n = SI / 60).
 """
@@ -1148,16 +1150,18 @@ def build_validation():
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Build Flood Explorer data artifacts")
     parser.add_argument("--references", action="store_true",
-                        help="Write JS-parity reference cases instead of the atlas")
+                        help="Write JS-parity reference cases for the solver ports")
     parser.add_argument("--validation", action="store_true",
-                        help="Rebuild only the observed-event validation data")
+                        help="Rebuild only the observed-event validation data (the default)")
+    parser.add_argument("--atlas", action="store_true",
+                        help="Rebuild the retired Regions atlas data (not shown on the site)")
     args = parser.parse_args(argv)
     if args.references:
         build_references()
-    elif args.validation:
-        build_validation()
-    else:
+    elif args.atlas:
         build_atlas()
+    else:
+        # Default: validation only. The Regions atlas is retired from the site.
         build_validation()
     return 0
 

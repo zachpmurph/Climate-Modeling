@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Flood Explorer — river flood simulation atlas &amp; playground</title>
+<title>Flood Explorer — river flood simulation sandbox &amp; validation</title>
 <link rel="stylesheet" href="css/style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>🌊</text></svg>">
 </head>
@@ -12,11 +12,10 @@
   <div class="wrap header-row">
     <div>
       <h1>Flood Explorer</h1>
-      <p class="tagline">Simulated river flooding under event stresses — from the Climate-Modeling solver suite</p>
+      <p class="tagline">A sandbox for the Climate-Modeling river solvers, and an honest look at how they compare with real gauge data</p>
     </div>
     <nav class="tabs" role="tablist" aria-label="Site sections">
-      <button class="tab active" data-tab="regions" role="tab" aria-selected="true">Regions</button>
-      <button class="tab" data-tab="playground" role="tab" aria-selected="false">Playground</button>
+      <button class="tab active" data-tab="playground" role="tab" aria-selected="true">Playground</button>
       <button class="tab" data-tab="validation" role="tab" aria-selected="false">Validation</button>
       <button class="tab" data-tab="about" role="tab" aria-selected="false">About</button>
     </nav>
@@ -25,62 +24,8 @@
 
 <main class="wrap">
 
-  <!-- ── Regions (atlas) ─────────────────────────────────────────────── -->
-  <section id="tab-regions" class="tab-panel active" role="tabpanel">
-    <p class="lede">Pick a region, then an event, to see the simulated impact: how deep,
-    where, and when. Every scenario below was produced by the repository's verified
-    numerical solvers running on that region's channel profile.</p>
-    <div id="region-list" class="card-grid" aria-label="Regions"></div>
-    <div id="scenario-view" class="scenario" hidden>
-      <div class="scenario-head">
-        <div>
-          <h2 id="scenario-title"></h2>
-          <p id="scenario-narrative" class="narrative"></p>
-        </div>
-        <div id="event-chips" class="chips" role="tablist" aria-label="Events"></div>
-      </div>
-      <div id="scenario-metrics" class="metric-row"></div>
-      <div class="chart-block" id="block-1d-depth">
-        <h3>Water depth along the reach</h3>
-        <div id="depth-chart"></div>
-      </div>
-      <div class="chart-block" id="block-2d-map" hidden>
-        <h3>Inundation map</h3>
-        <p class="chart-note">Plan view looking down on the reach; flow runs left to right.
-        The red outline is the channel edge before the event, so anything blue outside it is
-        new water.</p>
-        <div id="map-chart"></div>
-      </div>
-      <div class="anim-controls">
-        <button id="play-toggle" class="play" aria-label="Play or pause">▶</button>
-        <input id="frame-slider" type="range" min="0" value="0" step="1" aria-label="Time">
-        <span id="frame-label" class="mono"></span>
-      </div>
-      <div class="chart-block" id="block-2d-section" hidden>
-        <h3 id="section-title">Cross-section</h3>
-        <div id="section-chart"></div>
-      </div>
-      <div class="chart-block">
-        <h3 id="hydrograph-title">Downstream discharge</h3>
-        <div id="hydrograph-chart"></div>
-      </div>
-      <div class="chart-block" id="block-2d-area" hidden>
-        <h3>Flooded area over time</h3>
-        <p class="chart-note">Ground that is dry under baseline flow and is under water during
-        the event.</p>
-        <div id="area-chart"></div>
-      </div>
-      <div class="chart-block">
-        <h3>Peak depth by event</h3>
-        <div id="event-compare"></div>
-      </div>
-      <div id="scenario-limitations" class="limitations"></div>
-    </div>
-    <div id="atlas-error" class="error-card" hidden></div>
-  </section>
-
   <!-- ── Playground ──────────────────────────────────────────────────── -->
-  <section id="tab-playground" class="tab-panel" role="tabpanel">
+  <section id="tab-playground" class="tab-panel active" role="tabpanel">
     <p class="lede">A sandbox: choose a model, set the channel and the storm, and run the
     simulation live in your browser. The solvers here are JavaScript ports of the
     repository's Python solvers, held to parity by automated tests.</p>
@@ -246,25 +191,23 @@
     <div class="prose">
       <h2>What this is</h2>
       <p>Flood Explorer is the public window onto a set of open 1-D and 2-D river flood
-      solvers (kinematic wave, 1-D Saint-Venant, 2-D Saint-Venant) with a real-world
-      data-ingestion pipeline. The <strong>Regions</strong> tab shows precomputed scenarios
-      produced by the actual Python solvers over each region's channel profile or valley
-      grid. The <strong>Playground</strong> runs JavaScript ports of the same numerics in your
-      browser; all three ports are held to the Python implementations by automated parity
-      tests (tolerance ≤ 1e-8).</p>
-      <h2>Where the numbers come from</h2>
-      <p>The Columbia — Hanford Reach profile is built by the repository's ingestion
-      pipeline from DEM elevations, USGS gauge data, and reviewed channel roughness, with
-      every value carrying provenance metadata. The other regions are clearly labeled
-      synthetic reaches chosen to span contrasting flood behaviors. The 2-D solver is
-      verified to a formal numerical standard (convergence studies, well-balancing,
-      positivity, conservation); the 1-D solvers pass mass-balance and
-      analytical-equilibrium tests.</p>
-      <h2>Verified is not the same as validated</h2>
-      <p><strong>Verification</strong> asks whether the equations are being solved correctly, and
-      this suite is verified to a formal standard. <strong>Validation</strong> asks whether those
-      equations describe a real river — a separate question, answered only by observed data. The
-      <strong>Validation</strong> tab is where that question is put honestly: the same solver run
+      solvers (kinematic wave, 1-D Saint-Venant, 2-D Saint-Venant). The
+      <strong>Playground</strong> runs JavaScript ports of the numerics live in your browser;
+      the ports are held to the Python implementations by automated parity tests (tolerance
+      ≤ 1e-8). The <strong>Validation</strong> tab compares the Python solvers with real gauge
+      records.</p>
+      <p class="fine">A <em>Regions</em> tab — precomputed "what if" flood scenarios for
+      specific reaches — has been set aside for now. Projecting named-place impacts is only
+      worth showing once the model has earned that trust against observed data, and the
+      Validation tab makes plain that it has not yet. It will return when the numbers support it.</p>
+      <h2>How the solvers are checked</h2>
+      <p>The 2-D solver is verified to a formal numerical standard (convergence studies,
+      well-balancing, positivity, conservation); the 1-D solvers pass mass-balance and
+      analytical-equilibrium tests. That is <em>verification</em> — the equations are solved
+      correctly. Whether they describe a real river is <em>validation</em>, a separate question
+      answered only by observed data.</p>
+      <h2>What the Validation tab shows</h2>
+      <p>That is where the question is put honestly: the same solver run
       against real events on three rivers — the Colorado below Glen Canyon Dam, the Truckee at
       Reno, and a predeclared one-shot test on the Rio Grande — compared with what the downstream
       gauge recorded, with nothing tuned to match. Where the flow really moves the model does well
@@ -274,15 +217,14 @@
       shown, its parameters' identifiability warning is shown with it, so calibrated is never read
       as validated. Results are reported as-is rather than tuned away.</p>
       <h2>What this is not</h2>
-      <p>This is a <strong>screening and education tool</strong>, not a flood forecast.
-      For the 1-D regions, depths are cross-section averages: they say how high the water
-      gets, not how far it spreads. The 2-D region does produce an inundation extent, but
-      over an <em>idealised</em> straight compound channel — it is a picture of how water
-      behaves on that geometry, not a map of any real floodplain, and it contains no
-      levees, buildings, bridges, culverts, or infiltration. Roughness and geometry are
-      estimates; the models are verified numerically but, where observed data has been compared,
-      show real biases (see the Validation tab). The scenarios shown here are uncalibrated. Do not
-      use this site for safety-critical decisions.</p>
+      <p>This is a <strong>screening and education tool</strong>, not a flood forecast. In the
+      Playground, 1-D depths are cross-section averages — how high the water gets, not how far it
+      spreads — and the 2-D model produces an inundation extent only over an <em>idealised</em>
+      straight compound channel, a picture of how water behaves on that geometry rather than a map
+      of any real floodplain, with no levees, buildings, bridges, culverts, or infiltration.
+      Roughness and geometry are estimates, and where observed data has been compared the model
+      shows real biases (see the Validation tab). Nothing here is calibrated. Do not use this site
+      for safety-critical decisions.</p>
       <h2>Units</h2>
       <p>The models compute in meters and minutes (Manning n = SI value / 60,
       g = 35316 m/min²). The interface accepts familiar units (SI n, mm/h rain) and
@@ -293,7 +235,7 @@
 </main>
 
 <footer class="site-footer">
-  <div class="wrap">Generated scenarios: real Python solvers · Playground: parity-tested JS ports ·
+  <div class="wrap">Playground: parity-tested JS ports · Validation: real gauge data ·
   <span class="mono">Climate-Modeling</span></div>
 </footer>
 
