@@ -9,9 +9,12 @@ A static, dependency-free site presenting the repository's flood models:
 - **Playground** — pick a model (kinematic wave, 1-D Saint-Venant, or 2-D
   Saint-Venant), set channel and storm conditions, and run the simulation live in
   the browser.
-- **Validation** — the model against *observed* data: four real events on the Colorado
-  River below Glen Canyon Dam, with reach parameters held identical across every event,
-  compared to the downstream gauge. Sourced from `real_world_rivers/validation/`.
+- **Validation** — the model against *observed* data across three rivers (Colorado below
+  Glen Canyon Dam, Truckee at Reno, and a predeclared one-shot Rio Grande transfer test),
+  compared to the downstream gauge with nothing tuned to match. Every Nash–Sutcliffe score
+  is paired with the event's observed variability (NSE is unreliable on near-steady flow),
+  and the Colorado calibration is shown with its identifiability warning. Sourced from
+  `real_world_rivers/validation/`.
 - **About** — provenance, verification status, and limitations.
 
 No frameworks, no build step, no CDN: plain HTML/CSS/JS with inline SVG charts.
@@ -78,15 +81,25 @@ path.
 
 ## The Validation tab's one checked claim
 
-`data/validation.json` is reshaped from `real_world_rivers/validation/*.results.json`;
-nothing is recomputed. The page's central assertion is that no parameter was fitted per
-event, so the builder **verifies it** — it compares reach length, cells, slope, Manning n,
-width, warm-up, spatial order, initial condition, lateral inflow, and rainfall across all
-four cases and raises rather than publishing the claim if any of them differ.
+`data/validation.json` is reshaped from `real_world_rivers/validation/*.results.json` and
+`calibration_suite.results.json`; nothing is recomputed from the solver. The builder adds
+two derived quantities the honest reading needs — each event's observed coefficient of
+variation, and the front-loaded residual thirds for the Colorado events.
 
-Deliberate framing: this is an *uncalibrated comparison*, not a pass. One case is a
-baseline and three are out-of-sample; one of those scores below zero on Nash–Sutcliffe.
-Don't reword the tab to say the model is "validated".
+The Colorado suite's central claim is that no parameter was fitted per event, so the builder
+**verifies it** — it compares reach length, cells, slope, Manning n, width, warm-up, spatial
+order, initial condition, lateral inflow, and rainfall across the Colorado (`glen_canyon`)
+cases and raises rather than publishing the claim if any differ. The check is scoped to one
+river on purpose: different rivers legitimately have different geometry, so the identical-
+parameters claim is per river, not across the whole suite.
+
+Deliberate framing, do not undo it:
+- This is an *uncalibrated comparison*, not a pass. Present it that way.
+- Nash–Sutcliffe divides by the observed variance, so on a near-steady river (Rio Grande,
+  CoV 2.6%) it turns unreliable and can read strongly negative while the model matches
+  magnitude to ~5%. Always show NSE next to CoV; never headline a low-variance NSE alone.
+- Where the model is calibrated, show the identifiability warning next to the improved
+  scores. The Colorado fit lands every scale at a grid boundary — calibrated is not validated.
 
 ## Cost of a 2-D run in the browser
 

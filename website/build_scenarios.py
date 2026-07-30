@@ -939,75 +939,210 @@ FIXED_PARAMETER_KEYS = (
 )
 
 
+# Below this observed coefficient of variation, NSE's variance denominator is so
+# small that the score stops being a reliable read on the model (see metric note).
+LOW_VARIABILITY_COV_PERCENT = 5.0
+
+
+def _validation_event(stem, *, predeclared=False):
+    """Reshape one standalone case result, adding steadiness and residual shape.
+
+    Nothing is recomputed from the solver; CoV and residual thirds are derived
+    from the observed/predicted series already in the tracked results file.
+    """
+    result = json.loads((VALIDATION_DIR / f"{stem}.results.json").read_text(encoding="utf-8"))
+    series = result["series"]
+    observed = np.asarray(series["observed_downstream_m3_per_min"], dtype=float)
+    predicted = np.asarray(series["predicted_downstream_m3_per_min"], dtype=float)
+    residual = observed - predicted
+    count = len(observed)
+    first, second = count // 3, 2 * count // 3
+    mean_observed = float(observed.mean()) if count else float("nan")
+    cov = float(100.0 * observed.std() / mean_observed) if mean_observed else float("nan")
+    window = result["case"]["observation_window"]
+    return {
+        "id": stem,
+        "name": result["case"]["name"],
+        "date": window[0][:10],
+        "status": result["status"],
+        "purpose": result["case"].get("purpose", ""),
+        "predeclared": predeclared,
+        "cov_percent": cov,
+        "low_variability": cov < LOW_VARIABILITY_COV_PERCENT,
+        "observed_mean_m3_per_min": mean_observed,
+        "times_min": [float(v) for v in series["observed_times_min"]],
+        "observed_m3_per_min": [float(v) for v in observed],
+        "predicted_m3_per_min": [float(v) for v in predicted],
+        "scores": result["scores"],
+        "residual_thirds_m3_per_min": {
+            "early": float(residual[:first].mean()),
+            "middle": float(residual[first:second].mean()),
+            "late": float(residual[second:].mean()),
+        },
+    }
+
+
+def _gauge_pair(config_name):
+    case = json.loads((VALIDATION_DIR / config_name).read_text(encoding="utf-8"))["case"]
+    return f"{case['upstream_gauge']} → {case['downstream_gauge']}"
+
+
+def _colorado_calibration():
+    """The Colorado train/validation/test calibration, uncalibrated vs calibrated.
+
+    Surfaces the identifiability warning next to the improved scores so a reader
+    cannot mistake a calibrated fit for a validated one.
+    """
+    cal = json.loads((VALIDATION_DIR / "calibration_suite.results.json").read_text(encoding="utf-8"))
+    diagnostics = cal["parameter_diagnostics"]
+    improvement = cal["improvement"]
+    splits = {}
+    for split_name in ("training", "validation", "test"):
+        current = cal["splits"][split_name]["summary"]
+        baseline = cal["baseline_splits"][split_name]["summary"]
+        if not current or not baseline:
+            continue
+        splits[split_name] = {
+            "event_dates": [
+                event["config"].split("lees_ferry")[1].replace(".json", "").strip("_")
+                or "2004-07-01"
+                for event in cal["splits"][split_name]["events"]
+            ],
+            "baseline_nse": baseline["nse"]["mean"],
+            "calibrated_nse": current["nse"]["mean"],
+            "baseline_r": baseline["pearson_r"]["mean"],
+            "calibrated_r": current["pearson_r"]["mean"],
+            "baseline_abs_pct_bias": improvement[split_name]["mean_absolute_percent_bias_before"],
+            "calibrated_abs_pct_bias": improvement[split_name]["mean_absolute_percent_bias_after"],
+        }
+    return {
+        "selected_parameters": cal["selected_parameters"],
+        "identifiability": {
+            "warning": diagnostics["identifiability_warning"],
+            "boundary_hits": diagnostics["boundary_hits"],
+            "interpretation": diagnostics["interpretation"],
+        },
+        "splits": splits,
+    }
+
+
 def build_validation():
-    """Publish the multi-event observed-data comparison.
+    """Publish the observed-data comparison across rivers.
 
     Source: real_world_rivers/validation/, produced by
-    src/rivers/validation/run_suite.py. Nothing is recomputed here; this only
-    reshapes the results for the browser -- and checks the one claim the view
-    is built around.
+    src/rivers/validation/run_suite.py and calibrate_suite.py. Nothing is
+    recomputed from the solver here; this reshapes the tracked results and adds
+    the steadiness and residual-shape context the honest reading needs.
     """
+    # ── Colorado: the fixed-parameter suite whose one claim we still verify ──
+    # The suite now spans several rivers; the identical-parameters claim is made
+    # per river, so verify it across the Colorado events only. Different rivers
+    # legitimately use different length, slope, and width.
     suite = json.loads((VALIDATION_DIR / "validation_suite.json").read_text(encoding="utf-8"))
-    summary = json.loads((VALIDATION_DIR / "validation_suite.results.json").read_text(encoding="utf-8"))
-
-    cases = []
+    colorado_cases = [c for c in suite["cases"] if c.startswith("glen_canyon")]
     shared = None
-    for config_name in suite["cases"]:
+    colorado_events = []
+    for config_name in colorado_cases:
         stem = config_name[:-len(".json")]
         result = json.loads((VALIDATION_DIR / f"{stem}.results.json").read_text(encoding="utf-8"))
-        assumptions = result["assumptions"]
-
-        fixed = {k: assumptions.get(k) for k in FIXED_PARAMETER_KEYS}
+        fixed = {k: result["assumptions"].get(k) for k in FIXED_PARAMETER_KEYS}
         if shared is None:
             shared = fixed
         elif fixed != shared:
             differing = [k for k in FIXED_PARAMETER_KEYS if fixed.get(k) != shared.get(k)]
             raise ValueError(
-                "the validation suite claims no event-specific parameter fitting, but "
+                "the fixed-parameter suite claims no event-specific fitting, but "
                 f"{stem} differs from the first case in: {', '.join(differing)}. "
                 "Fix the suite or stop publishing the fixed-parameter claim."
             )
+        colorado_events.append(_validation_event(stem))
+    colorado_config = json.loads((VALIDATION_DIR / colorado_cases[0]).read_text(encoding="utf-8"))
+    colorado = {
+        "id": "colorado",
+        "name": "Colorado River — Glen Canyon Dam to Lees Ferry",
+        "kind": "fixed_parameter_suite",
+        "gauges": _gauge_pair(colorado_cases[0]),
+        "parameter_policy": suite["parameter_policy"],
+        "fixed_parameters": shared,
+        "roughness_origin": colorado_config["reach"].get("roughness_origin", ""),
+        "events": colorado_events,
+        "calibration": _colorado_calibration(),
+    }
 
-        series = result["series"]
-        window = result["case"]["observation_window"]
-        cases.append({
-            "id": stem,
-            "name": result["case"]["name"],
-            "date": window[0][:10],
-            "window": window,
-            "status": result["status"],
-            "purpose": result["case"].get("purpose", ""),
-            "solver": result["solver"],
-            "times_min": series["observed_times_min"],
-            "observed_m3_per_min": series["observed_downstream_m3_per_min"],
-            "predicted_m3_per_min": series["predicted_downstream_m3_per_min"],
-            "scores": result["scores"],
-            "observation_count": {
-                "upstream": result["observations"]["upstream_count"],
-                "downstream": result["observations"]["downstream_count"],
-            },
-        })
+    # ── Truckee: an independent river (different geometry, slope, forcing) ──
+    truckee = {
+        "id": "truckee",
+        "name": "Truckee River — Reno / Sparks",
+        "kind": "independent_river",
+        "gauges": _gauge_pair("truckee_reno_sparks_2017-01-08.json"),
+        "events": [
+            _validation_event("truckee_reno_sparks_2017-01-08"),
+            _validation_event("truckee_reno_sparks_2017-02-10"),
+        ],
+    }
+
+    # ── Rio Grande: the predeclared third-river transfer test ──
+    rio_config = json.loads(
+        (VALIDATION_DIR / "rio_grande_alameda_albuquerque_2023-05-12.json").read_text(encoding="utf-8")
+    )
+    rio_grande = {
+        "id": "rio_grande",
+        "name": "Rio Grande — Alameda to Albuquerque",
+        "kind": "predeclared_transfer_test",
+        "gauges": _gauge_pair("rio_grande_alameda_albuquerque_2023-05-12.json"),
+        "predeclared_policy": rio_config["case"].get("selection_protocol", {}),
+        "events": [
+            _validation_event("rio_grande_alameda_albuquerque_2023-05-12", predeclared=True),
+        ],
+    }
 
     payload = {
         "generated_by": "website/build_scenarios.py --validation",
-        "suite": summary["suite"],
-        "parameter_policy": suite["parameter_policy"],
-        "score_summary": summary["score_summary"],
-        "fixed_parameters": shared,
-        "roughness_origin": json.loads(
-            (VALIDATION_DIR / suite["cases"][0]).read_text(encoding="utf-8")
-        )["reach"].get("roughness_origin", ""),
-        "cases": cases,
+        "rivers": [colorado, truckee, rio_grande],
+        "metric_note": {
+            "title": "Why a good model can score a terrible NSE",
+            "text": (
+                "Nash–Sutcliffe (NSE) measures the model's error against the variance of "
+                "the observations themselves. When a river's flow barely changes across the "
+                "window, that variance is tiny and NSE stops being a reliable guide to the "
+                "model: a small, physically reasonable error can still drive a large negative "
+                "score. Each event below shows its observed variability (CoV); when it is only "
+                "a few percent, read correlation and bias instead of NSE."
+            ),
+            "cov_threshold_percent": LOW_VARIABILITY_COV_PERCENT,
+        },
+        "residual_finding": {
+            "title": "A residual we have not explained",
+            "text": (
+                "Across all four Colorado events the model's shortfall is concentrated in the "
+                "first third of each day. Feeding the observed upstream hydrograph into the "
+                "warm-up (already done here) did not remove it. Under-prediction on the early "
+                "limb that eases or reverses later is a timing signature, not a magnitude error "
+                "— its cause has not yet been isolated. It is shown here rather than tuned away."
+            ),
+            "per_event": [
+                {
+                    "date": event["date"],
+                    **event["residual_thirds_m3_per_min"],
+                }
+                for event in colorado_events
+            ],
+        },
     }
     path = DATA_DIR / "validation.json"
     path.write_text(json.dumps(payload), encoding="utf-8")
     print(f"Wrote {path} ({path.stat().st_size / 1024:.0f} KB)")
-    for case in cases:
-        s = case["scores"]
-        print(f"  {case['date']} {case['status']:<26} NSE {s['nse']:+.3f}  "
-              f"bias {s['percent_bias']:+.1f}%  r {s['pearson_r']:.3f}")
-    print("  fixed across every event: " +
-          ", ".join(f"{k}={shared[k]}" for k in ("length_m", "cells", "slope", "manning_n")))
+    for river in payload["rivers"]:
+        print(f"  {river['name']}  ({river['kind']})")
+        for event in river["events"]:
+            s = event["scores"]
+            flag = "  [low-variability: NSE unreliable]" if event["low_variability"] else ""
+            print(f"    {event['date']}  NSE {s['nse']:+.3f}  bias {s['percent_bias']:+.1f}%  "
+                  f"r {s['pearson_r']:.3f}  CoV {event['cov_percent']:.1f}%{flag}")
+    cal = colorado["calibration"]
+    print(f"  Colorado calibration: test NSE "
+          f"{cal['splits']['test']['baseline_nse']:.3f} -> {cal['splits']['test']['calibrated_nse']:.3f} "
+          f"(identifiability warning: {cal['identifiability']['warning']})")
 
 
 def main(argv=None):

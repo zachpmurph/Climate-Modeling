@@ -173,48 +173,66 @@
 
   <!-- ── Validation (observed events) ────────────────────────────────── -->
   <section id="tab-validation" class="tab-panel" role="tabpanel">
-    <p class="lede">Everywhere else on this site the model is answering
-    <em>what if</em>. Here it is answering <em>did it happen that way</em>: the same solver
-    run against four real days on the Colorado River below Glen Canyon Dam, compared against
-    what the downstream gauge actually recorded.</p>
-    <div id="policy-card" class="policy"></div>
+    <p class="lede">Everywhere else on this site the model answers <em>what if</em>. Here it
+    answers <em>did it happen that way</em>: the same solver run against real days on three
+    rivers, compared with what the downstream gauge recorded. Nothing here is tuned to match —
+    the downstream gauge is never fed to the model.</p>
+    <div id="metric-note" class="metric-note"></div>
     <div class="rig">
       <div class="rail">
         <div class="card">
+          <h2>River</h2>
+          <div class="choice" id="river-choice"></div>
+        </div>
+        <div class="card">
           <h2>Observed event</h2>
-          <div class="choice" id="case-choice"></div>
+          <div class="choice" id="event-choice-val"></div>
         </div>
         <div class="readouts" id="case-scores"></div>
       </div>
       <div class="stage">
         <p class="narrative" id="case-purpose"></p>
+        <div id="predeclared-note" class="policy predeclared" hidden></div>
         <div class="chart-block">
           <h3 id="val-hydro-title">Modelled against observed discharge</h3>
           <p class="chart-note">The upstream gauge drives the model; the downstream gauge is
-          never fed to it, so this line is a genuine prediction rather than a fit.</p>
+          never fed to it, so the modelled line is a genuine prediction, not a fit.</p>
           <div id="val-hydrograph"></div>
         </div>
         <div class="chart-block split">
           <div>
             <h3>Every reading against the 1:1 line</h3>
-            <p class="chart-note">Points below the diagonal are moments the model predicted less
-            water than the gauge measured.</p>
+            <p class="chart-note">Points off the diagonal are moments the model and gauge
+            disagree; below it, the model predicted less water than was measured.</p>
             <div id="val-scatter"></div>
           </div>
           <div id="val-readacross"></div>
         </div>
         <div class="chart-block">
-          <h3>Skill across all four events</h3>
-          <p class="chart-note">Nash–Sutcliffe compares the model against simply predicting the
-          mean of the observations: 1 is perfect, 0 is no better than the mean, below 0 is worse.</p>
+          <h3>Skill across every event and river</h3>
+          <p class="chart-note">Nash–Sutcliffe against simply predicting the mean: 1 perfect,
+          0 no better than the mean, below 0 worse. Each bar carries the event's observed
+          variability — read a low NSE next to a low CoV with suspicion of the metric, not the model.</p>
           <div id="val-skill"></div>
-          <h3 class="subhead">Bias across all four events</h3>
+          <h3 class="subhead">Bias across every event</h3>
           <div id="val-bias"></div>
         </div>
-        <div class="chart-block">
-          <h3>Parameters, held identical across every event</h3>
-          <p class="chart-note">The point of the suite. Nothing below was tuned per event — the
-          builder refuses to publish this page if the four cases disagree on any of it.</p>
+        <div class="chart-block" id="calibration-block" hidden>
+          <h3>Does calibration help?</h3>
+          <p class="chart-note">Fitting four global scales — roughness, width, slope, and a small
+          lateral gain — on the training events only, then scoring untouched validation and test
+          events. Uncalibrated versus calibrated below.</p>
+          <div id="cal-splits"></div>
+          <div id="cal-identifiability" class="warn-card"></div>
+        </div>
+        <div class="chart-block" id="residual-block" hidden>
+          <h3 id="residual-title"></h3>
+          <p class="chart-note" id="residual-text"></p>
+          <div id="residual-bars"></div>
+        </div>
+        <div class="chart-block" id="params-block" hidden>
+          <h3 id="params-title">Parameters, held identical across every event of this river</h3>
+          <p class="chart-note" id="params-note"></p>
           <div id="val-params" class="param-grid"></div>
         </div>
         <div id="val-limits" class="limitations"></div>
@@ -246,12 +264,15 @@
       <p><strong>Verification</strong> asks whether the equations are being solved correctly, and
       this suite is verified to a formal standard. <strong>Validation</strong> asks whether those
       equations describe a real river — a separate question, answered only by observed data. The
-      <strong>Validation</strong> tab is where that question is put honestly: four real days on the
-      Colorado River below Glen Canyon Dam, one solver, one set of reach parameters held identical
-      across every event, compared against what the downstream gauge recorded. The model tracks
-      the shape of each day reasonably (correlation 0.74–0.81) but runs 9–14% low on every single
-      event, and on one of the four it scores worse than simply predicting the average flow. That
-      is an uncalibrated result, reported as-is rather than tuned away.</p>
+      <strong>Validation</strong> tab is where that question is put honestly: the same solver run
+      against real events on three rivers — the Colorado below Glen Canyon Dam, the Truckee at
+      Reno, and a predeclared one-shot test on the Rio Grande — compared with what the downstream
+      gauge recorded, with nothing tuned to match. Where the flow really moves the model does well
+      (Truckee correlation 0.998); on the regulated Colorado it tracks shape but runs biased low;
+      and the tab is careful about a trap — Nash–Sutcliffe becomes unreliable when a river barely
+      varies, so every score is shown next to the event's variability. Where a calibrated fit is
+      shown, its parameters' identifiability warning is shown with it, so calibrated is never read
+      as validated. Results are reported as-is rather than tuned away.</p>
       <h2>What this is not</h2>
       <p>This is a <strong>screening and education tool</strong>, not a flood forecast.
       For the 1-D regions, depths are cross-section averages: they say how high the water
@@ -259,9 +280,9 @@
       over an <em>idealised</em> straight compound channel — it is a picture of how water
       behaves on that geometry, not a map of any real floodplain, and it contains no
       levees, buildings, bridges, culverts, or infiltration. Roughness and geometry are
-      estimates; the models are verified numerically and, on the one reach where observed data
-      has been compared, are measurably biased low. Nothing here has been calibrated. Do not use
-      this site for safety-critical decisions.</p>
+      estimates; the models are verified numerically but, where observed data has been compared,
+      show real biases (see the Validation tab). The scenarios shown here are uncalibrated. Do not
+      use this site for safety-critical decisions.</p>
       <h2>Units</h2>
       <p>The models compute in meters and minutes (Manning n = SI value / 60,
       g = 35316 m/min²). The interface accepts familiar units (SI n, mm/h rain) and
