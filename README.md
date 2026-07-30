@@ -58,8 +58,11 @@ transients, steep wetting fronts, and backwater effects.
 finite-volume stencil, hydrostatic reconstruction for well-balanced non-flat beds,
 a conservative draining limiter for wet/dry cells, ghost-cell boundaries, explicit
 forward Euler time stepping, operator-split Manning friction (semi-implicit in a
-single-step sense), and adaptive CFL time steps. The solver runs on the supplied
-profile grid and applies bed elevation, cross-section geometry, Manning roughness,
+single-step sense), and adaptive CFL time steps. Positive rainfall and lateral
+sources also constrain the proposed step using the wave speed of the water they
+can create, so an initially dry reach cannot skip all routing until the end of
+a storm. The solver runs on the supplied profile grid and applies bed elevation,
+cross-section geometry, Manning roughness,
 and rainfall independently in every cell. A common-geometry face reconstruction
 plus a discrete geometry source preserves a non-flat lake at rest even when
 bottom width and bank slope change by cell.
@@ -82,7 +85,8 @@ $$
 The implementation uses first-order Rusanov face fluxes, hydrostatic
 reconstruction for well-balanced non-flat topography, a conservative draining
 limiter for wet/dry positivity, adaptive two-dimensional CFL stepping, and
-semi-implicit Manning friction. It supports reflecting walls,
+semi-implicit Manning friction. The CFL bound includes source-created wetting
+depth as well as the current state. It supports reflecting walls,
 inflow/open-outflow or inflow/measured-stage x boundaries, wall y boundaries,
 and periodic verification domains.
 
@@ -166,6 +170,7 @@ The rationale for each transition is given alongside the change.
 | **4ap — Training-only structural selection** | Current branch | Calibration manifests may define named structural variants with shared case overrides. Parameters are fitted separately inside every variant; training alone selects the formulation, which is then frozen for validation and test. Leave-one-event- and leave-one-river-out folds repeat both structural and parameter selection without the held-out data. | Comparing formulations after viewing a held-out hydrograph leaks model selection just as surely as tuning a parameter. Nested selection measures whether a numerical or hydraulic structure transfers, not merely whether it can explain events already inspected. |
 | **4aq — Reconstruction transfer evidence** | Current branch | Predeclared and retained a river-balanced first- versus second-order comparison with every physical multiplier fixed at its uncalibrated value. Joint Colorado/Truckee training selects first order; Truckee-only fitting selects second order, which then gives mean held-Colorado NSE `-1.183`. | Second order slightly improves the Truckee training event but sharply degrades both Colorado events. The asymmetric leave-one-river result shows that reconstruction order is condition-dependent and cannot be chosen from one river then assumed transferable. |
 | **4ar — Spatial soil infiltration** | Current branch | Added shared Green-Ampt infiltration to 1-D and 2-D Saint-Venant. Profiles and reviewed terrain can carry per-cell conductivity, suction head, and moisture deficit; cumulative infiltration, proportional momentum removal, net source mass, and separate infiltration volume are retained in outputs. | Rainfall is not identical to runoff. Soil texture, hydraulic conductivity, and antecedent moisture control how much water ponds and moves across the surface, so treating all rainfall as immediate surface water overpredicts flooding on permeable, unsaturated ground. |
+| **4as — Source-aware wetting timestep** | Current branch | Both Saint-Venant solvers now predict the gravity-wave speed associated with positive rainfall or lateral source water during a proposed step and tighten the CFL step when needed. Regression cases prove that dry-start routing no longer depends on artificial rainfall breakpoints and remains conservative with soil infiltration. | A dry domain has zero current wave speed. Using only the current state allowed one timestep to span an entire storm, adding rainfall at the end and suppressing all movement during the event. |
 
 ---
 
@@ -670,6 +675,8 @@ tests/test_ingestion_export.py                 # atomic export + provenance side
 tests/test_ingestion_reliability.py            # dedup, retries, credential redaction
 tests/test_run_simulation.py                   # dispatch, UnsupportedScenario, result shapes
 tests/test_flood_reporting.py                  # report validation, outcomes, HTML, CLI
+tests/test_soil_infiltration.py                # Green-Ampt behavior and conservation
+tests/test_source_aware_wetting.py             # dry-start source CFL and knot independence
 data/                                          # simulation output: plots and time series CSVs
 data/real_world_rivers/                        # SQL schema, local database, run outputs
 real_world_rivers/                             # example profiles and Columbia River inputs

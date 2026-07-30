@@ -144,6 +144,34 @@ def _inflow_values(left_inflow, time, ny):
     return values
 
 
+def _cap_dt_for_wetting_source(dt, h, hu, hv, source, dx, dy, cfl):
+    """Limit source-created wetting waves using the two-dimensional CFL rate."""
+    positive_source = np.maximum(np.asarray(source, dtype=float), 0.0)
+    if not np.any(positive_source > 0.0):
+        return dt
+
+    def maximum_courant(trial_dt):
+        predicted_depth = h + positive_source * trial_dt
+        velocity_x = _velocity(predicted_depth, hu)
+        velocity_y = _velocity(predicted_depth, hv)
+        gravity_speed = np.sqrt(g * predicted_depth)
+        spectral_rate = (
+            (np.abs(velocity_x) + gravity_speed) / dx[:, None]
+            + (np.abs(velocity_y) + gravity_speed) / dy[None, :]
+        )
+        return float(np.max(trial_dt * spectral_rate))
+
+    candidate = float(dt)
+    courant = maximum_courant(candidate)
+    if courant <= cfl * (1.0 + 1e-12):
+        return candidate
+    candidate *= (cfl / courant) ** (2.0 / 3.0)
+    courant = maximum_courant(candidate)
+    if courant > cfl:
+        candidate *= cfl / courant
+    return candidate
+
+
 def _stage_values(downstream_stage_m, time, ny):
     values = (
         downstream_stage_m(time)
@@ -572,12 +600,23 @@ def run_model(
     rainfall_function = rainfall
 
     while t_current < T_final - 1e-14:
+        source_value = (
+            r(t_current)
+            if rainfall_function is None
+            else rainfall_function(x, y, t_current)
+        )
+        source = _field(source_value, 0.0, shape, "rainfall")
+        if np.any(source < 0):
+            raise ValueError("rainfall cannot be negative")
         speed_x = _wave_speed(h, hu)
         speed_y = _wave_speed(h, hv)
         spectral_rate = speed_x / dx[:, None] + speed_y / dy[None, :]
         max_rate = float(np.max(spectral_rate))
         dt = T_final - t_current if max_rate <= 1e-14 else cfl / max_rate
         dt = min(dt, T_final - t_current)
+        dt = _cap_dt_for_wetting_source(
+            dt, h, hu, hv, source, dx, dy, cfl
+        )
         if next_record < len(record_marks):
             dt = min(dt, record_marks[next_record] - t_current)
         dt = _cap_dt_at_forcing_breakpoints(
@@ -607,11 +646,6 @@ def run_model(
             downstream_stage,
         )
         y_raw = _rusanov_y(h, hu, hv, bed, boundary_y, spatial_order)
-        source_value = r(t_current) if rainfall_function is None else rainfall_function(x, y, t_current)
-        source = _field(source_value, 0.0, shape, "rainfall")
-        if np.any(source < 0):
-            raise ValueError("rainfall cannot be negative")
-
         theta = _draining_factors(h, source, dt, dx, dy, x_raw[0], y_raw[0])
         x_flux, y_flux = _limit_face_fluxes(
             theta, x_raw[:3], y_raw[:3], boundary_x, boundary_y

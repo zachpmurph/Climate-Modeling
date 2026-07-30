@@ -171,8 +171,9 @@ division and dry-cell momentum reset avoid division by zero. Positivity and
 mass gates require no material depth-floor addition.
 
 **Gap:** Hydraulic structures, radiation boundaries, unstructured terrain,
-infiltration, and real-data failure modes remain outside the documented solver
-scope.
+continuous inter-storm soil recovery, and some real-data failure modes remain
+outside the documented solver scope. Event-scale Green-Ampt infiltration is
+covered separately by conservation and heterogeneous-soil tests.
 
 ## Priority Gaps to Address
 
@@ -183,12 +184,12 @@ current documented method.
    - Both Saint-Venant solvers now support transmissive outflow and prescribed
      downstream stage with regression tests; 1-D also supports a wall. Real
      applications still need case-specific boundary-data and datum justification.
-   - The committed six-event suite now includes a second river, but all events
-     are historical and have been inspected during development. A future event
-     or untouched third river is still required for prospective evidence.
+   - The committed seven-event suite spans three rivers, but all events are
+     historical and have now been inspected during development. A future event
+     is still required for prospective evidence.
 
 2. **Continue independent events and validate uncertainty distributions.**
-   - The committed suite now covers six events on two rivers, and the 2-D
+   - The committed suite now covers seven events on three rivers, and the 2-D
      ensemble propagates explicit uncertainty ranges into depth, wet-area, and
      inundation-probability bands.
    - The example ranges remain illustrative rather than inferred distributions.

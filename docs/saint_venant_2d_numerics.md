@@ -27,11 +27,12 @@ with
 
 ```text
 ∂U/∂t + ∂F/∂x + ∂G/∂y
-  = [R, -gh ∂z_b/∂x - friction_x, -gh ∂z_b/∂y - friction_y]ᵀ.
+  = [R - I, -gh ∂z_b/∂x - friction_x, -gh ∂z_b/∂y - friction_y]ᵀ.
 ```
 
 Here `h` is water depth, `(hu, hv)` are unit-width momenta, `z_b` is bed
-elevation, and `R` is rainfall depth rate.
+elevation, `R` is rainfall depth rate, and `I` is optional Green-Ampt
+infiltration depth rate.
 
 ## Spatial flux
 
@@ -103,6 +104,14 @@ The method is explicit forward Euler. The adaptive two-dimensional time step is
 
 with `0 < CFL <= 0.5` and default `CFL = 0.45`. Steps are shortened to land
 exactly on requested output times and the final time.
+
+For positive rainfall, the solver also predicts
+`h_predict = h + max(R, 0) Δt` and evaluates the same spectral Courant number
+on that predicted depth. If it exceeds the target, the proposed step is
+reduced before fluxes or sources are applied. This matters at a dry start:
+the current-state wave speed is zero even though rainfall can create a moving
+gravity wave during the proposed interval. The source-aware bound prevents a
+whole storm from being collapsed into one end-of-event source update.
 
 Manning friction is applied after the conservative flux update:
 
@@ -236,8 +245,8 @@ test suite and standalone verification matrix and uploads its JSON evidence.
 - First-order Rusanov flux is deliberately diffusive near shocks.
 - The grid is Cartesian; curvilinear coordinates and unstructured meshes are
   outside the verified scope.
-- Coriolis force, infiltration, spatially varying gravity, sediment transport,
-  and hydraulic structures are not modeled.
+- Coriolis force, layered or macropore infiltration, spatially varying gravity,
+  sediment transport, and hydraulic structures are not modeled.
 - The radial dam-break case verifies symmetry and conservation, not agreement
   with a closed-form shock solution.
 - The open boundary is a zero-gradient numerical boundary; a radiation or

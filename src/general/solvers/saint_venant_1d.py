@@ -777,6 +777,86 @@ def _record_times(final_time, record_interval):
     return values
 
 
+def _cap_dt_for_wetting_source(
+    dt,
+    h,
+    discharge,
+    dx,
+    bottom_width,
+    side_slope,
+    table_depth,
+    table_width,
+    rainfall_rate,
+    lateral_rate,
+    cfl,
+):
+    """Apply a CFL bound to water that positive sources create during a step.
+
+    A dry cell has zero current wave speed, so the ordinary CFL calculation can
+    otherwise select the entire remaining simulation as one step.  This bound
+    predicts source-added area over a trial step and limits the resulting
+    gravity-wave Courant number.  It is independent of output recording times.
+    """
+    area = _cross_section_area(
+        h, bottom_width, side_slope, table_depth, table_width
+    )
+    top_width = _top_width(
+        h, bottom_width, side_slope, table_depth, table_width
+    )
+    positive_area_rate = np.maximum(
+        top_width * rainfall_rate + lateral_rate, 0.0
+    )
+    if not np.any(positive_area_rate > 0.0):
+        return dt
+
+    def maximum_courant(trial_dt):
+        predicted_area = area + positive_area_rate * trial_dt
+        predicted_depth = _depth_from_area(
+            predicted_area,
+            bottom_width,
+            side_slope,
+            table_depth,
+            table_width,
+        )
+        predicted_top_width = _top_width(
+            predicted_depth,
+            bottom_width,
+            side_slope,
+            table_depth,
+            table_width,
+        )
+        hydraulic_depth = np.zeros_like(predicted_area)
+        np.divide(
+            predicted_area,
+            predicted_top_width,
+            out=hydraulic_depth,
+            where=predicted_top_width > 0.0,
+        )
+        velocity = np.zeros_like(discharge)
+        np.divide(
+            discharge,
+            predicted_area,
+            out=velocity,
+            where=predicted_area > H_FLOOR,
+        )
+        speed = np.abs(velocity) + np.sqrt(g * hydraulic_depth)
+        return float(np.max(trial_dt * speed / dx))
+
+    candidate = float(dt)
+    courant = maximum_courant(candidate)
+    if courant <= cfl * (1.0 + 1e-12):
+        return candidate
+    # Source-created gravity speed scales as sqrt(dt), so its Courant number
+    # scales as dt**(3/2). This correction is exact in the dry-source limit.
+    candidate *= (cfl / courant) ** (2.0 / 3.0)
+    courant = maximum_courant(candidate)
+    # When pre-existing velocity dominates, Courant scales linearly with dt;
+    # this second conservative correction handles that limit.
+    if courant > cfl:
+        candidate *= cfl / courant
+    return candidate
+
+
 def run_model(
     L,
     T_final,
@@ -1016,7 +1096,15 @@ def run_model(
     mass_floor_correction = 0.0
     t_current = 0.0
 
-    def euler_stage(h_stage, q_stage, stage_time, dt, flux_data=None):
+    def euler_stage(
+        h_stage,
+        q_stage,
+        stage_time,
+        dt,
+        flux_data=None,
+        rainfall_source=None,
+        requested_lateral_source=None,
+    ):
         if flux_data is None:
             flux_data = _rusanov_fluxes(
                 h_stage,
@@ -1040,10 +1128,14 @@ def run_model(
             correction_right,
             geometry_balance,
         ) = flux_data
-        rainfall_source = _evaluate_rainfall(rainfall_function, x, stage_time)
-        requested_lateral_source = _evaluate_lateral_inflow(
-            lateral_inflow, x, stage_time
-        )
+        if rainfall_source is None:
+            rainfall_source = _evaluate_rainfall(
+                rainfall_function, x, stage_time
+            )
+        if requested_lateral_source is None:
+            requested_lateral_source = _evaluate_lateral_inflow(
+                lateral_inflow, x, stage_time
+            )
         area = _cross_section_area(
             h_stage,
             bottom_width,
@@ -1191,6 +1283,37 @@ def run_model(
             lateral_inflow,
             downstream_stage_m,
         )
+        wetting_rainfall = _evaluate_rainfall(
+            rainfall_function, x, t_current
+        )
+        wetting_lateral = _evaluate_lateral_inflow(
+            lateral_inflow, x, t_current
+        )
+        bound_rainfall = wetting_rainfall
+        bound_lateral = wetting_lateral
+        if spatial_order == 2 and dt > 0.0:
+            bound_time = np.nextafter(t_current + dt, t_current)
+            bound_rainfall = np.maximum(
+                bound_rainfall,
+                _evaluate_rainfall(rainfall_function, x, bound_time),
+            )
+            bound_lateral = np.maximum(
+                bound_lateral,
+                _evaluate_lateral_inflow(lateral_inflow, x, bound_time),
+            )
+        dt = _cap_dt_for_wetting_source(
+            dt,
+            h,
+            q,
+            dx,
+            bottom_width,
+            side_slope,
+            table_depth,
+            table_width,
+            bound_rainfall,
+            bound_lateral,
+            cfl_value,
+        )
         h_previous = h.copy()
         q_previous = q.copy()
         cumulative_infiltration_previous = cumulative_infiltration.copy()
@@ -1203,7 +1326,13 @@ def run_model(
             geometry_balance,
         )
         h_stage, q_stage, first_diagnostics = euler_stage(
-            h, q, t_current, dt, first_flux_data
+            h,
+            q,
+            t_current,
+            dt,
+            first_flux_data,
+            wetting_rainfall,
+            wetting_lateral,
         )
         if spatial_order == 2:
             second_time = np.nextafter(t_current + dt, t_current)
