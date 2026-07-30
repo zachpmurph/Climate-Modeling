@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flood Explorer — river flood simulation atlas &amp; playground</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>🌊</text></svg>">
+</head>
+<body>
+<header class="site-header">
+  <div class="wrap header-row">
+    <div>
+      <h1>Flood Explorer</h1>
+      <p class="tagline">Simulated river flooding under event stresses — from the Climate-Modeling solver suite</p>
+    </div>
+    <nav class="tabs" role="tablist" aria-label="Site sections">
+      <button class="tab active" data-tab="regions" role="tab" aria-selected="true">Regions</button>
+      <button class="tab" data-tab="playground" role="tab" aria-selected="false">Playground</button>
+      <button class="tab" data-tab="validation" role="tab" aria-selected="false">Validation</button>
+      <button class="tab" data-tab="about" role="tab" aria-selected="false">About</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ── Regions (atlas) ─────────────────────────────────────────────── -->
+  <section id="tab-regions" class="tab-panel active" role="tabpanel">
+    <p class="lede">Pick a region, then an event, to see the simulated impact: how deep,
+    where, and when. Every scenario below was produced by the repository's verified
+    numerical solvers running on that region's channel profile.</p>
+    <div id="region-list" class="card-grid" aria-label="Regions"></div>
+    <div id="scenario-view" class="scenario" hidden>
+      <div class="scenario-head">
+        <div>
+          <h2 id="scenario-title"></h2>
+          <p id="scenario-narrative" class="narrative"></p>
+        </div>
+        <div id="event-chips" class="chips" role="tablist" aria-label="Events"></div>
+      </div>
+      <div id="scenario-metrics" class="metric-row"></div>
+      <div class="chart-block" id="block-1d-depth">
+        <h3>Water depth along the reach</h3>
+        <div id="depth-chart"></div>
+      </div>
+      <div class="chart-block" id="block-2d-map" hidden>
+        <h3>Inundation map</h3>
+        <p class="chart-note">Plan view looking down on the reach; flow runs left to right.
+        The red outline is the channel edge before the event, so anything blue outside it is
+        new water.</p>
+        <div id="map-chart"></div>
+      </div>
+      <div class="anim-controls">
+        <button id="play-toggle" class="play" aria-label="Play or pause">▶</button>
+        <input id="frame-slider" type="range" min="0" value="0" step="1" aria-label="Time">
+        <span id="frame-label" class="mono"></span>
+      </div>
+      <div class="chart-block" id="block-2d-section" hidden>
+        <h3 id="section-title">Cross-section</h3>
+        <div id="section-chart"></div>
+      </div>
+      <div class="chart-block">
+        <h3 id="hydrograph-title">Downstream discharge</h3>
+        <div id="hydrograph-chart"></div>
+      </div>
+      <div class="chart-block" id="block-2d-area" hidden>
+        <h3>Flooded area over time</h3>
+        <p class="chart-note">Ground that is dry under baseline flow and is under water during
+        the event.</p>
+        <div id="area-chart"></div>
+      </div>
+      <div class="chart-block">
+        <h3>Peak depth by event</h3>
+        <div id="event-compare"></div>
+      </div>
+      <div id="scenario-limitations" class="limitations"></div>
+    </div>
+    <div id="atlas-error" class="error-card" hidden></div>
+  </section>
+
+  <!-- ── Playground ──────────────────────────────────────────────────── -->
+  <section id="tab-playground" class="tab-panel" role="tabpanel">
+    <p class="lede">A sandbox: choose a model, set the channel and the storm, and run the
+    simulation live in your browser. The solvers here are JavaScript ports of the
+    repository's Python solvers, held to parity by automated tests.</p>
+    <div class="playground-layout">
+      <form id="playground-form" class="controls" autocomplete="off">
+        <fieldset>
+          <legend>Model</legend>
+          <label class="radio"><input type="radio" name="model" value="kinematic_wave" checked>
+            Kinematic wave <span class="hint">fast; valid for gradually varying flow</span></label>
+          <label class="radio"><input type="radio" name="model" value="saint_venant">
+            Saint-Venant 1-D <span class="hint">full dynamic wave (Rusanov)</span></label>
+          <label class="radio"><input type="radio" name="model" value="saint_venant_2d">
+            Saint-Venant 2-D <span class="hint">plan-view inundation over a compound channel</span></label>
+        </fieldset>
+        <fieldset>
+          <legend>Channel</legend>
+          <label>Reach length <span class="unit">m</span>
+            <input type="number" name="length" value="2000" min="100" max="100000" step="100"></label>
+          <label>Cells along the reach
+            <input type="number" name="cells" value="80" min="10" max="400" step="1"></label>
+          <label>Bed slope <span class="unit">m/m</span>
+            <input type="number" name="slope" value="0.005" min="0.00005" max="0.1" step="any"></label>
+          <label>Manning n <span class="unit">SI, s·m<sup>-1/3</sup></span>
+            <input type="number" name="manning_si" value="0.04" min="0.01" max="0.15" step="any"></label>
+          <label class="only-1d">Initial depth <span class="unit">m</span>
+            <input type="number" name="depth0" value="0.10" min="0" max="10" step="any"></label>
+        </fieldset>
+        <fieldset class="only-2d" hidden>
+          <legend>Valley cross-section</legend>
+          <label>Valley width <span class="unit">m</span>
+            <input type="number" name="width" value="300" min="40" max="2000" step="10"></label>
+          <label>Cells across the valley
+            <input type="number" name="cells_y" value="20" min="6" max="40" step="1"></label>
+          <label>Channel half-width <span class="unit">m</span>
+            <input type="number" name="half_width" value="60" min="5" max="500" step="5"></label>
+          <label>Bank height <span class="unit">m above the channel bed</span>
+            <input type="number" name="bank_height" value="1.5" min="0.1" max="10" step="any"></label>
+          <label>Channel depth <span class="unit">m</span>
+            <input type="number" name="channel_depth" value="1.0" min="0.05" max="10" step="any"></label>
+        </fieldset>
+        <fieldset>
+          <legend>Forcing</legend>
+          <label class="only-1d">Upstream inflow <span class="unit">m²/min per m width</span>
+            <input type="number" name="inflow" value="1.0" min="0" max="2000" step="any"></label>
+          <label class="only-2d" hidden>Upstream inflow <span class="unit">× the channel's normal flow</span>
+            <input type="number" name="inflow_multiple" value="3.0" min="0" max="20" step="any"></label>
+          <label>Rain intensity <span class="unit">mm/h</span>
+            <input type="number" name="rain" value="15" min="0" max="150" step="1"></label>
+          <label>Rain duration <span class="unit">min</span>
+            <input type="number" name="rain_minutes" value="60" min="0" max="1440" step="5"></label>
+          <label>Simulation length <span class="unit">min</span>
+            <input type="number" name="minutes" value="180" min="5" max="1440" step="5"></label>
+        </fieldset>
+        <button id="run-button" type="submit" class="run">Run simulation</button>
+        <p id="playground-status" class="status" role="status"></p>
+      </form>
+      <div id="playground-results" class="results" hidden>
+        <div id="playground-metrics" class="metric-row"></div>
+        <div class="chart-block" id="pg-block-1d">
+          <h3>Water depth along the reach</h3>
+          <div id="pg-depth-chart"></div>
+        </div>
+        <div class="chart-block" id="pg-block-map" hidden>
+          <h3>Inundation map</h3>
+          <p class="chart-note">Plan view; flow runs left to right. The red outline is the
+          channel edge at the start of the run. Before your event runs, the reach is first
+          settled to steady state at normal flow, so what you see spreading is your event
+          rather than the model warming up.</p>
+          <div id="pg-map-chart"></div>
+        </div>
+        <div class="anim-controls">
+          <button id="pg-play-toggle" class="play" aria-label="Play or pause">▶</button>
+          <input id="pg-frame-slider" type="range" min="0" value="0" step="1" aria-label="Time">
+          <span id="pg-frame-label" class="mono"></span>
+        </div>
+        <div class="chart-block" id="pg-block-section" hidden>
+          <h3 id="pg-section-title">Cross-section</h3>
+          <div id="pg-section-chart"></div>
+        </div>
+        <div class="chart-block">
+          <h3 id="pg-hydrograph-title">Downstream discharge</h3>
+          <div id="pg-hydrograph-chart"></div>
+        </div>
+        <p class="fine">Manning n is converted to the model's meters-and-minutes
+        convention (n<sub>SI</sub>/60) internally; rain mm/h → m/min. Mass-balance error is
+        reported so you can judge each run's numerical quality.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Validation (observed events) ────────────────────────────────── -->
+  <section id="tab-validation" class="tab-panel" role="tabpanel">
+    <p class="lede">Everywhere else on this site the model is answering
+    <em>what if</em>. Here it is answering <em>did it happen that way</em>: the same solver
+    run against four real days on the Colorado River below Glen Canyon Dam, compared against
+    what the downstream gauge actually recorded.</p>
+    <div id="policy-card" class="policy"></div>
+    <div class="rig">
+      <div class="rail">
+        <div class="card">
+          <h2>Observed event</h2>
+          <div class="choice" id="case-choice"></div>
+        </div>
+        <div class="readouts" id="case-scores"></div>
+      </div>
+      <div class="stage">
+        <p class="narrative" id="case-purpose"></p>
+        <div class="chart-block">
+          <h3 id="val-hydro-title">Modelled against observed discharge</h3>
+          <p class="chart-note">The upstream gauge drives the model; the downstream gauge is
+          never fed to it, so this line is a genuine prediction rather than a fit.</p>
+          <div id="val-hydrograph"></div>
+        </div>
+        <div class="chart-block split">
+          <div>
+            <h3>Every reading against the 1:1 line</h3>
+            <p class="chart-note">Points below the diagonal are moments the model predicted less
+            water than the gauge measured.</p>
+            <div id="val-scatter"></div>
+          </div>
+          <div id="val-readacross"></div>
+        </div>
+        <div class="chart-block">
+          <h3>Skill across all four events</h3>
+          <p class="chart-note">Nash–Sutcliffe compares the model against simply predicting the
+          mean of the observations: 1 is perfect, 0 is no better than the mean, below 0 is worse.</p>
+          <div id="val-skill"></div>
+          <h3 class="subhead">Bias across all four events</h3>
+          <div id="val-bias"></div>
+        </div>
+        <div class="chart-block">
+          <h3>Parameters, held identical across every event</h3>
+          <p class="chart-note">The point of the suite. Nothing below was tuned per event — the
+          builder refuses to publish this page if the four cases disagree on any of it.</p>
+          <div id="val-params" class="param-grid"></div>
+        </div>
+        <div id="val-limits" class="limitations"></div>
+      </div>
+    </div>
+    <div id="validation-error" class="error-card" hidden></div>
+  </section>
+
+  <!-- ── About ───────────────────────────────────────────────────────── -->
+  <section id="tab-about" class="tab-panel" role="tabpanel">
+    <div class="prose">
+      <h2>What this is</h2>
+      <p>Flood Explorer is the public window onto a set of open 1-D and 2-D river flood
+      solvers (kinematic wave, 1-D Saint-Venant, 2-D Saint-Venant) with a real-world
+      data-ingestion pipeline. The <strong>Regions</strong> tab shows precomputed scenarios
+      produced by the actual Python solvers over each region's channel profile or valley
+      grid. The <strong>Playground</strong> runs JavaScript ports of the same numerics in your
+      browser; all three ports are held to the Python implementations by automated parity
+      tests (tolerance ≤ 1e-8).</p>
+      <h2>Where the numbers come from</h2>
+      <p>The Columbia — Hanford Reach profile is built by the repository's ingestion
+      pipeline from DEM elevations, USGS gauge data, and reviewed channel roughness, with
+      every value carrying provenance metadata. The other regions are clearly labeled
+      synthetic reaches chosen to span contrasting flood behaviors. The 2-D solver is
+      verified to a formal numerical standard (convergence studies, well-balancing,
+      positivity, conservation); the 1-D solvers pass mass-balance and
+      analytical-equilibrium tests.</p>
+      <h2>Verified is not the same as validated</h2>
+      <p><strong>Verification</strong> asks whether the equations are being solved correctly, and
+      this suite is verified to a formal standard. <strong>Validation</strong> asks whether those
+      equations describe a real river — a separate question, answered only by observed data. The
+      <strong>Validation</strong> tab is where that question is put honestly: four real days on the
+      Colorado River below Glen Canyon Dam, one solver, one set of reach parameters held identical
+      across every event, compared against what the downstream gauge recorded. The model tracks
+      the shape of each day reasonably (correlation 0.74–0.81) but runs 9–14% low on every single
+      event, and on one of the four it scores worse than simply predicting the average flow. That
+      is an uncalibrated result, reported as-is rather than tuned away.</p>
+      <h2>What this is not</h2>
+      <p>This is a <strong>screening and education tool</strong>, not a flood forecast.
+      For the 1-D regions, depths are cross-section averages: they say how high the water
+      gets, not how far it spreads. The 2-D region does produce an inundation extent, but
+      over an <em>idealised</em> straight compound channel — it is a picture of how water
+      behaves on that geometry, not a map of any real floodplain, and it contains no
+      levees, buildings, bridges, culverts, or infiltration. Roughness and geometry are
+      estimates; the models are verified numerically and, on the one reach where observed data
+      has been compared, are measurably biased low. Nothing here has been calibrated. Do not use
+      this site for safety-critical decisions.</p>
+      <h2>Units</h2>
+      <p>The models compute in meters and minutes (Manning n = SI value / 60,
+      g = 35316 m/min²). The interface accepts familiar units (SI n, mm/h rain) and
+      converts internally.</p>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">Generated scenarios: real Python solvers · Playground: parity-tested JS ports ·
+  <span class="mono">Climate-Modeling</span></div>
+</footer>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
