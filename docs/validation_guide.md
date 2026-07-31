@@ -137,6 +137,28 @@ idealized shelf is a controlled structural experiment, not a geographic flood
 map. Only continuous, datum-reviewed topobathymetry can support a terrain-based
 inundation validation.
 
+### Observed tributaries and withdrawals
+
+When an independently observed tributary, return flow, or diversion exists
+between gauges, provide `point_flow_series` as a CSV containing
+`station_m`, `discharge_m3_per_min`, and either `t_min` or `observed_at`.
+Every series must cover warm-up and the scored event. The 2-D runner maps each
+station to the nearest longitudinal cell and distributes its whole discharge
+over the active channel cells in that row:
+
+`depth source = discharge / (cell length × active channel width)`.
+
+Positive sources enter without an invented velocity when tributary momentum is
+unknown. Negative sources remove water with the local velocity and are capped
+by the water available in the cell, so a withdrawal cannot create mass through
+the non-negative depth limiter. Evidence records requested lateral volume,
+applied lateral volume, and unmet withdrawal separately.
+
+Do not infer these hydrographs from the downstream validation target. Use
+observed tributary gauges or an independently evaluated rainfall-runoff model.
+An unexplained downstream volume residual remains diagnostic evidence, not
+permission to add a fitted source.
+
 Do not interpret volume over a truncated flood window as permanent gain or
 loss. Water may still be stored in the reach at the end of the window, and
 reservoirs, hydropower operations, diversions, tributaries, and gauge

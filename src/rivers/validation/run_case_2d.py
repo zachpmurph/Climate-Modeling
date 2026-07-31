@@ -36,6 +36,7 @@ from rivers.validation.case_inputs import (
     _timestamp,
     discharge_boundary,
     load_event_control_series,
+    load_event_point_flows,
     load_two_gauge_observations,
     load_validation_geometry,
     shifted_boundary,
@@ -88,6 +89,50 @@ def _whole_flow_boundary(boundary, mask, dy):
     if hasattr(boundary, "breakpoints_min"):
         forcing.breakpoints_min = boundary.breakpoints_min
     return forcing
+
+
+def _point_flows_2d(point_flows, channel, dy):
+    """Distribute each whole-flow hydrograph over its mapped wet channel row."""
+    channel = np.asarray(channel, dtype=bool)
+    dy = np.asarray(dy, dtype=float)
+    row_widths = np.sum(channel * dy[None, :], axis=1)
+    if np.any(row_widths <= 0.0):
+        raise ValueError("Every point-flow row needs at least one channel cell")
+
+    def forcing(x, y, time):
+        del y
+        per_length = np.asarray(point_flows(x, time), dtype=float)
+        if per_length.shape != (len(x),):
+            raise ValueError("Mapped point flows must return one rate per x cell")
+        rates = np.zeros(channel.shape, dtype=float)
+        rates[channel] = np.broadcast_to(
+            (per_length / row_widths)[:, None], channel.shape
+        )[channel]
+        return rates
+
+    for attribute in (
+        "breakpoints_min",
+        "coverage_min",
+        "series_coverage_min",
+        "point_count",
+    ):
+        if hasattr(point_flows, attribute):
+            setattr(forcing, attribute, getattr(point_flows, attribute))
+    return forcing
+
+
+def _shifted_2d_forcing(forcing, offset_min):
+    """Shift an ``f(x, y, time)`` forcing onto a warm-up clock."""
+    offset = float(offset_min)
+
+    def shifted(x, y, time):
+        return forcing(x, y, float(time) + offset)
+
+    shifted.breakpoints_min = tuple(
+        float(value - offset)
+        for value in getattr(forcing, "breakpoints_min", ())
+    )
+    return shifted
 
 
 def _terrain(
@@ -220,11 +265,26 @@ def run_validation_case_2d(
             downstream_stage, warmup_start, duration, "downstream_stage_series"
         )
         boundary_x = "inflow_stage"
-    if config.get("point_flow_series") is not None:
-        raise ValueError(
-            "2-D screening validation does not invent a spatial source mapping "
-            "for point_flow_series"
+    point_flow_source = config.get("point_flow_series")
+    if point_flow_source is None:
+        point_flow_path = None
+        lateral_inflow = None
+    else:
+        point_flow_path = _configured_path(config_path, point_flow_source)
+        if not point_flow_path.is_file():
+            raise ValueError(
+                f"Point-flow control does not exist: {point_flow_path}"
+            )
+        point_flows = load_event_point_flows(
+            point_flow_path, x_m, dx_m, event_start
         )
+        _require_control_coverage(
+            point_flows,
+            warmup_start,
+            duration,
+            "point_flow_series",
+        )
+        lateral_inflow = _point_flows_2d(point_flows, channel, dy_m)
     if float(config.get("lateral_inflow_fraction", 0.0)) != 0.0:
         raise ValueError("Calibrated/uniform lateral gain is forbidden in 2-D validation")
 
@@ -258,6 +318,11 @@ def run_validation_case_2d(
             if downstream_stage is None
             else shifted_boundary(downstream_stage, warmup_start)
         )
+        warmup_lateral = (
+            None
+            if lateral_inflow is None
+            else _shifted_2d_forcing(lateral_inflow, warmup_start)
+        )
         warmup = saint_venant_2d.run_model(
             T_final=warmup_min,
             record_interval=warmup_min,
@@ -267,6 +332,7 @@ def run_validation_case_2d(
             left_inflow=_whole_flow_boundary(
                 warmup_boundary, channel[0], dy_m
             ),
+            lateral_inflow=warmup_lateral,
             downstream_stage_m=warmup_stage,
             **common,
         )
@@ -281,6 +347,7 @@ def run_validation_case_2d(
         hu_init=initial_hu,
         hv_init=initial_hv,
         left_inflow=boundary_2d,
+        lateral_inflow=lateral_inflow,
         downstream_stage_m=downstream_stage,
         **common,
     )
@@ -347,6 +414,19 @@ def run_validation_case_2d(
                 "finite-volume 2-D downstream boundary discharge flux"
             ),
             "downstream_stage_series": stage_source,
+            "point_flow_series": point_flow_source,
+            "point_flow_count": (
+                0 if lateral_inflow is None else lateral_inflow.point_count
+            ),
+            "point_flow_mapping": (
+                None
+                if lateral_inflow is None
+                else (
+                    "Nearest longitudinal cell; whole discharge divided by "
+                    "cell length and active channel width. Positive flow enters "
+                    "without assumed momentum; withdrawals remove local momentum."
+                )
+            ),
         },
         "scores": {
             key: (
@@ -366,6 +446,14 @@ def run_validation_case_2d(
         "mass": {
             "inflow_m3": float(result["mass_inflow"]),
             "source_m3": float(result["mass_source"]),
+            "rainfall_m3": float(result["mass_rainfall"]),
+            "lateral_inflow_m3": float(result["mass_lateral_inflow"]),
+            "lateral_requested_m3": float(
+                result["mass_lateral_requested"]
+            ),
+            "unmet_withdrawal_m3": float(
+                result["mass_unmet_withdrawal"]
+            ),
             "outflow_m3": float(result["mass_outflow"]),
             "floor_correction_m3": float(result["mass_floor_correction"]),
         },

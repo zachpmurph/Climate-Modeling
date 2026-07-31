@@ -391,8 +391,16 @@ def test_validation_case_uses_timestamped_stage_and_signed_point_flows(
         encoding="utf-8",
     )
 
-    with pytest.raises(ValueError, match="does not invent a spatial source mapping"):
-        run_validation_case(config, output_path=tmp_path / "results.json")
+    result = run_validation_case(
+        config, output_path=tmp_path / "results.json"
+    )
+
+    assert result["solver"] == "saint_venant_2d"
+    assert result["boundary"]["point_flow_series"] == point_flows.name
+    assert result["boundary"]["point_flow_count"] == 2
+    assert result["mass"]["lateral_requested_m3"] == pytest.approx(75.0)
+    assert result["mass"]["lateral_inflow_m3"] == pytest.approx(75.0)
+    assert result["mass"]["unmet_withdrawal_m3"] == pytest.approx(0.0)
 
 
 def test_measured_control_must_cover_observed_warmup(tmp_path):

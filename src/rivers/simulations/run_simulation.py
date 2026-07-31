@@ -332,13 +332,13 @@ def main(argv=None):
         )
     if args.lateral_inflow_rate < 0.0:
         raise SystemExit("error: --lateral-inflow-rate must be non-negative")
-    if args.solver != "saint_venant" and (
+    if args.solver not in {"saint_venant", "saint_venant_2d"} and (
         args.lateral_inflow_series is not None
         or args.lateral_inflow_points is not None
         or args.lateral_inflow_rate != 0.0
     ):
         raise SystemExit(
-            "error: lateral inflow currently requires --solver saint_venant"
+            "error: lateral inflow requires a Saint-Venant solver"
         )
     if args.solver not in {"saint_venant", "saint_venant_2d"} and (
         args.downstream_boundary != "outflow"
@@ -648,9 +648,10 @@ def main(argv=None):
         combined_rainfall.breakpoints_min = temporal_rainfall.breakpoints_min
         scenario.rainfall = combined_rainfall
 
+    lateral_inflow_forcing = None
     if args.lateral_inflow_points is not None:
         try:
-            scenario.lateral_inflow = _load_point_lateral_inflows(
+            lateral_inflow_forcing = _load_point_lateral_inflows(
                 args.lateral_inflow_points, domain.x_m, domain.dx_m
             )
         except ValueError as exc:
@@ -671,7 +672,7 @@ def main(argv=None):
             uniform_lateral_inflow.breakpoints_min = (
                 lateral_forcing.breakpoints_min
             )
-        scenario.lateral_inflow = uniform_lateral_inflow
+        lateral_inflow_forcing = uniform_lateral_inflow
 
     if isinstance(domain, Domain2D):
         channel_depth = (
@@ -690,6 +691,34 @@ def main(argv=None):
             0.0,
         )
         wet = scenario.initial_depth_m > 0.0
+        lateral_source_mask = wet.copy()
+        for row in range(len(domain.x_m)):
+            if not np.any(lateral_source_mask[row]):
+                lateral_source_mask[
+                    row, np.argmin(domain.bed_elevation_m[row])
+                ] = True
+        source_width = np.sum(
+            lateral_source_mask * domain.dy_m[None, :], axis=1
+        )
+        if lateral_inflow_forcing is not None:
+            def lateral_inflow_2d(x, y, time):
+                del y
+                per_length = np.asarray(
+                    lateral_inflow_forcing(x, time), dtype=float
+                )
+                rates = np.zeros(lateral_source_mask.shape, dtype=float)
+                rates[lateral_source_mask] = np.broadcast_to(
+                    (per_length / source_width)[:, None],
+                    lateral_source_mask.shape,
+                )[lateral_source_mask]
+                return rates
+
+            if hasattr(lateral_inflow_forcing, "breakpoints_min"):
+                lateral_inflow_2d.breakpoints_min = (
+                    lateral_inflow_forcing.breakpoints_min
+                )
+            scenario.lateral_inflow_2d = lateral_inflow_2d
+        scenario.lateral_inflow = None
         wet_width = np.sum(wet * domain.dy_m[None, :], axis=1)
         inflow_at_zero = _forcing_value(inflow, 0.0)
         initial_unit_flow = np.zeros_like(scenario.initial_depth_m)
@@ -728,6 +757,7 @@ def main(argv=None):
         )
         scenario.spatial_order = args.spatial_order
     elif args.solver == "saint_venant":
+        scenario.lateral_inflow = lateral_inflow_forcing
         scenario.initial_discharge = np.full(
             len(domain.x_m), _forcing_value(inflow, 0.0)
         )
@@ -882,6 +912,12 @@ def main(argv=None):
         "mass_source": result.mass_source,
         "mass_rainfall": result.extra.get("mass_rainfall"),
         "mass_lateral_inflow": result.extra.get("mass_lateral_inflow"),
+        "mass_lateral_requested": result.extra.get(
+            "mass_lateral_requested"
+        ),
+        "mass_unmet_withdrawal": result.extra.get(
+            "mass_unmet_withdrawal"
+        ),
         "mass_infiltration": result.extra.get("mass_infiltration"),
         "mass_outflow": result.mass_outflow,
         "mass_correction": result.mass_correction,

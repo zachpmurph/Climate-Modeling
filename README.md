@@ -172,6 +172,7 @@ The rationale for each transition is given alongside the change.
 | **4ar — Spatial soil infiltration** | Current branch | Added shared Green-Ampt infiltration to 1-D and 2-D Saint-Venant. Profiles and reviewed terrain can carry per-cell conductivity, suction head, and moisture deficit; cumulative infiltration, proportional momentum removal, net source mass, and separate infiltration volume are retained in outputs. | Rainfall is not identical to runoff. Soil texture, hydraulic conductivity, and antecedent moisture control how much water ponds and moves across the surface, so treating all rainfall as immediate surface water overpredicts flooding on permeable, unsaturated ground. |
 | **4as — Source-aware wetting timestep** | Current branch | Both Saint-Venant solvers now predict the gravity-wave speed associated with positive rainfall or lateral source water during a proposed step and tighten the CFL step when needed. Regression cases prove that dry-start routing no longer depends on artificial rainfall breakpoints and remains conservative with soil infiltration. | A dry domain has zero current wave speed. Using only the current state allowed one timestep to span an entire storm, adding rainfall at the end and suppressing all movement during the event. |
 | **4at — 2-D-only expanded validation** | Current branch | Observed validation now refuses 1-D fallback and runs 12 uncalibrated events across eight rivers through Saint-Venant 2-D. Five added USGS events span Delaware, Connecticut, Potomac, Russian, and Snoqualmie reaches, with tracked volume, timing, and structural-storage diagnostics. | Mixing solver families and fitted parameters obscures whether errors come from hydraulics, forcing, or datasets. A fixed 2-D pathway and diverse held-out events expose missing tributary inflow, reach storage, and geometry uncertainty without downstream calibration. |
+| **4au — Conservative 2-D internal hydrographs** | Current branch | Added signed, spatially mapped internal flow hydrographs to Saint-Venant 2-D. Observed tributaries and withdrawals are distributed over explicit channel cells, forcing breakpoints constrain time steps, withdrawals are capped by available water, and requested/applied lateral volumes are reported separately. | The expanded river tests showed that missing intervening runoff dominates volume error, but the 2-D path previously rejected measured point flows. Treating tributaries as rainfall would lose provenance and distort units; explicit internal hydrographs close the known forcing gap without downstream calibration. |
 
 ---
 
@@ -222,9 +223,9 @@ python src/rivers/simulations/run_simulation.py PROFILE --solver SOLVER --t-fina
 | `--inflow-series` | — | CSV with `t_min,left_inflow`; mutually exclusive with nonzero `--left-inflow` |
 | `--rainfall-rate` | `0.0` | Uniform rainfall rate, m/min |
 | `--rainfall-series` | — | CSV with `t_min,rainfall_rate_m_per_min`; added to profile and constant rainfall |
-| `--lateral-inflow-rate` | `0.0` | 1-D Saint-Venant distributed inflow, m³/min per metre of reach |
+| `--lateral-inflow-rate` | `0.0` | Saint-Venant distributed inflow, m³/min per metre of reach; mapped over active channel cells in 2-D |
 | `--lateral-inflow-series` | — | CSV with `t_min,lateral_inflow_m3_per_min_per_m`; mutually exclusive with nonzero constant lateral inflow |
-| `--lateral-inflow-points` | — | CSV with `station_m,t_min,discharge_m3_per_min`; positive values add tributary/return flow and negative values conservatively withdraw diversions at the nearest 1-D cell |
+| `--lateral-inflow-points` | — | CSV with `station_m,t_min,discharge_m3_per_min`; positive values add tributary/return flow and negative values conservatively withdraw diversions at the nearest longitudinal cell |
 | `--downstream-boundary` | `outflow` | Saint-Venant: `outflow` or `stage`; 1-D also supports `wall` |
 | `--downstream-stage` | — | Fixed water-surface elevation for a 1-D or 2-D `stage` boundary |
 | `--downstream-stage-series` | — | CSV with `t_min,downstream_stage_m`; time-varying measured 1-D or 2-D stage |
@@ -604,7 +605,8 @@ storage as a timing error from missing watershed inflow as a volume error.
 Constant widths, gauge-datum slope proxies, downstream controls, and truncated
 recession windows remain important uncertainties. See
 [`docs/validation_guide.md`](docs/validation_guide.md) and the machine-readable
-`expanded_river_error_assessment.results.json`.
+`expanded_river_error_assessment.results.json`. The staged corrective work is
+tracked in [`docs/model_shortfall_roadmap.md`](docs/model_shortfall_roadmap.md).
 
 Dependencies are pinned in `requirements.txt`. The GitHub Actions verification
 workflow runs the complete suite and matrix from a clean checkout.

@@ -101,6 +101,11 @@ Observed-event validation under `src/rivers/validation/` must use
 solver. The 1-D solvers remain available for numerical verification, reference,
 and non-validation simulation workflows.
 
+Observed internal tributary and withdrawal hydrographs belong in
+`Scenario.lateral_inflow_2d`, not `rainfall_2d`. Preserve whole-flow volume when
+mapping them to cells, cap withdrawals by available water, retain forcing
+breakpoints, and report requested versus applied source mass separately.
+
 All registered solvers run on the supplied grid and must honor its spatial cell
 widths, slopes, and `manning_n`. `scenario_from_profile(...)` transfers
 the optional profile initial depth, rainfall rates, and labels into `Scenario`.
