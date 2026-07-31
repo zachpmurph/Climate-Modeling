@@ -2,15 +2,17 @@
 
 A static, dependency-free site presenting the repository's flood models:
 
-- **Playground** — pick a model (kinematic wave, 1-D Saint-Venant, or 2-D
-  Saint-Venant), set channel and storm conditions, and run the simulation live in
-  the browser.
-- **Validation** — the model against *observed* data across three rivers (Colorado below
-  Glen Canyon Dam, Truckee at Reno, and a predeclared one-shot Rio Grande transfer test),
-  compared to the downstream gauge with nothing tuned to match. Every Nash–Sutcliffe score
-  is paired with the event's observed variability (NSE is unreliable on near-steady flow),
-  and the Colorado calibration is shown with its identifiability warning. Sourced from
-  `real_world_rivers/validation/`.
+- **Playground** — pick a model (kinematic wave or 2-D Saint-Venant), set channel and
+  storm conditions, and run the simulation live in the browser. Only ports that pass the
+  parity gate against the current Python solver are offered; 1-D Saint-Venant is paused
+  (see *Solver parity* below).
+- **Validation** — the Saint-Venant 2-D solver against *observed* data across **eight rivers,
+  twelve events** (Colorado, Truckee, Rio Grande, Delaware, Connecticut, Potomac, Russian,
+  Snoqualmie), compared to the downstream gauge with nothing tuned to match — every event 2-D
+  with its declared terrain, no fitted parameter, no 1-D fallback. Every Nash–Sutcliffe score is
+  paired with the event's observed variability (NSE is unreliable on near-steady flow), and each
+  event carries a volume/amplitude/routing-lag diagnosis plus a volume-only counterfactual whose
+  oracle guard is shown verbatim. Sourced from `real_world_rivers/validation/`.
 - **About** — provenance, verification status, and limitations.
 
 No frameworks, no build step, no CDN: plain HTML/CSS/JS with inline SVG charts.
@@ -57,7 +59,7 @@ including mass balance, come from the full-precision arrays.
 
 `website/js/solvers.js` ports `src/general/solvers/linear_advection.py` and
 `src/general/solvers/saint_venant_1d.py`; `website/js/solvers2d.js` ports
-`src/general/solvers/saint_venant_2d.py`. All three are held to the Python
+`src/general/solvers/saint_venant_2d.py`. They are held to the Python
 implementations by reference tests:
 
 ```bash
@@ -65,10 +67,20 @@ python website/build_scenarios.py --references   # regenerate Python reference o
 node --test website/test/solver_parity.test.mjs  # compare the JS ports (tol <= 1e-8)
 ```
 
-If you change the numerics in any of the three Python solvers, update the JS port and
-re-run both commands. The port must follow the Python source, never the reverse:
-`src/general/solvers/**` is gated by `tests/test_saint_venant_2d_verification.py` and
+If you change the numerics in any Python solver, update the JS port and re-run both
+commands. The port must follow the Python source, never the reverse: `src/general/solvers/**`
+is gated by `tests/test_saint_venant_2d_verification.py` and
 `docs/validation/saint_venant_2d_results.json`.
+
+**Known drift (the ratchet).** Some Python solvers have moved ahead of their ports.
+`KNOWN_DRIFT` in the test names each such reference case with its measured magnitude and an
+upper bound; the suite reports the drift, fails if it *grows* past the bound, and fails if it
+*disappears* (meaning the port was re-synced and the case should graduate back to normal
+gating). This exists because the 1-D Saint-Venant port silently drifted once when references
+were left stale — deleting or muting a case is how that happens, so don't. Currently drifted:
+the two 1-D Saint-Venant cases (codex's solver rewrite; the model is therefore removed from the
+Playground selector until re-ported) and `saint_venant_2d_flat` at fp scale (a wetting-source
+dt cap the 2-D port lacks; the real 2-D physics cases still match exactly).
 
 The 2-D references cover a flat bed, a compound bed with dry benches, and a collapsing
 pond on a slope. They do **not** cover the draining limiter's `theta < 1` branch: at the
@@ -77,27 +89,36 @@ number, so `theta` measures exactly 1.0 in every case. Both implementations then
 by 1.0, so the branch cannot make them diverge — it is a positivity guard, not a live
 path.
 
-## The Validation tab's one checked claim
+The 2-D references cover a flat bed, a compound bed with dry benches, and a collapsing
+pond on a slope. They do **not** cover the draining limiter's `theta < 1` branch: at the
+enforced `cfl <= 0.5` the outgoing-to-available volume ratio is bounded by the CFL
+number, so `theta` measures exactly 1.0 in every case. Both implementations then scale
+by 1.0, so the branch cannot make them diverge — it is a positivity guard, not a live
+path.
 
-`data/validation.json` is reshaped from `real_world_rivers/validation/*.results.json` and
-`calibration_suite.results.json`; nothing is recomputed from the solver. The builder adds
-two derived quantities the honest reading needs — each event's observed coefficient of
-variation, and the front-loaded residual thirds for the Colorado events.
+## The Validation tab's checked claim
 
-The Colorado suite's central claim is that no parameter was fitted per event, so the builder
-**verifies it** — it compares reach length, cells, slope, Manning n, width, warm-up, spatial
-order, initial condition, lateral inflow, and rainfall across the Colorado (`glen_canyon`)
-cases and raises rather than publishing the claim if any differ. The check is scoped to one
-river on purpose: different rivers legitimately have different geometry, so the identical-
-parameters claim is per river, not across the whole suite.
+`data/validation.json` is reshaped from `real_world_rivers/validation/*.results.json`
+(twelve events across eight rivers) plus `validation_suite.results.json`; nothing is
+recomputed from the solver. The builder adds one derived quantity — each event's observed
+coefficient of variation — and copies the tracked per-event diagnostics through, including
+their guard strings verbatim.
+
+The suite's standing claim is `parameter_policy`: every event runs Saint-Venant 2-D only, no
+fitted parameter, no 1-D fallback. The builder **verifies the 2-D-only half per case** — it
+raises if any case's result solver is not `saint_venant_2d`, or if a case carries a calibrated
+status. (The old fixed-parameter check was removed: the multi-river suite deliberately uses
+different geometry per river, so that claim no longer holds and must not be republished.)
 
 Deliberate framing, do not undo it:
-- This is an *uncalibrated comparison*, not a pass. Present it that way.
+- This is an *uncalibrated 2-D screening*, not a pass. Present it that way.
 - Nash–Sutcliffe divides by the observed variance, so on a near-steady river (Rio Grande,
   CoV 2.6%) it turns unreliable and can read strongly negative while the model matches
   magnitude to ~5%. Always show NSE next to CoV; never headline a low-variance NSE alone.
-- Where the model is calibrated, show the identifiability warning next to the improved
-  scores. The Colorado fit lands every scale at a grid boundary — calibrated is not validated.
+  Distinguish that metric artifact from a genuine miss (Russian, −76% bias, high CoV).
+- The `volume_only_counterfactual` rescales the prediction to the observed total volume — it
+  uses held-out downstream volume as an oracle. Show its `guard` text ("not a permissible
+  correction") with the number, or don't show the number.
 
 ## Cost of a 2-D run in the browser
 

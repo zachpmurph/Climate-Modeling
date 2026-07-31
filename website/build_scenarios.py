@@ -931,28 +931,33 @@ def _write_reference(name, payload):
 
 VALIDATION_DIR = REPO_ROOT / "real_world_rivers" / "validation"
 
-# Parameters that the suite's whole argument depends on being identical across
-# every event. If any of these differ between cases, the "no event-specific
-# fitting" claim is false and the site must not repeat it.
-FIXED_PARAMETER_KEYS = (
-    "length_m", "cells", "slope", "manning_n", "upstream_width_m",
-    "downstream_width_m", "warmup_min", "spatial_order",
-    "initial_condition", "lateral_inflow", "rainfall",
-)
-
-
 # Below this observed coefficient of variation, NSE's variance denominator is so
 # small that the score stops being a reliable read on the model (see metric note).
 LOW_VARIABILITY_COV_PERCENT = 5.0
 
+# A cell counts as flooding-relevant nowhere here; validation scores discharge.
+# River display order and short ids, data-driven from the case config's river.
+def _river_id(river_name):
+    return river_name.lower().replace(" river", "").replace(" ", "_").strip("_")
+
 
 def _validation_event(stem, *, predeclared=False):
-    """Reshape one standalone case result, adding steadiness and residual shape.
+    """Reshape one 2-D case result: series, steadiness, and the tracked diagnostics.
 
-    Nothing is recomputed from the solver; CoV and residual thirds are derived
-    from the observed/predicted series already in the tracked results file.
+    Nothing is recomputed from the solver. CoV is derived from the observed
+    series; every other field is copied from the results file, including the
+    error/reach diagnosis guards verbatim (they mark oracle-only quantities that
+    must never be read as a permitted correction).
     """
     result = json.loads((VALIDATION_DIR / f"{stem}.results.json").read_text(encoding="utf-8"))
+    if result.get("solver") != "saint_venant_2d":
+        raise ValueError(
+            f"{stem}: validation is 2-D only, but its result solver is {result.get('solver')!r}"
+        )
+    status_l = str(result.get("status", "")).lower()
+    if "calibrated" in status_l and "uncalibrated" not in status_l:
+        raise ValueError(f"{stem}: a calibrated status ({result['status']}) cannot be published as validation")
+
     series = result["series"]
     observed = np.asarray(series["observed_downstream_m3_per_min"], dtype=float)
     predicted = np.asarray(series["predicted_downstream_m3_per_min"], dtype=float)
@@ -961,6 +966,14 @@ def _validation_event(stem, *, predeclared=False):
     first, second = count // 3, 2 * count // 3
     mean_observed = float(observed.mean()) if count else float("nan")
     cov = float(100.0 * observed.std() / mean_observed) if mean_observed else float("nan")
+
+    terrain = result.get("terrain_representation") or {}
+    err = result.get("error_diagnosis") or {}
+    reach = result.get("reach_diagnosis") or {}
+    counterfactual = err.get("volume_only_counterfactual") or {}
+    observed_volume = reach.get("observed_downstream_volume_m3")
+    unexplained = reach.get("unexplained_downstream_volume_m3")
+
     window = result["case"]["observation_window"]
     return {
         "id": stem,
@@ -972,10 +985,34 @@ def _validation_event(stem, *, predeclared=False):
         "cov_percent": cov,
         "low_variability": cov < LOW_VARIABILITY_COV_PERCENT,
         "observed_mean_m3_per_min": mean_observed,
-        "times_min": [float(v) for v in series["observed_times_min"]],
+        "times_min": [float(v) for v in series.get("times_min", series.get("observed_times_min"))],
         "observed_m3_per_min": [float(v) for v in observed],
         "predicted_m3_per_min": [float(v) for v in predicted],
         "scores": result["scores"],
+        "terrain": {
+            "name": terrain.get("name"),
+            "x_cells": terrain.get("x_cells"),
+            "y_cells": terrain.get("y_cells"),
+            "limitation": terrain.get("limitation"),
+        },
+        "diagnostics": {
+            "volume_ratio": err.get("volume_ratio"),
+            "amplitude_ratio": err.get("amplitude_ratio"),
+            "peak_lag_min": err.get("peak_lag_min"),
+            "volume_only_counterfactual": {
+                "scaled_nse": (counterfactual.get("scores") or {}).get("nse"),
+                "scale": counterfactual.get("scale_applied_to_prediction"),
+                "guard": counterfactual.get("guard"),
+            } if counterfactual else None,
+            "observed_routing_lag_min": reach.get("observed_routing_lag_min"),
+            "modeled_routing_lag_min": reach.get("modeled_routing_lag_min"),
+            "routing_lag_error_min": reach.get("routing_lag_error_min"),
+            "unexplained_volume_fraction": (
+                float(unexplained / observed_volume)
+                if observed_volume and unexplained is not None else None
+            ),
+            "reach_guard": reach.get("guard"),
+        },
         "residual_thirds_m3_per_min": {
             "early": float(residual[:first].mean()),
             "middle": float(residual[first:second].mean()),
@@ -984,123 +1021,61 @@ def _validation_event(stem, *, predeclared=False):
     }
 
 
-def _gauge_pair(config_name):
-    case = json.loads((VALIDATION_DIR / config_name).read_text(encoding="utf-8"))["case"]
-    return f"{case['upstream_gauge']} → {case['downstream_gauge']}"
-
-
-def _colorado_calibration():
-    """The Colorado train/validation/test calibration, uncalibrated vs calibrated.
-
-    Surfaces the identifiability warning next to the improved scores so a reader
-    cannot mistake a calibrated fit for a validated one.
-    """
-    cal = json.loads((VALIDATION_DIR / "calibration_suite.results.json").read_text(encoding="utf-8"))
-    diagnostics = cal["parameter_diagnostics"]
-    improvement = cal["improvement"]
-    splits = {}
-    for split_name in ("training", "validation", "test"):
-        current = cal["splits"][split_name]["summary"]
-        baseline = cal["baseline_splits"][split_name]["summary"]
-        if not current or not baseline:
-            continue
-        splits[split_name] = {
-            "event_dates": [
-                event["config"].split("lees_ferry")[1].replace(".json", "").strip("_")
-                or "2004-07-01"
-                for event in cal["splits"][split_name]["events"]
-            ],
-            "baseline_nse": baseline["nse"]["mean"],
-            "calibrated_nse": current["nse"]["mean"],
-            "baseline_r": baseline["pearson_r"]["mean"],
-            "calibrated_r": current["pearson_r"]["mean"],
-            "baseline_abs_pct_bias": improvement[split_name]["mean_absolute_percent_bias_before"],
-            "calibrated_abs_pct_bias": improvement[split_name]["mean_absolute_percent_bias_after"],
-        }
-    return {
-        "selected_parameters": cal["selected_parameters"],
-        "identifiability": {
-            "warning": diagnostics["identifiability_warning"],
-            "boundary_hits": diagnostics["boundary_hits"],
-            "interpretation": diagnostics["interpretation"],
-        },
-        "splits": splits,
-    }
-
-
 def build_validation():
-    """Publish the observed-data comparison across rivers.
+    """Publish the observed-data comparison: Saint-Venant 2-D across eight rivers.
 
     Source: real_world_rivers/validation/, produced by
-    src/rivers/validation/run_suite.py and calibrate_suite.py. Nothing is
-    recomputed from the solver here; this reshapes the tracked results and adds
-    the steadiness and residual-shape context the honest reading needs.
+    src/rivers/validation/run_suite.py (and run_case_2d.py). Nothing is
+    recomputed from the solver; this reshapes the tracked 2-D results and adds
+    the steadiness context (CoV) the honest reading of NSE needs.
+
+    The suite's standing claim is now `parameter_policy`: every event runs
+    Saint-Venant 2-D only, no fitted parameter, no 1-D fallback. _validation_event
+    verifies the 2-D-only half per case (and refuses any calibrated status); this
+    keeps the published page from outrunning what the suite actually did.
     """
-    # ── Colorado: the fixed-parameter suite whose one claim we still verify ──
-    # The suite now spans several rivers; the identical-parameters claim is made
-    # per river, so verify it across the Colorado events only. Different rivers
-    # legitimately use different length, slope, and width.
     suite = json.loads((VALIDATION_DIR / "validation_suite.json").read_text(encoding="utf-8"))
-    colorado_cases = [c for c in suite["cases"] if c.startswith("glen_canyon")]
-    shared = None
-    colorado_events = []
-    for config_name in colorado_cases:
+    summary = json.loads((VALIDATION_DIR / "validation_suite.results.json").read_text(encoding="utf-8"))
+
+    # Group the 12 cases by river, preserving suite order.
+    rivers_by_id = {}
+    order = []
+    for config_name in suite["cases"]:
         stem = config_name[:-len(".json")]
-        result = json.loads((VALIDATION_DIR / f"{stem}.results.json").read_text(encoding="utf-8"))
-        fixed = {k: result["assumptions"].get(k) for k in FIXED_PARAMETER_KEYS}
-        if shared is None:
-            shared = fixed
-        elif fixed != shared:
-            differing = [k for k in FIXED_PARAMETER_KEYS if fixed.get(k) != shared.get(k)]
-            raise ValueError(
-                "the fixed-parameter suite claims no event-specific fitting, but "
-                f"{stem} differs from the first case in: {', '.join(differing)}. "
-                "Fix the suite or stop publishing the fixed-parameter claim."
-            )
-        colorado_events.append(_validation_event(stem))
-    colorado_config = json.loads((VALIDATION_DIR / colorado_cases[0]).read_text(encoding="utf-8"))
-    colorado = {
-        "id": "colorado",
-        "name": "Colorado River — Glen Canyon Dam to Lees Ferry",
-        "kind": "fixed_parameter_suite",
-        "gauges": _gauge_pair(colorado_cases[0]),
-        "parameter_policy": suite["parameter_policy"],
-        "fixed_parameters": shared,
-        "roughness_origin": colorado_config["reach"].get("roughness_origin", ""),
-        "events": colorado_events,
-        "calibration": _colorado_calibration(),
-    }
+        config = json.loads((VALIDATION_DIR / config_name).read_text(encoding="utf-8"))
+        case = config["case"]
+        river_name = case["river"]
+        rid = _river_id(river_name)
+        predeclared = "selection_protocol" in case
+        if rid not in rivers_by_id:
+            order.append(rid)
+            rivers_by_id[rid] = {
+                "id": rid,
+                "name": river_name,
+                "gauges": f"{case['upstream_gauge']} → {case['downstream_gauge']}",
+                "predeclared_policy": case.get("selection_protocol") if predeclared else None,
+                "events": [],
+            }
+        rivers_by_id[rid]["events"].append(_validation_event(stem, predeclared=predeclared))
 
-    # ── Truckee: an independent river (different geometry, slope, forcing) ──
-    truckee = {
-        "id": "truckee",
-        "name": "Truckee River — Reno / Sparks",
-        "kind": "independent_river",
-        "gauges": _gauge_pair("truckee_reno_sparks_2017-01-08.json"),
-        "events": [
-            _validation_event("truckee_reno_sparks_2017-01-08"),
-            _validation_event("truckee_reno_sparks_2017-02-10"),
-        ],
-    }
-
-    # ── Rio Grande: the predeclared third-river transfer test ──
-    rio_config = json.loads(
-        (VALIDATION_DIR / "rio_grande_alameda_albuquerque_2023-05-12.json").read_text(encoding="utf-8")
-    )
-    rio_grande = {
-        "id": "rio_grande",
-        "name": "Rio Grande — Alameda to Albuquerque",
-        "kind": "predeclared_transfer_test",
-        "gauges": _gauge_pair("rio_grande_alameda_albuquerque_2023-05-12.json"),
-        "predeclared_policy": rio_config["case"].get("selection_protocol", {}),
-        "events": [
-            _validation_event("rio_grande_alameda_albuquerque_2023-05-12", predeclared=True),
-        ],
-    }
+    rivers = []
+    for rid in order:
+        river = rivers_by_id[rid]
+        river["kind"] = (
+            "predeclared_transfer_test" if river["predeclared_policy"]
+            else "multi_event_river" if len(river["events"]) > 1
+            else "independent_river"
+        )
+        rivers.append(river)
 
     payload = {
         "generated_by": "website/build_scenarios.py --validation",
-        "rivers": [colorado, truckee, rio_grande],
+        "suite_name": suite["suite"]["name"],
+        "parameter_policy": suite["parameter_policy"],
+        "score_summary": summary.get("score_summary"),
+        "event_count": sum(len(r["events"]) for r in rivers),
+        "river_count": len(rivers),
+        "rivers": rivers,
         "metric_note": {
             "title": "Why a good model can score a terrible NSE",
             "text": (
@@ -1113,38 +1088,30 @@ def build_validation():
             ),
             "cov_threshold_percent": LOW_VARIABILITY_COV_PERCENT,
         },
-        "residual_finding": {
-            "title": "A residual we have not explained",
+        "diagnostics_note": {
+            "title": "How each event is diagnosed",
             "text": (
-                "Across all four Colorado events the model's shortfall is concentrated in the "
-                "first third of each day. Feeding the observed upstream hydrograph into the "
-                "warm-up (already done here) did not remove it. Under-prediction on the early "
-                "limb that eases or reverses later is a timing signature, not a magnitude error "
-                "— its cause has not yet been isolated. It is shown here rather than tuned away."
+                "For every event the pipeline reports where the error lives: the volume ratio "
+                "and amplitude ratio separate a level error from a shape error, the routing-lag "
+                "error compares modelled and observed travel time, and a volume-only "
+                "counterfactual shows what the score would be if the prediction were rescaled to "
+                "the observed total. That counterfactual uses held-out downstream volume as an "
+                "oracle — it is a diagnostic, never a permitted correction — and its guard text "
+                "is shown with it."
             ),
-            "per_event": [
-                {
-                    "date": event["date"],
-                    **event["residual_thirds_m3_per_min"],
-                }
-                for event in colorado_events
-            ],
         },
     }
     path = DATA_DIR / "validation.json"
     path.write_text(json.dumps(payload), encoding="utf-8")
-    print(f"Wrote {path} ({path.stat().st_size / 1024:.0f} KB)")
-    for river in payload["rivers"]:
+    print(f"Wrote {path} ({path.stat().st_size / 1024:.0f} KB) — "
+          f"{payload['river_count']} rivers, {payload['event_count']} events, 2-D only")
+    for river in rivers:
         print(f"  {river['name']}  ({river['kind']})")
         for event in river["events"]:
             s = event["scores"]
             flag = "  [low-variability: NSE unreliable]" if event["low_variability"] else ""
             print(f"    {event['date']}  NSE {s['nse']:+.3f}  bias {s['percent_bias']:+.1f}%  "
                   f"r {s['pearson_r']:.3f}  CoV {event['cov_percent']:.1f}%{flag}")
-    cal = colorado["calibration"]
-    print(f"  Colorado calibration: test NSE "
-          f"{cal['splits']['test']['baseline_nse']:.3f} -> {cal['splits']['test']['calibrated_nse']:.3f} "
-          f"(identifiability warning: {cal['identifiability']['warning']})")
 
 
 def main(argv=None):

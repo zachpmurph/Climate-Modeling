@@ -35,10 +35,12 @@
           <legend>Model</legend>
           <label class="radio"><input type="radio" name="model" value="kinematic_wave" checked>
             Kinematic wave <span class="hint">fast; valid for gradually varying flow</span></label>
-          <label class="radio"><input type="radio" name="model" value="saint_venant">
-            Saint-Venant 1-D <span class="hint">full dynamic wave (Rusanov)</span></label>
           <label class="radio"><input type="radio" name="model" value="saint_venant_2d">
             Saint-Venant 2-D <span class="hint">plan-view inundation over a compound channel</span></label>
+          <p class="field-note">Only models whose in-browser port is verified against the current
+          Python solver are offered. The 1-D Saint-Venant sandbox is paused: its solver was
+          substantially rewritten and the port has not been re-synced. It returns once parity is
+          restored — the guardrail test tracks the gap.</p>
         </fieldset>
         <fieldset>
           <legend>Channel</legend>
@@ -118,10 +120,11 @@
 
   <!-- ── Validation (observed events) ────────────────────────────────── -->
   <section id="tab-validation" class="tab-panel" role="tabpanel">
-    <p class="lede">Everywhere else on this site the model answers <em>what if</em>. Here it
-    answers <em>did it happen that way</em>: the same solver run against real days on three
-    rivers, compared with what the downstream gauge recorded. Nothing here is tuned to match —
-    the downstream gauge is never fed to the model.</p>
+    <p class="lede">The Playground answers <em>what if</em>. Here the model answers
+    <em>did it happen that way</em>: the Saint-Venant 2-D solver run against real days on
+    <strong>eight rivers</strong>, compared with what the downstream gauge recorded. Every event
+    is 2-D with its declared terrain, no fitted parameter, no 1-D fallback — and the downstream
+    gauge is never fed to the model, so the modelled line is a genuine prediction.</p>
     <div id="metric-note" class="metric-note"></div>
     <div class="rig">
       <div class="rail">
@@ -162,23 +165,17 @@
           <h3 class="subhead">Bias across every event</h3>
           <div id="val-bias"></div>
         </div>
-        <div class="chart-block" id="calibration-block" hidden>
-          <h3>Does calibration help?</h3>
-          <p class="chart-note">Fitting four global scales — roughness, width, slope, and a small
-          lateral gain — on the training events only, then scoring untouched validation and test
-          events. Uncalibrated versus calibrated below.</p>
-          <div id="cal-splits"></div>
-          <div id="cal-identifiability" class="warn-card"></div>
+        <div class="chart-block" id="diagnosis-block">
+          <h3>Where this event's error lives</h3>
+          <p class="chart-note" id="diagnosis-note"></p>
+          <div id="diagnosis-grid" class="diag-grid"></div>
+          <div id="counterfactual-card" class="warn-card" hidden></div>
         </div>
-        <div class="chart-block" id="residual-block" hidden>
-          <h3 id="residual-title"></h3>
-          <p class="chart-note" id="residual-text"></p>
-          <div id="residual-bars"></div>
-        </div>
-        <div class="chart-block" id="params-block" hidden>
-          <h3 id="params-title">Parameters, held identical across every event of this river</h3>
-          <p class="chart-note" id="params-note"></p>
-          <div id="val-params" class="param-grid"></div>
+        <div class="chart-block" id="terrain-block">
+          <h3>How this event was run</h3>
+          <p class="chart-note">Saint-Venant 2-D on the reach's declared terrain. No parameter is
+          fitted to the gauge.</p>
+          <div id="terrain-grid" class="param-grid"></div>
         </div>
         <div id="val-limits" class="limitations"></div>
       </div>
@@ -194,8 +191,10 @@
       solvers (kinematic wave, 1-D Saint-Venant, 2-D Saint-Venant). The
       <strong>Playground</strong> runs JavaScript ports of the numerics live in your browser;
       the ports are held to the Python implementations by automated parity tests (tolerance
-      ≤ 1e-8). The <strong>Validation</strong> tab compares the Python solvers with real gauge
-      records.</p>
+      ≤ 1e-8). Only ports that currently pass — kinematic wave and 2-D Saint-Venant — are
+      offered; the 1-D Saint-Venant port trails a recent solver rewrite and is paused until it
+      is re-synced, with the parity test tracking the gap. The <strong>Validation</strong> tab
+      compares the Python 2-D solver with real gauge records.</p>
       <p class="fine">A <em>Regions</em> tab — precomputed "what if" flood scenarios for
       specific reaches — has been set aside for now. Projecting named-place impacts is only
       worth showing once the model has earned that trust against observed data, and the
@@ -207,15 +206,18 @@
       correctly. Whether they describe a real river is <em>validation</em>, a separate question
       answered only by observed data.</p>
       <h2>What the Validation tab shows</h2>
-      <p>That is where the question is put honestly: the same solver run
-      against real events on three rivers — the Colorado below Glen Canyon Dam, the Truckee at
-      Reno, and a predeclared one-shot test on the Rio Grande — compared with what the downstream
-      gauge recorded, with nothing tuned to match. Where the flow really moves the model does well
-      (Truckee correlation 0.998); on the regulated Colorado it tracks shape but runs biased low;
-      and the tab is careful about a trap — Nash–Sutcliffe becomes unreliable when a river barely
-      varies, so every score is shown next to the event's variability. Where a calibrated fit is
-      shown, its parameters' identifiability warning is shown with it, so calibrated is never read
-      as validated. Results are reported as-is rather than tuned away.</p>
+      <p>That is where the question is put honestly: the Saint-Venant 2-D solver run against
+      <strong>twelve real events on eight rivers</strong> — the Colorado below Glen Canyon Dam,
+      the Truckee, the Rio Grande (a predeclared one-shot test), the Delaware, Connecticut,
+      Potomac, Russian, and Snoqualmie — compared with what the downstream gauge recorded, every
+      event 2-D with its declared terrain and nothing tuned to match. The results run the full
+      range: near-perfect where the flow really moves (Potomac and Connecticut correlation 0.99),
+      biased low on the regulated Colorado, and a genuine miss on the Russian (76% under). Two
+      traps are handled openly — Nash–Sutcliffe becomes unreliable when a river barely varies, so
+      every score is shown next to the event's variability; and each event carries a diagnosis
+      (how much volume and how much of the swing the model delivered, how far off its routing time
+      was) with a volume-only counterfactual whose oracle guard is printed alongside it. Results
+      are reported as-is rather than tuned away.</p>
       <h2>What this is not</h2>
       <p>This is a <strong>screening and education tool</strong>, not a flood forecast. In the
       Playground, 1-D depths are cross-section averages — how high the water gets, not how far it
