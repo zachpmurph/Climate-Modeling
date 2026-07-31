@@ -198,6 +198,40 @@ def _cap_dt_at_forcing_breakpoints(dt, time, *forcings):
     return dt
 
 
+def _downstream_discharge(
+    h,
+    hu,
+    hv,
+    bed,
+    dy,
+    boundary_x,
+    left_inflow,
+    downstream_stage_m,
+    spatial_order,
+    time,
+):
+    """Return the signed whole-boundary x discharge at one instant."""
+    if boundary_x == "periodic":
+        return 0.0
+    inflow = _inflow_values(left_inflow, time, h.shape[1])
+    stage = (
+        None
+        if downstream_stage_m is None
+        else _stage_values(downstream_stage_m, time, h.shape[1])
+    )
+    flux = _rusanov_x(
+        h,
+        hu,
+        hv,
+        bed,
+        boundary_x,
+        inflow,
+        spatial_order,
+        stage,
+    )[0]
+    return float(np.sum(flux[-1, :] * dy))
+
+
 def _extend_x(h, hu, hv, bed, boundary, inflow, downstream_stage=None):
     if boundary == "periodic":
         return tuple(
@@ -472,6 +506,7 @@ def run_model(
     hv_init=None,
     left_inflow=0.0,
     rainfall=None,
+    lateral_inflow=None,
     x_m=None,
     y_m=None,
     dx_m=None,
@@ -588,26 +623,54 @@ def run_model(
     hu_history = [hu.copy()]
     hv_history = [hv.copy()]
     cumulative_infiltration_history = [cumulative_infiltration.copy()]
+    downstream_flux_history = [
+        _downstream_discharge(
+            h,
+            hu,
+            hv,
+            bed,
+            dy,
+            boundary_x,
+            left_inflow,
+            downstream_stage_m,
+            spatial_order,
+            0.0,
+        )
+    ]
     next_record = 1
 
     mass_inflow = 0.0
     mass_outflow = 0.0
     mass_source = 0.0
+    mass_rainfall = 0.0
+    mass_lateral_inflow = 0.0
+    mass_lateral_requested = 0.0
+    mass_unmet_withdrawal = 0.0
     mass_infiltration = 0.0
     mass_floor_correction = 0.0
     t_current = 0.0
     area = dx[:, None] * dy[None, :]
     rainfall_function = rainfall
+    lateral_inflow_function = lateral_inflow
 
     while t_current < T_final - 1e-14:
-        source_value = (
+        rainfall_value = (
             r(t_current)
             if rainfall_function is None
             else rainfall_function(x, y, t_current)
         )
-        source = _field(source_value, 0.0, shape, "rainfall")
-        if np.any(source < 0):
+        rainfall_source = _field(rainfall_value, 0.0, shape, "rainfall")
+        if np.any(rainfall_source < 0):
             raise ValueError("rainfall cannot be negative")
+        lateral_value = (
+            0.0
+            if lateral_inflow_function is None
+            else lateral_inflow_function(x, y, t_current)
+        )
+        lateral_requested = _field(
+            lateral_value, 0.0, shape, "lateral_inflow"
+        )
+        wetting_source = rainfall_source + np.maximum(lateral_requested, 0.0)
         speed_x = _wave_speed(h, hu)
         speed_y = _wave_speed(h, hv)
         spectral_rate = speed_x / dx[:, None] + speed_y / dy[None, :]
@@ -615,7 +678,7 @@ def run_model(
         dt = T_final - t_current if max_rate <= 1e-14 else cfl / max_rate
         dt = min(dt, T_final - t_current)
         dt = _cap_dt_for_wetting_source(
-            dt, h, hu, hv, source, dx, dy, cfl
+            dt, h, hu, hv, wetting_source, dx, dy, cfl
         )
         if next_record < len(record_marks):
             dt = min(dt, record_marks[next_record] - t_current)
@@ -624,10 +687,18 @@ def run_model(
             t_current,
             left_inflow,
             rainfall_function,
+            lateral_inflow_function,
             downstream_stage_m,
         )
         if dt <= 0 or not np.isfinite(dt):
             raise FloatingPointError(f"Invalid time step {dt!r} at t={t_current}")
+
+        # A signed internal flow hydrograph may request a withdrawal.  Limit
+        # extraction to the water already present plus rainfall arriving in
+        # this step so it cannot rely on the non-negative depth floor.
+        minimum_lateral = -h / dt - rainfall_source
+        lateral_source = np.maximum(lateral_requested, minimum_lateral)
+        source = rainfall_source + lateral_source
 
         inflow = _inflow_values(left_inflow, t_current, ny)
         downstream_stage = (
@@ -669,6 +740,9 @@ def run_model(
             + ((ghv + corr_y_bottom)[:, 1:] - (ghv + corr_y_top)[:, :-1])
             / dy[None, :]
         )
+        withdrawal = np.minimum(lateral_source, 0.0)
+        hu_star += dt * withdrawal * _velocity(h, hu)
+        hv_star += dt * withdrawal * _velocity(h, hv)
         if momentum_source is not None:
             momentum_values = momentum_source(x, y, t_current)
             if not isinstance(momentum_values, (tuple, list)) or len(momentum_values) != 2:
@@ -734,7 +808,16 @@ def run_model(
                 mass_outflow += right_volume
             else:
                 mass_inflow -= right_volume
-        mass_source += float(np.sum(source * area) * dt) - infiltration_volume
+        rainfall_volume = float(np.sum(rainfall_source * area) * dt)
+        lateral_volume = float(np.sum(lateral_source * area) * dt)
+        requested_lateral_volume = float(
+            np.sum(lateral_requested * area) * dt
+        )
+        mass_rainfall += rainfall_volume
+        mass_lateral_inflow += lateral_volume
+        mass_lateral_requested += requested_lateral_volume
+        mass_unmet_withdrawal += lateral_volume - requested_lateral_volume
+        mass_source += rainfall_volume + lateral_volume - infiltration_volume
         mass_infiltration += infiltration_volume
 
         h, hu, hv = h_new, hu_new, hv_new
@@ -746,6 +829,20 @@ def run_model(
             hv_history.append(hv.copy())
             cumulative_infiltration_history.append(
                 cumulative_infiltration.copy()
+            )
+            downstream_flux_history.append(
+                _downstream_discharge(
+                    h,
+                    hu,
+                    hv,
+                    bed,
+                    dy,
+                    boundary_x,
+                    left_inflow,
+                    downstream_stage_m,
+                    spatial_order,
+                    t_current,
+                )
             )
             next_record += 1
 
@@ -759,6 +856,7 @@ def run_model(
         "h_history": np.asarray(h_history),
         "hu_history": np.asarray(hu_history),
         "hv_history": np.asarray(hv_history),
+        "downstream_flux_history": np.asarray(downstream_flux_history),
         "h_initial": h_initial,
         "h_final": h,
         "hu_initial": hu_initial,
@@ -768,6 +866,10 @@ def run_model(
         "mass_inflow": mass_inflow,
         "mass_outflow": mass_outflow,
         "mass_source": mass_source,
+        "mass_rainfall": mass_rainfall,
+        "mass_lateral_inflow": mass_lateral_inflow,
+        "mass_lateral_requested": mass_lateral_requested,
+        "mass_unmet_withdrawal": mass_unmet_withdrawal,
         "mass_infiltration": mass_infiltration,
         "soil_ksat_m_per_min": None if soil is None else soil[0],
         "soil_suction_head_m": None if soil is None else soil[1],
@@ -790,6 +892,7 @@ class _SaintVenant2DSolver:
         "left_inflow",
         "rainfall",
         "rainfall_2d",
+        "lateral_inflow_2d",
         "cfl",
         "boundary_x",
         "boundary_y",
@@ -826,6 +929,8 @@ class _SaintVenant2DSolver:
         else:
             rainfall = lambda x, y, time: np.zeros(shape)
 
+        lateral_inflow = scenario.lateral_inflow_2d
+
         raw = run_model(
             T_final=scenario.t_final_min,
             record_interval=scenario.record_interval_min,
@@ -834,6 +939,7 @@ class _SaintVenant2DSolver:
             hv_init=state(scenario.initial_discharge_y, "initial_discharge_y"),
             left_inflow=scenario.left_inflow,
             rainfall=rainfall,
+            lateral_inflow=lateral_inflow,
             x_m=domain.x_m,
             y_m=domain.y_m,
             dx_m=domain.dx_m,
@@ -868,10 +974,15 @@ class _SaintVenant2DSolver:
                 "bed_elevation_m": raw["bed_elevation_m"],
                 "discharge_x_history": raw["hu_history"],
                 "discharge_y_history": raw["hv_history"],
+                "downstream_flux_history": raw["downstream_flux_history"],
                 "discharge_x_final": raw["hu_final"],
                 "discharge_y_final": raw["hv_final"],
                 "mass_floor_correction": raw["mass_floor_correction"],
                 "mass_infiltration": raw["mass_infiltration"],
+                "mass_rainfall": raw["mass_rainfall"],
+                "mass_lateral_inflow": raw["mass_lateral_inflow"],
+                "mass_lateral_requested": raw["mass_lateral_requested"],
+                "mass_unmet_withdrawal": raw["mass_unmet_withdrawal"],
                 "soil_ksat_m_per_min": raw["soil_ksat_m_per_min"],
                 "soil_suction_head_m": raw["soil_suction_head_m"],
                 "soil_moisture_deficit": raw["soil_moisture_deficit"],

@@ -32,6 +32,8 @@ def test_runs_stably_with_all_finite_output():
     # 2D snapshots: (n_times, nx, ny)
     assert result["h_history"].ndim == 3
     assert result["h_history"].shape[0] == len(result["times"])
+    assert result["downstream_flux_history"].shape == result["times"].shape
+    assert np.all(np.isfinite(result["downstream_flux_history"]))
 
 
 def test_mass_conservation(monkeypatch):
@@ -382,6 +384,98 @@ def test_high_downstream_stage_drives_conservative_2d_backflow():
         + result["mass_floor_correction"],
         abs=1e-12,
     )
+
+
+def test_internal_lateral_hydrograph_adds_exact_2d_volume():
+    nx, ny = 4, 3
+    shape = (nx, ny)
+    zero = np.zeros(shape)
+    source_rate = np.zeros(shape)
+    source_rate[2, 1] = 0.01
+    dx = np.full(nx, 2.0 / nx)
+    dy = np.full(ny, 1.5 / ny)
+    x = (np.arange(nx) + 0.5) * dx[0]
+    y = (np.arange(ny) + 0.5) * dy[0]
+
+    def lateral(x, y, time):
+        del x, y, time
+        return source_rate
+
+    result = sv2.run_model(
+        T_final=0.1,
+        record_interval=0.1,
+        h_init=zero,
+        hu_init=zero,
+        hv_init=zero,
+        x_m=x,
+        y_m=y,
+        dx_m=dx,
+        dy_m=dy,
+        slope_x=zero,
+        slope_y=zero,
+        manning_n=zero,
+        bed_elevation_m=zero,
+        rainfall=lambda x, y, time: zero,
+        lateral_inflow=lateral,
+        boundary_x="periodic",
+        boundary_y="periodic",
+    )
+    area = result["dx_m"][:, None] * result["dy_m"][None, :]
+    storage_change = float(np.sum(result["h_final"] * area))
+    expected = source_rate[2, 1] * area[2, 1] * 0.1
+
+    assert result["mass_lateral_inflow"] == pytest.approx(expected)
+    assert result["mass_lateral_requested"] == pytest.approx(expected)
+    assert result["mass_unmet_withdrawal"] == pytest.approx(0.0)
+    assert result["mass_rainfall"] == pytest.approx(0.0)
+    assert result["mass_source"] == pytest.approx(expected)
+    assert storage_change == pytest.approx(expected, abs=1e-12)
+
+
+def test_internal_withdrawal_is_capped_without_floor_mass():
+    nx, ny = 2, 2
+    shape = (nx, ny)
+    depth = np.full(shape, 0.01)
+    zero = np.zeros(shape)
+    dx = np.full(nx, 1.0 / nx)
+    dy = np.full(ny, 1.0 / ny)
+    x = (np.arange(nx) + 0.5) * dx[0]
+    y = (np.arange(ny) + 0.5) * dy[0]
+
+    def withdrawal(x, y, time):
+        del x, y, time
+        return np.full(shape, -1.0)
+
+    result = sv2.run_model(
+        T_final=0.1,
+        record_interval=0.1,
+        h_init=depth,
+        hu_init=zero,
+        hv_init=zero,
+        x_m=x,
+        y_m=y,
+        dx_m=dx,
+        dy_m=dy,
+        slope_x=zero,
+        slope_y=zero,
+        manning_n=zero,
+        bed_elevation_m=zero,
+        rainfall=lambda x, y, time: zero,
+        lateral_inflow=withdrawal,
+        boundary_x="periodic",
+        boundary_y="periodic",
+    )
+    area = result["dx_m"][:, None] * result["dy_m"][None, :]
+    initial_volume = float(np.sum(depth * area))
+
+    assert np.min(result["h_history"]) >= 0.0
+    assert result["mass_lateral_inflow"] == pytest.approx(-initial_volume)
+    assert result["mass_lateral_requested"] == pytest.approx(-0.1)
+    assert result["mass_unmet_withdrawal"] == pytest.approx(
+        0.1 - initial_volume
+    )
+    assert result["mass_floor_correction"] == pytest.approx(0.0)
+    assert np.sum(result["h_final"] * area) == pytest.approx(0.0)
 
 
 @pytest.mark.parametrize(

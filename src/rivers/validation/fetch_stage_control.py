@@ -13,7 +13,7 @@ SRC_ROOT = Path(__file__).resolve().parents[2]
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
-from rivers.ingest.common import request_json
+from rivers.validation.providers import request_json
 
 
 CONTINUOUS_URL = (

@@ -11,7 +11,7 @@ from general.solvers.profile import (
     load_profile,
 )
 from general.solvers import saint_venant_1d, saint_venant_2d
-from rivers.simulations.registry import dispatch
+from general.solvers.registry import dispatch
 
 
 def test_green_ampt_capacity_reflects_antecedent_moisture_and_wetting():

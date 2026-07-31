@@ -96,6 +96,15 @@ def test_unsupported_lateral_inflow_on_kinematic_wave():
         dispatch("kinematic_wave", domain, scenario)
 
 
+def test_2d_lateral_inflow_is_rejected_by_1d_solver():
+    domain = _load_domain()
+    scenario = _make_scenario(
+        lateral_inflow_2d=lambda x, y, t: np.zeros((len(x), len(y)))
+    )
+    with pytest.raises(UnsupportedScenario, match="lateral_inflow_2d"):
+        dispatch("saint_venant", domain, scenario)
+
+
 def test_simulation_result_shapes_kinematic_wave():
     domain = _load_domain()
     scenario = _make_scenario(t_final_min=3.0, left_inflow=0.0006)
@@ -971,6 +980,60 @@ def test_runner_exposes_time_varying_lateral_inflow(tmp_path, monkeypatch):
     assert summary["forcing_inputs"]["lateral_inflow_series"] == str(
         lateral_path
     )
+
+
+def test_runner_maps_point_hydrograph_conservatively_into_2d(
+    tmp_path, monkeypatch
+):
+    point_path = tmp_path / "tributary.csv"
+    point_path.write_text(
+        "station_m,t_min,discharge_m3_per_min\n"
+        "1000,0,1\n"
+        "1000,1,2\n",
+        encoding="utf-8",
+    )
+    captured = {}
+    actual_dispatch = run_simulation.dispatch
+
+    def capture(solver_name, domain, scenario):
+        rates = scenario.lateral_inflow_2d(
+            domain.x_m, domain.y_m, 0.5
+        )
+        captured["whole_flow"] = float(
+            np.sum(
+                rates
+                * domain.dx_m[:, None]
+                * domain.dy_m[None, :]
+            )
+        )
+        captured["one_dimensional_source"] = scenario.lateral_inflow
+        return actual_dispatch(solver_name, domain, scenario)
+
+    monkeypatch.setattr(run_simulation, "dispatch", capture)
+    run_simulation.main(
+        [
+            PROFILE_PATH,
+            "--solver",
+            "saint_venant_2d",
+            "--width",
+            "100",
+            "--cross-cells",
+            "5",
+            "--hydraulic-geometry",
+            GEOMETRY_PATH,
+            "--lateral-inflow-points",
+            str(point_path),
+            "--t-final",
+            "0",
+            "--output-dir",
+            str(tmp_path),
+            "--run-name",
+            "tributary_2d",
+        ]
+    )
+
+    assert captured["whole_flow"] == pytest.approx(1.5)
+    assert captured["one_dimensional_source"] is None
 
 
 def test_runner_records_prescribed_downstream_stage(tmp_path):

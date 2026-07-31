@@ -171,6 +171,8 @@ The rationale for each transition is given alongside the change.
 | **4aq — Reconstruction transfer evidence** | Current branch | Predeclared and retained a river-balanced first- versus second-order comparison with every physical multiplier fixed at its uncalibrated value. Joint Colorado/Truckee training selects first order; Truckee-only fitting selects second order, which then gives mean held-Colorado NSE `-1.183`. | Second order slightly improves the Truckee training event but sharply degrades both Colorado events. The asymmetric leave-one-river result shows that reconstruction order is condition-dependent and cannot be chosen from one river then assumed transferable. |
 | **4ar — Spatial soil infiltration** | Current branch | Added shared Green-Ampt infiltration to 1-D and 2-D Saint-Venant. Profiles and reviewed terrain can carry per-cell conductivity, suction head, and moisture deficit; cumulative infiltration, proportional momentum removal, net source mass, and separate infiltration volume are retained in outputs. | Rainfall is not identical to runoff. Soil texture, hydraulic conductivity, and antecedent moisture control how much water ponds and moves across the surface, so treating all rainfall as immediate surface water overpredicts flooding on permeable, unsaturated ground. |
 | **4as — Source-aware wetting timestep** | Current branch | Both Saint-Venant solvers now predict the gravity-wave speed associated with positive rainfall or lateral source water during a proposed step and tighten the CFL step when needed. Regression cases prove that dry-start routing no longer depends on artificial rainfall breakpoints and remains conservative with soil infiltration. | A dry domain has zero current wave speed. Using only the current state allowed one timestep to span an entire storm, adding rainfall at the end and suppressing all movement during the event. |
+| **4at — 2-D-only expanded validation** | Current branch | Observed validation now refuses 1-D fallback and runs 12 uncalibrated events across eight rivers through Saint-Venant 2-D. Five added USGS events span Delaware, Connecticut, Potomac, Russian, and Snoqualmie reaches, with tracked volume, timing, and structural-storage diagnostics. | Mixing solver families and fitted parameters obscures whether errors come from hydraulics, forcing, or datasets. A fixed 2-D pathway and diverse held-out events expose missing tributary inflow, reach storage, and geometry uncertainty without downstream calibration. |
+| **4au — Conservative 2-D internal hydrographs** | Current branch | Added signed, spatially mapped internal flow hydrographs to Saint-Venant 2-D. Observed tributaries and withdrawals are distributed over explicit channel cells, forcing breakpoints constrain time steps, withdrawals are capped by available water, and requested/applied lateral volumes are reported separately. | The expanded river tests showed that missing intervening runoff dominates volume error, but the 2-D path previously rejected measured point flows. Treating tributaries as rainfall would lose provenance and distort units; explicit internal hydrographs close the known forcing gap without downstream calibration. |
 
 ---
 
@@ -221,9 +223,9 @@ python src/rivers/simulations/run_simulation.py PROFILE --solver SOLVER --t-fina
 | `--inflow-series` | — | CSV with `t_min,left_inflow`; mutually exclusive with nonzero `--left-inflow` |
 | `--rainfall-rate` | `0.0` | Uniform rainfall rate, m/min |
 | `--rainfall-series` | — | CSV with `t_min,rainfall_rate_m_per_min`; added to profile and constant rainfall |
-| `--lateral-inflow-rate` | `0.0` | 1-D Saint-Venant distributed inflow, m³/min per metre of reach |
+| `--lateral-inflow-rate` | `0.0` | Saint-Venant distributed inflow, m³/min per metre of reach; mapped over active channel cells in 2-D |
 | `--lateral-inflow-series` | — | CSV with `t_min,lateral_inflow_m3_per_min_per_m`; mutually exclusive with nonzero constant lateral inflow |
-| `--lateral-inflow-points` | — | CSV with `station_m,t_min,discharge_m3_per_min`; positive values add tributary/return flow and negative values conservatively withdraw diversions at the nearest 1-D cell |
+| `--lateral-inflow-points` | — | CSV with `station_m,t_min,discharge_m3_per_min`; positive values add tributary/return flow and negative values conservatively withdraw diversions at the nearest longitudinal cell |
 | `--downstream-boundary` | `outflow` | Saint-Venant: `outflow` or `stage`; 1-D also supports `wall` |
 | `--downstream-stage` | — | Fixed water-surface elevation for a 1-D or 2-D `stage` boundary |
 | `--downstream-stage-series` | — | CSV with `t_min,downstream_stage_m`; time-varying measured 1-D or 2-D stage |
@@ -568,8 +570,8 @@ python src/general/verification/verify_saint_venant_2d.py \
     --output docs/validation/saint_venant_2d_results.json
 ```
 
-Reproduce the held-out two-gauge field baseline and its structural sensitivity
-screening:
+Reproduce the 2-D-only two-gauge field baseline, its structural sensitivity,
+and the expanded validation suite:
 
 ```bash
 python src/rivers/validation/run_case.py \
@@ -578,56 +580,33 @@ python src/rivers/validation/run_sensitivity.py \
     real_world_rivers/validation/glen_canyon_lees_ferry.json
 python src/rivers/validation/run_suite.py \
     real_world_rivers/validation/validation_suite.json
-python src/rivers/validation/calibrate_suite.py \
-    real_world_rivers/validation/calibration_suite.json
+python src/rivers/validation/analyze_expanded_events.py \
+    real_world_rivers/validation/expanded_river_error_assessment.json
 ```
 
-The field case is deliberately uncalibrated. Its downstream observations are
-used only for scoring; the sensitivity matrix varies roughness, width,
-longitudinal resolution, and spatial reconstruction one at a time. The tracked
-screening shows NSE from `-1.35` to `0.63`: roughness dominates the tested input
-range, grid refinement is nearly neutral, and second-order reconstruction exposes
-strong sensitivity to the simplified steady-flow initialization. Do not choose a
-variant from this matrix as a calibration.
+The canonical observed runner dispatches only to `saint_venant_2d`, requires
+explicit `validation_2d` terrain settings, and rejects calibration fields.
+One-cell ribbons exercise the 2-D equations but remain routing screens rather
+than geographic flood maps. Raised shelves are retained only as controlled
+storage/connectivity sensitivity tests.
 
-With observed pre-event spin-up, the four-event uncalibrated Colorado subset has median NSE
-`0.043` (range `-0.272` to `0.384`) and percent bias from `-21.48%` to `-12.53%`.
-This is worse than constant-flow startup, showing that the old initialization was
-optimistic rather than physically transferable.
+The 12-event suite covers Colorado, Truckee, Rio Grande, Delaware, Connecticut,
+Potomac, Russian, and Snoqualmie. Among the five added rivers, Connecticut and
+Potomac score NSE `0.951` and `0.964`, Delaware `0.757`, Snoqualmie `0.230`,
+and Russian `-2.423`. The modeled volume deficit rises strongly with additional
+drainage area between gauges, elevating omitted tributary and rainfall-runoff
+forcing as the leading hypothesis. This five-event association is descriptive,
+not causal.
 
-Two independent Truckee River events transfer the same unfitted reach assumptions
-between events and score NSE `0.967` and `0.797`, correlation `0.998` and `0.920`,
-and percent bias `9.39%` and `0.70%`. These are historical structural tests, not
-a new calibration set; their width and roughness are still estimated.
-
-The predeclared Rio Grande transfer case was committed before its observations
-were fetched or scored. Its retained first run has NSE `-2.848`, correlation
-`0.570`, and percent bias `+4.55%`. The near-zero aggregate bias does not rescue
-the weak dynamics: the model attenuates the observed range and misses the peak
-timing. No Rio Grande parameter was adjusted after seeing this result.
-
-Using approved downstream stage as a measured boundary in a separate
-post-baseline experiment produces NSE `-3.322`, RMSE `450 m³/min`, percent bias
-`+4.66%`, and correlation `0.403`. These are finite-volume downstream-boundary
-flux scores. The earlier last-cell discharge comparison was not the gauge
-observable and overstated the benefit of the stage boundary.
-
-A second post-baseline experiment uses USGS field visits at both gauges to
-derive active width, effective bed elevation, and Manning roughness without
-looking at the scored hydrograph. It produces NSE `-3.412`, RMSE `455 m³/min`,
-percent bias `+4.81%`, and correlation `0.457`. The result does not justify
-tuning those measured quantities. It shows that static two-section geometry
-plus observed tailwater is still missing the reach-scale storage, exchange, or
-time-varying sand-bed behavior needed to reproduce this event.
-
-The constrained global calibration selects roughness `0.8×`, width `1.2×`, slope
-`1.2×`, and distributed reach gain `7.5%`. It produces training NSE
-`0.725–0.762`, validation NSE `0.760`, and historical-test NSE `0.722`, with
-correlation `0.865–0.918`. Roughness, width, and slope hit search bounds, so these
-are effective parameters—not independently identified physical measurements.
-Each leave-one-2002-event-out refit independently selected the same parameter
-set; omitted-event NSE was `0.725` and `0.762`, with correlation `0.865` and
-`0.888`. This is useful historical transfer evidence, not a prospective test.
+An idealized Russian River shelf improves correlation from `0.620` to `0.819`
+and reduces routing-lag error from 285 minutes early to 30 minutes early while
+leaving the roughly 76% volume deficit. This distinguishes missing lateral
+storage as a timing error from missing watershed inflow as a volume error.
+Constant widths, gauge-datum slope proxies, downstream controls, and truncated
+recession windows remain important uncertainties. See
+[`docs/validation_guide.md`](docs/validation_guide.md) and the machine-readable
+`expanded_river_error_assessment.results.json`. The staged corrective work is
+tracked in [`docs/model_shortfall_roadmap.md`](docs/model_shortfall_roadmap.md).
 
 Dependencies are pinned in `requirements.txt`. The GitHub Actions verification
 workflow runs the complete suite and matrix from a clean checkout.
@@ -653,7 +632,8 @@ src/rivers/validation/run_sensitivity.py       # one-at-a-time structural sensit
 src/rivers/validation/fetch_event.py            # reproducible approved-USGS event fetch
 src/rivers/validation/fetch_stage_control.py     # approved stage fetch + datum conversion
 src/rivers/validation/run_suite.py              # fixed-parameter multi-event evidence
-src/rivers/validation/calibrate_suite.py        # constrained global multi-event optimizer
+src/rivers/validation/run_case_2d.py            # 2-D-only observed-event runner
+src/rivers/validation/analyze_expanded_events.py # cross-river error assessment
 src/rivers/reporting/generate_flood_report.py  # saved artifacts → HTML + outcomes JSON
 src/rivers/reporting/generate_uncertainty_report.py # ensemble NPZ → spatial HTML report
 src/rivers/visualization/animate_flood_map.py  # saved time series → geographic HTML animation

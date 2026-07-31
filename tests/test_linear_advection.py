@@ -31,8 +31,18 @@ def _uniform_profile(n_cells=11, length_m=1000.0, slope=0.001, manning_n=0.04):
 
 
 # ── profile loading ────────────────────────────────────────────────────────
-def test_load_profile_csv():
-    profile = la.load_profile("real_world_rivers/tools/example_river_profile.csv")
+def test_load_profile_csv(tmp_path):
+    profile_path = tmp_path / "profile.csv"
+    profile_path.write_text(
+        "station_m,slope,manning_n,initial_depth_m,rainfall_rate_m_per_min,label\n"
+        "0,0.001,0.0005833333333333334,0.04,0.000001,upstream\n"
+        "1000,0.001,0.0006333333333333333,0.04,0.000001,\n"
+        "2000,0.001,0.0006666666666666666,0.04,0.000001,\n"
+        "3000,0.001,0.0007,0.04,0.000001,\n"
+        "4000,0.001,0.00075,0.04,0.000001,downstream\n",
+        encoding="utf-8",
+    )
+    profile = la.load_profile(profile_path)
 
     assert np.allclose(profile.station_m, [0, 1000, 2000, 3000, 4000])
     assert np.all(profile.dx_m > 0)

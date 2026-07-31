@@ -5,10 +5,15 @@
     "rivers": [
       "Colorado River",
       "Truckee River",
-      "Rio Grande"
+      "Rio Grande",
+      "Delaware River",
+      "Connecticut River",
+      "Potomac River",
+      "Russian River",
+      "Snoqualmie River"
     ]
   },
-  "parameter_policy": "Within each reach, all events use independently estimated length, slope, Manning roughness, width, grid, warm-up duration, and numerical settings fixed before scoring. The Colorado calibration remains a separate manifest and is never transferred into the independent Truckee or predeclared Rio Grande tests.",
+  "parameter_policy": "Every event runs Saint-Venant 2-D only, with its declared validation_2d terrain settings and independently estimated slope, roughness, width, warm-up, and boundaries fixed before scoring. No fitted parameter or 1-D fallback is permitted.",
   "cases": [
     "glen_canyon_lees_ferry.json",
     "glen_canyon_lees_ferry_2002-01-25.json",
@@ -16,6 +21,11 @@
     "glen_canyon_lees_ferry_2004-01-06.json",
     "truckee_reno_sparks_2017-01-08.json",
     "truckee_reno_sparks_2017-02-10.json",
-    "rio_grande_alameda_albuquerque_2023-05-12.json"
+    "rio_grande_alameda_albuquerque_2023-05-12.json",
+    "delaware_montague_belvidere_2006-06-27.json",
+    "connecticut_montague_holyoke_2011-08-28.json",
+    "potomac_point_of_rocks_little_falls_2018-06-02.json",
+    "russian_hopland_guerneville_2019-02-26.json",
+    "snoqualmie_snoqualmie_carnation_2009-01-07.json"
   ]
 }

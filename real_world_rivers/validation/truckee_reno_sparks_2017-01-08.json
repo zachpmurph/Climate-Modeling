@@ -11,6 +11,9 @@
     "purpose": "Independent-river structural validation; downstream discharge is not used as a boundary or calibration target."
   },
   "validation_status": "independent_river_structural_test",
+  "validation_policy": {"calibration": "none"},
+  "hydraulic_dataset": "gage_datum_reach_proxy",
+  "validation_2d": {"representation": "ribbon", "x_cells": 31, "y_cells": 1},
   "observations": "truckee_reno_sparks_2017-01-08.csv",
   "sources": [
     {

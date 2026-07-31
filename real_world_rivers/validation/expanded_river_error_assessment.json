@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "title": "Uncalibrated error assessment for five added historical rivers",
+  "selection": "Five independent USGS two-gauge flood events spanning regulated, humid, rainfall-dominated, tributary-rich, and steep-to-lowland reaches.",
+  "cases": [
+    "delaware_montague_belvidere_2006-06-27.json",
+    "connecticut_montague_holyoke_2011-08-28.json",
+    "potomac_point_of_rocks_little_falls_2018-06-02.json",
+    "russian_hopland_guerneville_2019-02-26.json",
+    "snoqualmie_snoqualmie_carnation_2009-01-07.json"
+  ],
+  "diagnostic_variants": [
+    {
+      "river": "Russian River",
+      "baseline": "russian_hopland_guerneville_2019-02-26.results.json",
+      "variant": "russian_hopland_guerneville_2019-02-26.shelf.2d.results.json",
+      "change": "Replace the one-cell ribbon with seven-cell idealized lateral shelves."
+    },
+    {
+      "river": "Snoqualmie River",
+      "baseline": "snoqualmie_snoqualmie_carnation_2009-01-07.results.json",
+      "variant": "snoqualmie_snoqualmie_carnation_2009-01-07.shelf.2d.results.json",
+      "change": "Replace the one-cell ribbon with seven-cell idealized lateral shelves."
+    }
+  ]
+}

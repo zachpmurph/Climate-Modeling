@@ -1,0 +1,152 @@
+{
+  "schema_version": 1,
+  "title": "Uncalibrated error assessment for five added historical rivers",
+  "solver_policy": "saint_venant_2d_only",
+  "calibration": "none",
+  "case_count": 5,
+  "cases": [
+    {
+      "config": "delaware_montague_belvidere_2006-06-27.json",
+      "river": "Delaware River",
+      "intervening_drainage_area_growth_fraction": 0.30316,
+      "nse": 0.7574684177427311,
+      "pearson_r": 0.949474186745577,
+      "percent_bias": -13.33892512060258,
+      "predicted_to_observed_volume_ratio": 0.9252661816865383,
+      "observed_downstream_to_upstream_volume_ratio": 1.0026614611043303,
+      "peak_lag_error_min": -285.0,
+      "routing_lag_error_min": 0.0,
+      "unexplained_downstream_volume_m3": 73223718.0725019
+    },
+    {
+      "config": "connecticut_montague_holyoke_2011-08-28.json",
+      "river": "Connecticut River",
+      "intervening_drainage_area_growth_fraction": 0.06005,
+      "nse": 0.950679276610932,
+      "pearson_r": 0.9971912745968062,
+      "percent_bias": -10.917376683256775,
+      "predicted_to_observed_volume_ratio": 0.8909712935618974,
+      "observed_downstream_to_upstream_volume_ratio": 0.8381712465668433,
+      "peak_lag_error_min": 135.0,
+      "routing_lag_error_min": -30.0,
+      "unexplained_downstream_volume_m3": 57619150.95705992
+    },
+    {
+      "config": "potomac_point_of_rocks_little_falls_2018-06-02.json",
+      "river": "Potomac River",
+      "intervening_drainage_area_growth_fraction": 0.1978,
+      "nse": 0.964263524135434,
+      "pearson_r": 0.9925508072890545,
+      "percent_bias": -8.81249867283747,
+      "predicted_to_observed_volume_ratio": 0.9119321992123152,
+      "observed_downstream_to_upstream_volume_ratio": 1.0251145379801636,
+      "peak_lag_error_min": -150.0,
+      "routing_lag_error_min": -45.0,
+      "unexplained_downstream_volume_m3": 74801091.89647472
+    },
+    {
+      "config": "russian_hopland_guerneville_2019-02-26.json",
+      "river": "Russian River",
+      "intervening_drainage_area_growth_fraction": 2.69613,
+      "nse": -2.4233860130674065,
+      "pearson_r": 0.6201923472017516,
+      "percent_bias": -76.08286954764014,
+      "predicted_to_observed_volume_ratio": 0.2394688363600451,
+      "observed_downstream_to_upstream_volume_ratio": 3.9770495425630914,
+      "peak_lag_error_min": -390.0,
+      "routing_lag_error_min": -285.0,
+      "unexplained_downstream_volume_m3": 272106867.7997277
+    },
+    {
+      "config": "snoqualmie_snoqualmie_carnation_2009-01-07.json",
+      "river": "Snoqualmie River",
+      "intervening_drainage_area_growth_fraction": 0.608,
+      "nse": 0.2299652825103392,
+      "pearson_r": 0.7976643831308128,
+      "percent_bias": -32.554241060011385,
+      "predicted_to_observed_volume_ratio": 0.6747931079122842,
+      "observed_downstream_to_upstream_volume_ratio": 1.4667308522293416,
+      "peak_lag_error_min": -420.0,
+      "routing_lag_error_min": -465.0,
+      "unexplained_downstream_volume_m3": 119000918.32582968
+    }
+  ],
+  "descriptive_associations": {
+    "sample_size": 5,
+    "warning": "Five purposively selected events are too few for causal inference; correlations are hypothesis-ranking evidence only and are strongly influenced by the Russian River case.",
+    "drainage_growth_vs_observed_net_volume_gain_pearson_r": 0.9990573741224276,
+    "drainage_growth_vs_modeled_volume_deficit_pearson_r": 0.9752034625045183,
+    "drainage_growth_vs_nse_pearson_r": -0.9982936834111248,
+    "drainage_growth_vs_hydrograph_correlation_pearson_r": -0.9403110535047854,
+    "modeled_routing_too_fast_case_count": 4,
+    "routing_lag_comparable_case_count": 5
+  },
+  "structural_sensitivity": [
+    {
+      "river": "Russian River",
+      "baseline": "russian_hopland_guerneville_2019-02-26.results.json",
+      "variant": "russian_hopland_guerneville_2019-02-26.shelf.2d.results.json",
+      "change": "Replace the one-cell ribbon with seven-cell idealized lateral shelves.",
+      "baseline_terrain": "ribbon",
+      "variant_terrain": "shelf",
+      "baseline_nse": -2.4233860130674065,
+      "variant_nse": -2.361874018769753,
+      "baseline_pearson_r": 0.6201923472017516,
+      "variant_pearson_r": 0.8188549084616363,
+      "baseline_volume_ratio": 0.2394688363600451,
+      "variant_volume_ratio": 0.23022721894684267,
+      "baseline_routing_lag_error_min": -285.0,
+      "variant_routing_lag_error_min": -30.0,
+      "interpretation": "A timing/correlation improvement without a volume recovery supports storage/connectivity as a timing error source and missing forcing as a separate volume error source."
+    },
+    {
+      "river": "Snoqualmie River",
+      "baseline": "snoqualmie_snoqualmie_carnation_2009-01-07.results.json",
+      "variant": "snoqualmie_snoqualmie_carnation_2009-01-07.shelf.2d.results.json",
+      "change": "Replace the one-cell ribbon with seven-cell idealized lateral shelves.",
+      "baseline_terrain": "ribbon",
+      "variant_terrain": "shelf",
+      "baseline_nse": 0.2299652825103392,
+      "variant_nse": 0.2895870678650352,
+      "baseline_pearson_r": 0.7976643831308128,
+      "variant_pearson_r": 0.8399644047397337,
+      "baseline_volume_ratio": 0.6747931079122842,
+      "variant_volume_ratio": 0.6732398545868455,
+      "baseline_routing_lag_error_min": -465.0,
+      "variant_routing_lag_error_min": -405.0,
+      "interpretation": "A timing/correlation improvement without a volume recovery supports storage/connectivity as a timing error source and missing forcing as a separate volume error source."
+    }
+  ],
+  "ranked_hypotheses": [
+    {
+      "rank": 1,
+      "source": "missing intervening runoff and tributary inflow",
+      "evidence": "Volume deficit and skill degradation rise sharply with intervening drainage-area growth; the model currently supplies only the upstream hydrograph.",
+      "next_discriminating_test": "Supply independently observed tributary hydrographs and rainfall-runoff lateral sources without fitting them to the downstream gauge."
+    },
+    {
+      "rank": 2,
+      "source": "underrepresented reach and floodplain storage",
+      "evidence": "The modeled routing lag is too short in 4 of 5 comparable cases; the one-cell ribbon has no lateral floodplain storage. The idealized Russian River shelf removes most routing-lag error and improves correlation while leaving its volume deficit.",
+      "next_discriminating_test": "Replace the idealized ribbon with datum-reviewed terrain and topobathymetry, then compare routing lag before changing roughness."
+    },
+    {
+      "rank": 3,
+      "source": "reach-average geometry and slope proxies",
+      "evidence": "Widths are assumed constant and slopes use gage-datum differences, which are not channel-bed profiles; these errors directly alter wave speed and storage.",
+      "next_discriminating_test": "Use surveyed sections or conditioned 3DEP/topobathymetry while holding forcing and solver settings fixed."
+    },
+    {
+      "rank": 4,
+      "source": "unrepresented controls and event-window storage",
+      "evidence": "Hydropower, reservoir operations, diversions, and incomplete recession windows can change downstream volume and timing without representing a solver conservation failure.",
+      "next_discriminating_test": "Add observed control operations where available and repeat volume accounting over windows that include the full recession."
+    },
+    {
+      "rank": 5,
+      "source": "numerical diffusion or 2-D equation implementation",
+      "evidence": "The same solver and grid achieve high skill on Connecticut and Potomac, so numerics alone do not explain the cross-river pattern; they remain a secondary contributor.",
+      "next_discriminating_test": "Repeat fixed-forcing cases at multiple longitudinal and lateral resolutions and retain every result as a sensitivity test."
+    }
+  ]
+}

@@ -1,0 +1,61 @@
+{
+  "case": {
+    "name": "Potomac River, Point of Rocks to Little Falls — June 2018 flood",
+    "river": "Potomac River",
+    "upstream_gauge": "USGS-01638500",
+    "downstream_gauge": "USGS-01646500",
+    "observation_window": [
+      "2018-06-02T00:00:00Z",
+      "2018-06-06T00:00:00Z"
+    ],
+    "purpose": "Independent tributary-rich flood-routing test; downstream observations are used only for scoring."
+  },
+  "validation_status": "independent_river_structural_test",
+  "validation_policy": {"calibration": "none"},
+  "hydraulic_dataset": "gage_datum_reach_proxy",
+  "validation_2d": {"representation": "ribbon", "x_cells": 31, "y_cells": 1},
+  "observations": "potomac_point_of_rocks_little_falls_2018-06-02.csv",
+  "sources": [
+    {
+      "role": "upstream",
+      "provider": "U.S. Geological Survey Water Data APIs",
+      "parameter": "00060 continuous discharge",
+      "gauge": "USGS-01638500",
+      "url": "https://api.waterdata.usgs.gov/ogcapi/v0/collections/continuous/items?f=json&monitoring_location_id=USGS-01638500&parameter_code=00060&datetime=2018-06-01T12%3A00%3A00Z%2F2018-06-06T00%3A00%3A00Z&limit=50000",
+      "approval_status": "Approved"
+    },
+    {
+      "role": "downstream",
+      "provider": "U.S. Geological Survey Water Data APIs",
+      "parameter": "00060 continuous discharge",
+      "gauge": "USGS-01646500",
+      "url": "https://api.waterdata.usgs.gov/ogcapi/v0/collections/continuous/items?f=json&monitoring_location_id=USGS-01646500&parameter_code=00060&datetime=2018-06-02T00%3A00%3A00Z%2F2018-06-06T00%3A00%3A00Z&limit=50000",
+      "approval_status": "Approved"
+    }
+  ],
+  "retrieved_at": "2026-07-30",
+  "reach": {
+    "length_m": 69945.828,
+    "cells": 81,
+    "slope": 0.00070964,
+    "manning_n": 0.0005833333333333334,
+    "upstream_width_m": 300.0,
+    "downstream_width_m": 300.0,
+    "geometry_classification": "estimated",
+    "roughness_origin": "A priori SI Manning n 0.035 divided by 60; not fitted",
+    "length_source": "USGS NLDI NHDPlusV2 routed centerline",
+    "slope_source": "Difference between published NAVD88 gage datums divided by routed length; screening proxy only",
+    "gage_datum_upstream_ft_navd88": 199.91,
+    "gage_datum_downstream_ft_navd88": 37.04,
+    "drainage_area_upstream_mi2": 9651.0,
+    "drainage_area_downstream_mi2": 11560.0
+  },
+  "reach_context": {
+    "intervening_drainage_area_growth_fraction": 0.19780,
+    "forcing_limitation": "Monocacy River and other tributary runoff, direct rainfall, diversions, and floodplain exchange are not supplied to the model."
+  },
+  "warmup": {"duration_min": 720.0, "upstream_forcing": "observed"},
+  "record_interval_min": 15.0,
+  "spatial_order": 1,
+  "cfl": 0.4
+}
