@@ -19,18 +19,29 @@ from rivers.validation.run_case import run_validation_case
 
 def summarize_results(results):
     """Return transparent across-event score ranges and medians."""
-    metrics = ("nse", "rmse", "bias", "percent_bias", "pearson_r")
+    metrics = (
+        "nse",
+        "rmse",
+        "normalized_rmse",
+        "bias",
+        "percent_bias",
+        "pearson_r",
+        "kge",
+        "volumetric_efficiency",
+    )
     summary = {}
     for metric in metrics:
         values = np.asarray(
             [
-                result["scores"][metric]
+                result["scores"].get(metric)
                 for result in results
-                if result["scores"][metric] is not None
-                and math.isfinite(float(result["scores"][metric]))
+                if result["scores"].get(metric) is not None
+                and math.isfinite(float(result["scores"].get(metric)))
             ],
             dtype=float,
         )
+        if values.size == 0:
+            continue
         summary[metric] = {
             "minimum": float(np.min(values)),
             "median": float(np.median(values)),

@@ -204,6 +204,20 @@ Explicitly refresh a committed USGS fixture only when source review requires it:
 python src/rivers/validation/fetch_event.py CASE.json
 python src/rivers/validation/fetch_stage_control.py CASE.json
 python src/rivers/validation/fetch_channel_geometry.py CASE.json
+python src/rivers/validation/fetch_point_flows.py CASE.json
 ```
 
 The refresh utilities have no database or generic ingestion/export path.
+
+Run the complementary metric audit with:
+
+```bash
+python src/rivers/validation/audit_validation_metrics.py \
+  real_world_rivers/validation/metric_audit.json
+```
+
+Do not use NSE or correlation alone as physical validation. Inspect KGE
+components, normalized RMSE, percent bias, volumetric efficiency, volume ratio,
+amplitude, peak and routing timing, conservation, and skill over the unchanged
+upstream hydrograph. Internal-source runs do not have one comparable mainstem
+routing lag because downstream timing mixes multiple source paths.

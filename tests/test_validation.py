@@ -9,12 +9,16 @@ import pytest
 
 from general.solvers import saint_venant_1d as sv1
 from rivers.validation.skill import (
+    benchmark_skill,
+    kling_gupta,
     mean_bias,
     nash_sutcliffe,
+    normalized_rmse,
     pearson_r,
     percent_bias,
     rmse,
     skill_scores,
+    volumetric_efficiency,
 )
 from rivers.validation.compare import evaluate_series, interpolate_to
 
@@ -26,6 +30,9 @@ def test_perfect_prediction_is_perfect_skill():
     assert rmse(obs, obs) == pytest.approx(0.0)
     assert mean_bias(obs, obs) == pytest.approx(0.0)
     assert pearson_r(obs, obs) == pytest.approx(1.0)
+    assert kling_gupta(obs, obs) == pytest.approx(1.0)
+    assert normalized_rmse(obs, obs) == pytest.approx(0.0)
+    assert volumetric_efficiency(obs, obs) == pytest.approx(1.0)
 
 
 def test_nash_sutcliffe_of_mean_predictor_is_zero():
@@ -50,13 +57,40 @@ def test_percent_bias_known_value():
 def test_skill_scores_returns_all_metrics():
     obs = np.array([1.0, 2.0, 3.0, 4.0])
     scores = skill_scores(obs, obs + 0.1)
-    assert {"nse", "rmse", "bias", "percent_bias", "pearson_r", "n"} <= set(scores)
+    assert {
+        "nse",
+        "rmse",
+        "normalized_rmse",
+        "bias",
+        "percent_bias",
+        "pearson_r",
+        "kge",
+        "volumetric_efficiency",
+        "n",
+    } <= set(scores)
     assert scores["n"] == 4
 
 
 def test_metrics_reject_mismatched_lengths():
     with pytest.raises(ValueError):
         nash_sutcliffe(np.array([1.0, 2.0]), np.array([1.0]))
+
+
+def test_kge_penalizes_bias_and_variability_despite_perfect_correlation():
+    observed = np.array([1.0, 2.0, 3.0, 4.0])
+    doubled = 2.0 * observed
+    assert pearson_r(observed, doubled) == pytest.approx(1.0)
+    assert kling_gupta(observed, doubled) < 0.0
+    assert volumetric_efficiency(observed, doubled) == pytest.approx(0.0)
+
+
+def test_benchmark_skill_requires_model_to_beat_naive_upstream_series():
+    observed = np.array([1.0, 3.0, 2.0, 4.0])
+    upstream = np.array([1.0, 2.0, 2.0, 3.0])
+    improved = np.array([1.0, 2.8, 2.0, 3.8])
+    worse = np.array([2.0, 2.0, 3.0, 3.0])
+    assert benchmark_skill(observed, improved, upstream) > 0.0
+    assert benchmark_skill(observed, worse, upstream) < 0.0
 
 
 # ── series alignment ───────────────────────────────────────────────────────

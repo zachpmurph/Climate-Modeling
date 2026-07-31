@@ -16,6 +16,7 @@ from rivers.validation.run_case import (
     shifted_boundary,
 )
 from rivers.validation.fetch_event import collect_event_rows
+from rivers.validation.fetch_point_flows import collect_point_flow_rows
 from rivers.validation.fetch_channel_geometry import (
     collect_channel_geometry_rows,
 )
@@ -476,6 +477,52 @@ def test_fetch_event_normalizes_approved_usgs_rows():
         100.0 * 0.028316846592 * 60.0
     )
     assert set(urls) == {"upstream", "downstream"}
+
+
+def test_fetch_point_flows_preserves_station_and_requires_warmup_coverage():
+    config = {
+        "case": {
+            "observation_window": [
+                "2020-01-01T00:00:00Z",
+                "2020-01-01T00:15:00Z",
+            ]
+        },
+        "warmup": {"duration_min": 15.0},
+        "internal_sources": [
+            {"name": "tributary", "gauge": "USGS-3", "station_m": 1250.0}
+        ],
+    }
+
+    def requester(url, params=None):
+        assert params["datetime"] == (
+            "2019-12-31T23:45:00Z/2020-01-01T00:15:00Z"
+        )
+        return {
+            "features": [
+                {
+                    "properties": {
+                        "parameter_code": "00060",
+                        "time": timestamp,
+                        "value": value,
+                        "unit_of_measure": "ft^3/s",
+                        "approval_status": "Approved",
+                    }
+                }
+                for timestamp, value in (
+                    ("2019-12-31T23:45:00Z", 10.0),
+                    ("2020-01-01T00:00:00Z", 20.0),
+                    ("2020-01-01T00:15:00Z", 15.0),
+                )
+            ]
+        }, "https://example.test/USGS-3"
+
+    rows, urls = collect_point_flow_rows(config, requester=requester)
+
+    assert len(rows) == 3
+    assert {row["source_name"] for row in rows} == {"tributary"}
+    assert {float(row["station_m"]) for row in rows} == {1250.0}
+    assert {row["approval_status"] for row in rows} == {"Approved"}
+    assert set(urls) == {"tributary"}
 
 
 def test_fetch_stage_control_converts_gage_height_to_model_datum():

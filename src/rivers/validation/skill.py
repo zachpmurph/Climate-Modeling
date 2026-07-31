@@ -23,6 +23,15 @@ def rmse(observed, predicted):
     return float(np.sqrt(np.mean((pred - obs) ** 2)))
 
 
+def normalized_rmse(observed, predicted):
+    """RMSE divided by the observed range; 0 is perfect."""
+    obs, pred = _paired(observed, predicted)
+    observed_range = float(np.max(obs) - np.min(obs))
+    if observed_range == 0.0:
+        return float("nan")
+    return rmse(obs, pred) / observed_range
+
+
 def mean_bias(observed, predicted):
     """Mean signed error, mean(predicted - observed). Positive = over-prediction."""
     obs, pred = _paired(observed, predicted)
@@ -56,14 +65,61 @@ def pearson_r(observed, predicted):
     return float(np.corrcoef(obs, pred)[0, 1])
 
 
+def kling_gupta(observed, predicted):
+    """Original KGE using correlation, variability, and mean-flow ratios."""
+    obs, pred = _paired(observed, predicted)
+    observed_mean = float(np.mean(obs))
+    observed_std = float(np.std(obs))
+    predicted_mean = float(np.mean(pred))
+    predicted_std = float(np.std(pred))
+    correlation = pearson_r(obs, pred)
+    if (
+        observed_mean == 0.0
+        or observed_std == 0.0
+        or not np.isfinite(correlation)
+    ):
+        return float("nan")
+    variability_ratio = predicted_std / observed_std
+    mean_ratio = predicted_mean / observed_mean
+    return 1.0 - float(
+        np.sqrt(
+            (correlation - 1.0) ** 2
+            + (variability_ratio - 1.0) ** 2
+            + (mean_ratio - 1.0) ** 2
+        )
+    )
+
+
+def volumetric_efficiency(observed, predicted):
+    """One minus absolute flow error divided by total observed flow volume."""
+    obs, pred = _paired(observed, predicted)
+    denominator = float(np.sum(np.abs(obs)))
+    if denominator == 0.0:
+        return float("nan")
+    return 1.0 - float(np.sum(np.abs(pred - obs))) / denominator
+
+
+def benchmark_skill(observed, predicted, benchmark):
+    """Squared-error skill over a supplied benchmark; positive adds value."""
+    obs, pred = _paired(observed, predicted)
+    _, baseline = _paired(obs, benchmark)
+    denominator = float(np.sum((baseline - obs) ** 2))
+    if denominator == 0.0:
+        return float("nan")
+    return 1.0 - float(np.sum((pred - obs) ** 2)) / denominator
+
+
 def skill_scores(observed, predicted):
     """Return every metric as a dict, plus the sample count ``n``."""
     obs, _ = _paired(observed, predicted)
     return {
         "nse": nash_sutcliffe(observed, predicted),
         "rmse": rmse(observed, predicted),
+        "normalized_rmse": normalized_rmse(observed, predicted),
         "bias": mean_bias(observed, predicted),
         "percent_bias": percent_bias(observed, predicted),
         "pearson_r": pearson_r(observed, predicted),
+        "kge": kling_gupta(observed, predicted),
+        "volumetric_efficiency": volumetric_efficiency(observed, predicted),
         "n": int(obs.size),
     }
