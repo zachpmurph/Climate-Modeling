@@ -115,6 +115,20 @@ volume error with drainage-area growth elevates omitted tributary and
 rainfall-runoff forcing as a hypothesis. It does not prove that drainage area
 alone predicts event runoff.
 
+Run the predeclared matched-river holdouts and rebuild the fit-regime analysis:
+
+```bash
+python src/rivers/validation/run_suite.py \
+  real_world_rivers/validation/cross_river_hypothesis_suite.json
+python src/rivers/validation/analyze_fit_regimes.py \
+  real_world_rivers/validation/fit_regime_analysis.json
+```
+
+The matched suite adds tributary-rich Eel and Willamette floods plus a regulated
+Chattahoochee pulse-routing control. Rio Grande is explicitly excluded from the
+fit-regime analysis. See `docs/cross_river_fit_investigation.md` for the
+predeclared hypotheses and interpretation.
+
 Run the cross-region diagnostic subset:
 
 ```bash

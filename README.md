@@ -607,6 +607,9 @@ recession windows remain important uncertainties. See
 [`docs/validation_guide.md`](docs/validation_guide.md) and the machine-readable
 `expanded_river_error_assessment.results.json`. The staged corrective work is
 tracked in [`docs/model_shortfall_roadmap.md`](docs/model_shortfall_roadmap.md).
+The matched-river attribution study and its new Eel, Willamette, and
+Chattahoochee holdouts are documented in
+[`docs/cross_river_fit_investigation.md`](docs/cross_river_fit_investigation.md).
 
 Dependencies are pinned in `requirements.txt`. The GitHub Actions verification
 workflow runs the complete suite and matrix from a clean checkout.

@@ -1,0 +1,327 @@
+{
+  "schema_version": 1,
+  "suite": "Predeclared cross-river tests of missing inflow and regulated reach storage",
+  "solver_policy": "saint_venant_2d_only",
+  "case_count": 3,
+  "parameter_policy": "No calibration; common a priori Manning n and fixed screening geometry selected before downstream scoring.",
+  "cases": [
+    {
+      "config": "eel_fort_seward_scotia_2019-02-26.json",
+      "name": "Eel River, Fort Seward to Scotia \u2014 February 2019 flood",
+      "status": "independent_hypothesis_test",
+      "solver": "saint_venant_2d",
+      "terrain_representation": {
+        "name": "ribbon",
+        "x_cells": 31,
+        "y_cells": 1,
+        "domain_width_m": 110.0,
+        "bank_height_m": 0.0,
+        "floodplain_width_factor": 3.0,
+        "configured_channel_width_m_range": {
+          "minimum": 110.0,
+          "maximum": 110.0
+        },
+        "effective_channel_width_m_range": {
+          "minimum": 110.0,
+          "maximum": 110.0
+        },
+        "provenance": {
+          "cross_section_shape": "rectangular"
+        },
+        "limitation": "Laterally uniform constant-width numerical ribbon; configured longitudinal width variation is not represented and this is not mapped flood terrain."
+      },
+      "scores": {
+        "nse": -0.10503071260258956,
+        "rmse": 107329.59133524778,
+        "bias": -102764.09817271603,
+        "percent_bias": -40.766605280444175,
+        "pearson_r": 0.9766154063921537,
+        "n": 289
+      },
+      "reach_context": {
+        "intervening_drainage_area_growth_fraction": 0.477456,
+        "forcing_limitation": "Intervening tributary runoff, direct rainfall, floodplain exchange, and controls are not supplied to the model.",
+        "hypothesis_role": "tributary_rich_volume_gain_test"
+      },
+      "error_diagnosis": {
+        "observed_volume_m3": 1090984103.1164622,
+        "predicted_volume_m3": 646316143.8032931,
+        "volume_ratio": 0.5924157299423995,
+        "volume_only_counterfactual": {
+          "scale_applied_to_prediction": 1.6880037943915327,
+          "scores": {
+            "nse": 0.8572341449097984,
+            "rmse": 38578.42354606038,
+            "bias": -34.799417837018595,
+            "percent_bias": -0.01380495869838363,
+            "pearson_r": 0.9766154063921537,
+            "n": 289
+          },
+          "guard": "Uses held-out downstream volume as an oracle diagnostic. It is not a permissible forcing correction or calibration."
+        },
+        "amplitude_ratio": 0.7377925072237107,
+        "observed_peak_time_min": 2775.0,
+        "predicted_peak_time_min": 2550.0,
+        "peak_lag_min": -225.0,
+        "pearson_r": 0.9766154063921537,
+        "signals": [
+          {
+            "component": "volume",
+            "likely_sources": [
+              "missing or excess lateral flow",
+              "boundary forcing bias",
+              "storage/geometry bias"
+            ]
+          },
+          {
+            "component": "attenuation",
+            "likely_sources": [
+              "excess channel/floodplain storage",
+              "roughness or geometry bias",
+              "numerical diffusion"
+            ]
+          },
+          {
+            "component": "timing",
+            "likely_sources": [
+              "wave-speed/roughness error",
+              "bed or cross-section geometry error",
+              "boundary-control timing"
+            ]
+          }
+        ]
+      },
+      "reach_diagnosis": {
+        "upstream_volume_m3": 666965801.6528256,
+        "observed_downstream_volume_m3": 1090984103.1164622,
+        "predicted_downstream_volume_m3": 646316143.8032931,
+        "observed_net_change_from_upstream_m3": 424018301.46363664,
+        "observed_net_change_fraction": 0.6357421930972558,
+        "modeled_net_change_from_upstream_m3": -20649657.849532485,
+        "modeled_net_change_fraction": -0.030960594678707695,
+        "unexplained_downstream_volume_m3": 444667959.3131691,
+        "observed_routing_lag_min": 315.0,
+        "modeled_routing_lag_min": 225.0,
+        "routing_lag_error_min": -90.0,
+        "guard": "Volume change combines intervening flows, withdrawals, measurement error, and net reach-storage change; it is not a calibrated lateral flow."
+      },
+      "observation_count": {
+        "upstream": 337,
+        "downstream": 289
+      }
+    },
+    {
+      "config": "willamette_albany_salem_2012-01-18.json",
+      "name": "Willamette River, Albany to Salem \u2014 January 2012 flood",
+      "status": "independent_hypothesis_test",
+      "solver": "saint_venant_2d",
+      "terrain_representation": {
+        "name": "ribbon",
+        "x_cells": 31,
+        "y_cells": 1,
+        "domain_width_m": 150.0,
+        "bank_height_m": 0.0,
+        "floodplain_width_factor": 3.0,
+        "configured_channel_width_m_range": {
+          "minimum": 150.0,
+          "maximum": 150.0
+        },
+        "effective_channel_width_m_range": {
+          "minimum": 150.0,
+          "maximum": 150.0
+        },
+        "provenance": {
+          "cross_section_shape": "rectangular"
+        },
+        "limitation": "Laterally uniform constant-width numerical ribbon; configured longitudinal width variation is not represented and this is not mapped flood terrain."
+      },
+      "scores": {
+        "nse": -0.2700089077014276,
+        "rmse": 86825.0092760105,
+        "bias": -75450.77681444763,
+        "percent_bias": -57.966884196311945,
+        "pearson_r": 0.9959335447416451,
+        "n": 289
+      },
+      "reach_context": {
+        "intervening_drainage_area_growth_fraction": 0.504132,
+        "forcing_limitation": "Santiam and other intervening tributary runoff, direct rainfall, floodplain exchange, and reservoir operations are not supplied to the model.",
+        "hypothesis_role": "tributary_rich_volume_gain_test"
+      },
+      "error_diagnosis": {
+        "observed_volume_m3": 561924883.9725006,
+        "predicted_volume_m3": 236147892.17139298,
+        "volume_ratio": 0.4202481486528181,
+        "volume_only_counterfactual": {
+          "scale_applied_to_prediction": 2.3795464732103686,
+          "scores": {
+            "nse": 0.9877283062716896,
+            "rmse": 8534.807078902031,
+            "bias": 25.710181403627207,
+            "percent_bias": 0.019752468708908705,
+            "pearson_r": 0.9959335447416449,
+            "n": 289
+          },
+          "guard": "Uses held-out downstream volume as an oracle diagnostic. It is not a permissible forcing correction or calibration."
+        },
+        "amplitude_ratio": 0.41146069023274295,
+        "observed_peak_time_min": 4305.0,
+        "predicted_peak_time_min": 4320.0,
+        "peak_lag_min": 15.0,
+        "pearson_r": 0.9959335447416451,
+        "signals": [
+          {
+            "component": "volume",
+            "likely_sources": [
+              "missing or excess lateral flow",
+              "boundary forcing bias",
+              "storage/geometry bias"
+            ]
+          },
+          {
+            "component": "attenuation",
+            "likely_sources": [
+              "excess channel/floodplain storage",
+              "roughness or geometry bias",
+              "numerical diffusion"
+            ]
+          }
+        ]
+      },
+      "reach_diagnosis": {
+        "upstream_volume_m3": 295742561.64917755,
+        "observed_downstream_volume_m3": 561924883.9725006,
+        "predicted_downstream_volume_m3": 236147892.17139298,
+        "observed_net_change_from_upstream_m3": 266182322.323323,
+        "observed_net_change_fraction": 0.9000473954069548,
+        "modeled_net_change_from_upstream_m3": -59594669.477784574,
+        "modeled_net_change_fraction": -0.20150859972761823,
+        "unexplained_downstream_volume_m3": 325776991.8011076,
+        "observed_routing_lag_min": 315.0,
+        "modeled_routing_lag_min": 510.0,
+        "routing_lag_error_min": 195.0,
+        "guard": "Volume change combines intervening flows, withdrawals, measurement error, and net reach-storage change; it is not a calibrated lateral flow."
+      },
+      "observation_count": {
+        "upstream": 337,
+        "downstream": 289
+      }
+    },
+    {
+      "config": "chattahoochee_buford_norcross_2019-07-01.json",
+      "name": "Chattahoochee River, Buford Dam to Norcross \u2014 July 2019 release",
+      "status": "independent_hypothesis_test",
+      "solver": "saint_venant_2d",
+      "terrain_representation": {
+        "name": "ribbon",
+        "x_cells": 31,
+        "y_cells": 1,
+        "domain_width_m": 75.0,
+        "bank_height_m": 0.0,
+        "floodplain_width_factor": 3.0,
+        "configured_channel_width_m_range": {
+          "minimum": 75.0,
+          "maximum": 75.0
+        },
+        "effective_channel_width_m_range": {
+          "minimum": 75.0,
+          "maximum": 75.0
+        },
+        "provenance": {
+          "cross_section_shape": "rectangular"
+        },
+        "limitation": "Laterally uniform constant-width numerical ribbon; configured longitudinal width variation is not represented and this is not mapped flood terrain."
+      },
+      "scores": {
+        "nse": 0.5891535292798324,
+        "rmse": 811.6175893809674,
+        "bias": -240.33070608887317,
+        "percent_bias": -9.454262643623563,
+        "pearson_r": 0.8390992552784381,
+        "n": 97
+      },
+      "reach_context": {
+        "intervening_drainage_area_growth_fraction": 0.125,
+        "forcing_limitation": "Intervening tributaries and Buford Dam operations are represented only through the observed upstream boundary; downstream stage and detailed channel storage are not supplied.",
+        "hypothesis_role": "regulated_pulse_storage_test"
+      },
+      "error_diagnosis": {
+        "observed_volume_m3": 3636617.924581862,
+        "predicted_volume_m3": 3275615.8590372317,
+        "volume_ratio": 0.9007313737568022,
+        "volume_only_counterfactual": {
+          "scale_applied_to_prediction": 1.1102089137066078,
+          "scores": {
+            "nse": 0.5404827916387561,
+            "rmse": 858.3463408973441,
+            "bias": 13.33767125652415,
+            "percent_bias": 0.5246847111865,
+            "pearson_r": 0.8390992552784377,
+            "n": 97
+          },
+          "guard": "Uses held-out downstream volume as an oracle diagnostic. It is not a permissible forcing correction or calibration."
+        },
+        "amplitude_ratio": 1.3528921543112695,
+        "observed_peak_time_min": 1440.0,
+        "predicted_peak_time_min": 1440.0,
+        "peak_lag_min": 0.0,
+        "pearson_r": 0.8390992552784381,
+        "signals": [
+          {
+            "component": "amplification",
+            "likely_sources": [
+              "insufficient storage",
+              "geometry or roughness bias",
+              "unrepresented downstream control"
+            ]
+          }
+        ]
+      },
+      "reach_diagnosis": {
+        "upstream_volume_m3": 7363415.094662937,
+        "observed_downstream_volume_m3": 3636617.924581862,
+        "predicted_downstream_volume_m3": 3275615.8590372317,
+        "observed_net_change_from_upstream_m3": -3726797.1700810753,
+        "observed_net_change_fraction": -0.5061234661050533,
+        "modeled_net_change_from_upstream_m3": -4087799.2356257057,
+        "modeled_net_change_fraction": -0.5551499111585568,
+        "unexplained_downstream_volume_m3": 361002.0655446304,
+        "observed_routing_lag_min": 330.0,
+        "modeled_routing_lag_min": 255.0,
+        "routing_lag_error_min": -75.0,
+        "guard": "Volume change combines intervening flows, withdrawals, measurement error, and net reach-storage change; it is not a calibrated lateral flow."
+      },
+      "observation_count": {
+        "upstream": 145,
+        "downstream": 97
+      }
+    }
+  ],
+  "score_summary": {
+    "nse": {
+      "minimum": -0.2700089077014276,
+      "median": -0.10503071260258956,
+      "maximum": 0.5891535292798324
+    },
+    "rmse": {
+      "minimum": 811.6175893809674,
+      "median": 86825.0092760105,
+      "maximum": 107329.59133524778
+    },
+    "bias": {
+      "minimum": -102764.09817271603,
+      "median": -75450.77681444763,
+      "maximum": -240.33070608887317
+    },
+    "percent_bias": {
+      "minimum": -57.966884196311945,
+      "median": -40.766605280444175,
+      "maximum": -9.454262643623563
+    },
+    "pearson_r": {
+      "minimum": 0.8390992552784381,
+      "median": 0.9766154063921537,
+      "maximum": 0.9959335447416451
+    }
+  }
+}

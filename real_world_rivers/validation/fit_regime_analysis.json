@@ -1,0 +1,33 @@
+{
+  "title": "Why upstream-driven 2-D validation succeeds or underestimates across rivers",
+  "excluded_rivers": ["Rio Grande"],
+  "natural_flow_cases": [
+    "connecticut_montague_holyoke_2011-08-28.json",
+    "delaware_montague_belvidere_2006-06-27.json",
+    "potomac_point_of_rocks_little_falls_2018-06-02.json",
+    "russian_hopland_guerneville_2019-02-26.json",
+    "snoqualmie_snoqualmie_carnation_2009-01-07.json",
+    "eel_fort_seward_scotia_2019-02-26.json",
+    "willamette_albany_salem_2012-01-18.json"
+  ],
+  "other_cases": [
+    "truckee_reno_sparks_2017-01-08.json",
+    "truckee_reno_sparks_2017-02-10.json",
+    "glen_canyon_lees_ferry_2002-01-25.json",
+    "glen_canyon_lees_ferry_2002-07-02.json",
+    "glen_canyon_lees_ferry_2004-01-06.json",
+    "glen_canyon_lees_ferry.json",
+    "chattahoochee_buford_norcross_2019-07-01.json"
+  ],
+  "diagnostics": {
+    "colorado_one_day": "glen_canyon_lees_ferry.results.json",
+    "colorado_three_day": "glen_canyon_lees_ferry_2004-07-01_extended.results.json",
+    "colorado_coarse": "glen_canyon_lees_ferry.ribbon.2d.results.json",
+    "colorado_fine": "glen_canyon_lees_ferry.ribbon_fine.2d.results.json",
+    "colorado_shelf": "glen_canyon_lees_ferry.shelf.2d.results.json",
+    "russian_ribbon": "russian_hopland_guerneville_2019-02-26.results.json",
+    "russian_shelf": "russian_hopland_guerneville_2019-02-26.shelf.2d.results.json",
+    "snoqualmie_ribbon": "snoqualmie_snoqualmie_carnation_2009-01-07.results.json",
+    "snoqualmie_shelf": "snoqualmie_snoqualmie_carnation_2009-01-07.shelf.2d.results.json"
+  }
+}

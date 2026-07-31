@@ -1,0 +1,9 @@
+{
+  "suite": "Predeclared cross-river tests of missing inflow and regulated reach storage",
+  "parameter_policy": "No calibration; common a priori Manning n and fixed screening geometry selected before downstream scoring.",
+  "cases": [
+    "eel_fort_seward_scotia_2019-02-26.json",
+    "willamette_albany_salem_2012-01-18.json",
+    "chattahoochee_buford_norcross_2019-07-01.json"
+  ]
+}
