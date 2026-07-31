@@ -11,6 +11,9 @@
     "purpose": "Out-of-sample event with parameters fixed across the suite; downstream observations are not used as a boundary or calibration target."
   },
   "validation_status": "out_of_sample_validation",
+  "validation_policy": {"calibration": "none"},
+  "hydraulic_dataset": "assumed_reach_geometry",
+  "validation_2d": {"representation": "ribbon", "x_cells": 31, "y_cells": 1},
   "observations": "glen_canyon_lees_ferry_2002-01-25.csv",
   "sources": [
     {

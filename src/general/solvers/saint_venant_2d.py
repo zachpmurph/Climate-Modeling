@@ -198,6 +198,40 @@ def _cap_dt_at_forcing_breakpoints(dt, time, *forcings):
     return dt
 
 
+def _downstream_discharge(
+    h,
+    hu,
+    hv,
+    bed,
+    dy,
+    boundary_x,
+    left_inflow,
+    downstream_stage_m,
+    spatial_order,
+    time,
+):
+    """Return the signed whole-boundary x discharge at one instant."""
+    if boundary_x == "periodic":
+        return 0.0
+    inflow = _inflow_values(left_inflow, time, h.shape[1])
+    stage = (
+        None
+        if downstream_stage_m is None
+        else _stage_values(downstream_stage_m, time, h.shape[1])
+    )
+    flux = _rusanov_x(
+        h,
+        hu,
+        hv,
+        bed,
+        boundary_x,
+        inflow,
+        spatial_order,
+        stage,
+    )[0]
+    return float(np.sum(flux[-1, :] * dy))
+
+
 def _extend_x(h, hu, hv, bed, boundary, inflow, downstream_stage=None):
     if boundary == "periodic":
         return tuple(
@@ -588,6 +622,20 @@ def run_model(
     hu_history = [hu.copy()]
     hv_history = [hv.copy()]
     cumulative_infiltration_history = [cumulative_infiltration.copy()]
+    downstream_flux_history = [
+        _downstream_discharge(
+            h,
+            hu,
+            hv,
+            bed,
+            dy,
+            boundary_x,
+            left_inflow,
+            downstream_stage_m,
+            spatial_order,
+            0.0,
+        )
+    ]
     next_record = 1
 
     mass_inflow = 0.0
@@ -747,6 +795,20 @@ def run_model(
             cumulative_infiltration_history.append(
                 cumulative_infiltration.copy()
             )
+            downstream_flux_history.append(
+                _downstream_discharge(
+                    h,
+                    hu,
+                    hv,
+                    bed,
+                    dy,
+                    boundary_x,
+                    left_inflow,
+                    downstream_stage_m,
+                    spatial_order,
+                    t_current,
+                )
+            )
             next_record += 1
 
     return {
@@ -759,6 +821,7 @@ def run_model(
         "h_history": np.asarray(h_history),
         "hu_history": np.asarray(hu_history),
         "hv_history": np.asarray(hv_history),
+        "downstream_flux_history": np.asarray(downstream_flux_history),
         "h_initial": h_initial,
         "h_final": h,
         "hu_initial": hu_initial,
@@ -868,6 +931,7 @@ class _SaintVenant2DSolver:
                 "bed_elevation_m": raw["bed_elevation_m"],
                 "discharge_x_history": raw["hu_history"],
                 "discharge_y_history": raw["hv_history"],
+                "downstream_flux_history": raw["downstream_flux_history"],
                 "discharge_x_final": raw["hu_final"],
                 "discharge_y_final": raw["hv_final"],
                 "mass_floor_correction": raw["mass_floor_correction"],

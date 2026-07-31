@@ -32,6 +32,8 @@ def test_runs_stably_with_all_finite_output():
     # 2D snapshots: (n_times, nx, ny)
     assert result["h_history"].ndim == 3
     assert result["h_history"].shape[0] == len(result["times"])
+    assert result["downstream_flux_history"].shape == result["times"].shape
+    assert np.all(np.isfinite(result["downstream_flux_history"]))
 
 
 def test_mass_conservation(monkeypatch):

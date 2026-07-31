@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "suite": {
+    "name": "Uncalibrated cross-region hydraulic-data diagnostics",
+    "purpose": "Expose model error across regions and data sources without selecting parameters from validation scores."
+  },
+  "calibration": "none",
+  "cases": [
+    "glen_canyon_lees_ferry.json",
+    "truckee_reno_sparks_2017-01-08.json",
+    "rio_grande_alameda_albuquerque_2023-05-12_stage.json",
+    "rio_grande_alameda_albuquerque_2023-05-12_stage_geometry.json"
+  ],
+  "paired_comparisons": [
+    {
+      "name": "Rio Grande proxy versus measured cross-sections",
+      "control": "rio_grande_alameda_albuquerque_2023-05-12_stage.json",
+      "treatment": "rio_grande_alameda_albuquerque_2023-05-12_stage_geometry.json",
+      "fixed": [
+        "event observations",
+        "upstream forcing",
+        "downstream measured-stage boundary",
+        "solver",
+        "numerical order"
+      ],
+      "changed": "channel geometry, bed slope, and roughness evidence",
+      "interpretation": "This paired structural test is the only current comparison that can isolate a hydraulic-data substitution. It remains retrospective because the field visits postdate the event."
+    }
+  ]
+}

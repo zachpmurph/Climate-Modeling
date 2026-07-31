@@ -48,13 +48,20 @@ def run_validation_suite(manifest_path, *, output_path=None):
     for relative_path in manifest["cases"]:
         config_path = manifest_path.parent / relative_path
         result = run_validation_case(config_path)
+        if result["solver"] != "saint_venant_2d":
+            raise RuntimeError("Observed validation suite accepts 2-D results only")
         results.append(result)
         cases.append(
             {
                 "config": relative_path,
                 "name": result["case"]["name"],
                 "status": result["status"],
+                "solver": result["solver"],
+                "terrain_representation": result["terrain_representation"],
                 "scores": result["scores"],
+                "reach_context": result.get("reach_context"),
+                "error_diagnosis": result["error_diagnosis"],
+                "reach_diagnosis": result["reach_diagnosis"],
                 "observation_count": {
                     "upstream": result["observations"]["upstream_count"],
                     "downstream": result["observations"]["downstream_count"],
@@ -65,6 +72,7 @@ def run_validation_suite(manifest_path, *, output_path=None):
     evidence = {
         "schema_version": 1,
         "suite": manifest["suite"],
+        "solver_policy": "saint_venant_2d_only",
         "case_count": len(cases),
         "parameter_policy": manifest["parameter_policy"],
         "cases": cases,

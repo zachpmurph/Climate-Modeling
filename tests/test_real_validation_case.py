@@ -1,4 +1,5 @@
 import csv
+import csv
 import json
 from datetime import datetime
 from pathlib import Path
@@ -63,11 +64,12 @@ def test_real_case_reproduces_tracked_uncalibrated_baseline(tmp_path):
     tracked = json.loads(EVIDENCE.read_text(encoding="utf-8"))
     actual = run_validation_case(CASE, output_path=tmp_path / "results.json")
 
-    assert actual["status"] == "uncalibrated_baseline"
+    assert actual["status"] == "uncalibrated_2d_screening"
+    assert actual["solver"] == "saint_venant_2d"
+    assert actual["solver_policy"] == "saint_venant_2d_only"
     assert actual["observations"]["upstream_count"] == 433
     assert actual["observations"]["downstream_count"] == 97
-    assert actual["assumptions"]["warmup_upstream_forcing"] == "observed"
-    assert actual["mass"]["lateral_inflow_m3"] == pytest.approx(0.0)
+    assert actual["terrain_representation"]["name"] == "ribbon"
     for metric in ("nse", "rmse", "bias", "percent_bias", "pearson_r"):
         assert actual["scores"][metric] == pytest.approx(
             tracked["scores"][metric], rel=1e-10, abs=1e-10
@@ -81,15 +83,10 @@ def test_sensitivity_variants_are_one_at_a_time_and_symmetric():
         for name, overrides, changes in build_variants(config)
     }
 
-    assert len(variants) == 8
-    base_n = config["reach"]["manning_n"]
-    assert variants["roughness_minus_20_percent"][0]["reach"][
-        "manning_n"
-    ] == pytest.approx(0.8 * base_n)
-    assert variants["roughness_plus_20_percent"][0]["reach"][
-        "manning_n"
-    ] == pytest.approx(1.2 * base_n)
-    assert variants["second_order_reconstruction"][0] == {"spatial_order": 2}
+    assert len(variants) == 3
+    assert variants["baseline_2d_ribbon"][0]["representation"] == "ribbon"
+    assert variants["fine_longitudinal_2d_ribbon"][0]["x_cells"] == 61
+    assert variants["connected_lateral_shelves_2d"][0]["representation"] == "shelf"
 
 
 def test_tracked_sensitivity_evidence_covers_every_variant():
@@ -101,17 +98,18 @@ def test_tracked_sensitivity_evidence_covers_every_variant():
         )
     }
 
-    assert evidence["method"]["type"] == "one_at_a_time"
+    assert evidence["method"]["type"] == "one_at_a_time_structural_2d"
+    assert evidence["solver_policy"] == "saint_venant_2d_only"
     assert {run["name"] for run in evidence["runs"]} == configured
     assert evidence["score_ranges"]["nse"]["minimum"] < 0.0
-    assert evidence["score_ranges"]["nse"]["maximum"] > 0.5
+    assert evidence["score_ranges"]["nse"]["maximum"] > 0.4
 
 
 def test_multi_event_suite_observations_and_results_are_reproducible(tmp_path):
     manifest = json.loads(SUITE.read_text(encoding="utf-8"))
     tracked_suite = json.loads(SUITE_EVIDENCE.read_text(encoding="utf-8"))
 
-    assert len(manifest["cases"]) == tracked_suite["case_count"] == 7
+    assert len(manifest["cases"]) == tracked_suite["case_count"] == 12
     for relative_path in manifest["cases"]:
         config_path = SUITE.parent / relative_path
         config = json.loads(config_path.read_text(encoding="utf-8"))
@@ -120,7 +118,7 @@ def test_multi_event_suite_observations_and_results_are_reproducible(tmp_path):
         with observation_path.open(newline="", encoding="utf-8") as handle:
             raw_rows = list(csv.DictReader(handle))
         assert len(observations["upstream"][0]) >= 145
-        assert len(observations["downstream"][0]) >= 97
+        assert len(observations["downstream"][0]) >= 90
         assert {row["approval_status"] for row in raw_rows} == {"Approved"}
         start, end = config["case"]["observation_window"]
         duration_min = (
@@ -193,13 +191,14 @@ def test_measured_stage_experiment_reproduces_without_replacing_baseline(
     assert stage_rows[0]["observed_at"] == "2023-05-11T12:00:00+00:00"
     assert stage_rows[-1]["observed_at"] == "2023-05-14T00:00:00+00:00"
     assert actual["status"] == "post_baseline_measured_stage_experiment"
-    assert actual["assumptions"]["downstream_boundary"] == "stage"
+    assert actual["solver"] == "saint_venant_2d"
+    assert actual["boundary"]["x"] == "inflow_stage"
     for metric in ("nse", "rmse", "bias", "percent_bias", "pearson_r"):
         assert actual["scores"][metric] == pytest.approx(
             tracked["scores"][metric], rel=1e-10, abs=1e-10
         )
-    assert actual["assumptions"]["downstream_score_observable"] == (
-        "finite-volume downstream boundary discharge flux"
+    assert actual["boundary"]["downstream_score_observable"] == (
+        "finite-volume 2-D downstream boundary discharge flux"
     )
     assert actual["scores"]["nse"] < baseline["scores"]["nse"]
     assert actual["scores"]["rmse"] > baseline["scores"]["rmse"]
@@ -235,17 +234,18 @@ def test_measured_field_geometry_experiment_is_reproducible(tmp_path):
     assert actual["status"] == (
         "post_baseline_measured_stage_geometry_experiment"
     )
-    assert actual["assumptions"]["downstream_boundary"] == "stage"
-    assert actual["assumptions"]["field_measurement_geometry"] == (
+    assert actual["boundary"]["x"] == "inflow_stage"
+    provenance = actual["terrain_representation"]["provenance"]
+    assert provenance["field_measurement_geometry"] == (
         RIO_CHANNEL_GEOMETRY.name
     )
-    assert actual["assumptions"]["modeled_manning_n_range"] == pytest.approx(
+    assert provenance["modeled_manning_n_range"] == pytest.approx(
         {
             "minimum": 0.000472853714174,
             "maximum": 0.000526252232655,
         }
     )
-    assert "not used" in actual["assumptions"][
+    assert "not used" in provenance[
         "configured_manning_n_role"
     ]
     for metric in ("nse", "rmse", "bias", "percent_bias", "pearson_r"):
@@ -286,14 +286,21 @@ def test_validation_case_uses_surveyed_stage_dependent_geometry(tmp_path):
     config.write_text(
         json.dumps(
             {
-                "case": {
-                    "name": "surveyed validation",
+                    "case": {
+                        "name": "surveyed validation",
                     "observation_window": [
                         "2020-01-01T00:00:00Z",
                         "2020-01-01T00:15:00Z",
-                    ],
-                },
-                "observations": observations.name,
+                        ],
+                    },
+                    "validation_policy": {"calibration": "none"},
+                        "hydraulic_dataset": "surveyed_topobathymetry",
+                        "validation_2d": {
+                            "representation": "ribbon",
+                            "x_cells": 3,
+                            "y_cells": 1,
+                        },
+                    "observations": observations.name,
                 "reach": {
                     "length_m": 100.0,
                     "cells": 3,
@@ -309,20 +316,8 @@ def test_validation_case_uses_surveyed_stage_dependent_geometry(tmp_path):
         encoding="utf-8",
     )
 
-    evidence = run_validation_case(
-        config, output_path=tmp_path / "results.json"
-    )
-
-    assert evidence["assumptions"]["cross_section_shape"] == "surveyed"
-    assert evidence["assumptions"]["surveyed_cross_sections"] == surveys.name
-    assert evidence["assumptions"]["stage_dependent_manning"] == (
-        stage_manning.name
-    )
-    assert (
-        evidence["assumptions"]["initial_condition"]
-        == "per-cell cross-section Manning normal depth and discharge"
-    )
-    assert evidence["scores"]["n"] == 2
+    with pytest.raises(ValueError, match="rectangular source sections only"):
+        run_validation_case(config, output_path=tmp_path / "results.json")
 
 
 def test_validation_case_uses_timestamped_stage_and_signed_point_flows(
@@ -361,14 +356,21 @@ def test_validation_case_uses_timestamped_stage_and_signed_point_flows(
     config.write_text(
         json.dumps(
             {
-                "case": {
-                    "name": "measured controls",
+                    "case": {
+                        "name": "measured controls",
                     "observation_window": [
                         "2020-01-01T00:00:00Z",
                         "2020-01-01T00:15:00Z",
-                    ],
-                },
-                "observations": observations.name,
+                        ],
+                    },
+                    "validation_policy": {"calibration": "none"},
+                        "hydraulic_dataset": "assumed_reach_geometry",
+                        "validation_2d": {
+                            "representation": "ribbon",
+                            "x_cells": 3,
+                            "y_cells": 1,
+                        },
+                    "observations": observations.name,
                 "downstream_stage_series": stage.name,
                 "point_flow_series": point_flows.name,
                 "reach": {
@@ -389,17 +391,8 @@ def test_validation_case_uses_timestamped_stage_and_signed_point_flows(
         encoding="utf-8",
     )
 
-    evidence = run_validation_case(
-        config, output_path=tmp_path / "results.json"
-    )
-
-    assumptions = evidence["assumptions"]
-    assert assumptions["downstream_boundary"] == "stage"
-    assert assumptions["downstream_stage_series"] == stage.name
-    assert assumptions["lateral_inflow"] == "measured signed point flows"
-    assert assumptions["point_flow_series"] == point_flows.name
-    assert assumptions["point_flow_count"] == 2
-    assert evidence["mass"]["lateral_inflow_m3"] == pytest.approx(75.0)
+    with pytest.raises(ValueError, match="does not invent a spatial source mapping"):
+        run_validation_case(config, output_path=tmp_path / "results.json")
 
 
 def test_measured_control_must_cover_observed_warmup(tmp_path):

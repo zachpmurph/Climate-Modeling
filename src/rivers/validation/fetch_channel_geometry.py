@@ -13,8 +13,7 @@ SRC_ROOT = Path(__file__).resolve().parents[2]
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
-from rivers.ingest.common import request_json
-from rivers.ingest.usgs_flow import CFS_TO_M3_PER_MIN
+from rivers.validation.providers import CFS_TO_M3_PER_MIN, request_json
 
 
 CHANNEL_URL = (

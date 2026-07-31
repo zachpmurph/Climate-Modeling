@@ -16,6 +16,9 @@
     "interpretation": "This is stage- and geometry-conditioned discharge validation, not an independent forecast and not a calibration event."
   },
   "validation_status": "post_baseline_measured_stage_geometry_experiment",
+  "validation_policy": {"calibration": "none"},
+  "hydraulic_dataset": "field_measurement_cross_sections",
+  "validation_2d": {"representation": "ribbon", "x_cells": 31, "y_cells": 1},
   "observations": "rio_grande_alameda_albuquerque_2023-05-12.csv",
   "downstream_stage_series": "rio_grande_alameda_albuquerque_2023-05-12_stage_geometry.csv",
   "downstream_stage_source": {

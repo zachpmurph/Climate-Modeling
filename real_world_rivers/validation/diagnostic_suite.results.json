@@ -1,0 +1,348 @@
+{
+  "schema_version": 1,
+  "suite": {
+    "name": "Uncalibrated cross-region hydraulic-data diagnostics",
+    "purpose": "Expose model error across regions and data sources without selecting parameters from validation scores."
+  },
+  "calibration": "none",
+  "solver_policy": "saint_venant_2d_only",
+  "dataset_hierarchy": [
+    [
+      {
+        "dataset_id": "surveyed_topobathymetry",
+        "rank": 1,
+        "label": "Surveyed cross-sections or topobathymetric lidar",
+        "resolution": "survey scale",
+        "role": "Preferred channel, bank, floodplain, and submerged-bed geometry",
+        "limitations": "Coverage is sparse and survey dates must bracket the event."
+      }
+    ],
+    [
+      {
+        "dataset_id": "usgs_3dep_1m",
+        "rank": 2,
+        "label": "USGS 3DEP 1 m lidar DEM",
+        "resolution": "1 m",
+        "role": "Preferred U.S. bare-earth floodplain terrain when bathymetry is absent",
+        "limitations": "Does not normally resolve submerged channel bathymetry."
+      },
+      {
+        "dataset_id": "noaa_topobathy",
+        "rank": 2,
+        "label": "NOAA/USGS integrated topobathymetric DEM",
+        "resolution": "project specific",
+        "role": "Preferred public terrain where an integrated product exists",
+        "limitations": "Geographically limited; vertical datum and survey epoch must be checked."
+      }
+    ],
+    [
+      {
+        "dataset_id": "anadem_30m",
+        "rank": 3,
+        "label": "ANADEM regional bare-earth DEM",
+        "resolution": "30 m",
+        "role": "South America fallback when higher-resolution reviewed terrain is absent",
+        "limitations": "Too coarse for many channels, levees, culverts, and local bank controls."
+      }
+    ],
+    [
+      {
+        "dataset_id": "gedtm30",
+        "rank": 4,
+        "label": "GEDTM30 global bare-earth DEM",
+        "resolution": "30 m",
+        "role": "Global screening fallback",
+        "limitations": "Screening-grade only; requires conditioning and independent verification."
+      }
+    ]
+  ],
+  "regions_tested": [
+    "Colorado River",
+    "Rio Grande",
+    "Truckee River"
+  ],
+  "datasets_tested": [
+    "assumed_reach_geometry",
+    "field_measurement_cross_sections",
+    "gage_datum_reach_proxy"
+  ],
+  "coverage_gaps": [
+    "surveyed_topobathymetry",
+    "usgs_3dep_1m",
+    "noaa_topobathy",
+    "anadem_30m",
+    "gedtm30"
+  ],
+  "interpretation_guard": "Differences between unrelated rivers confound dataset and river physics. Only paired cases on the same event can isolate a dataset substitution.",
+  "paired_comparisons": [
+    {
+      "name": "Rio Grande proxy versus measured cross-sections",
+      "control": "rio_grande_alameda_albuquerque_2023-05-12_stage.json",
+      "treatment": "rio_grande_alameda_albuquerque_2023-05-12_stage_geometry.json",
+      "fixed": [
+        "event observations",
+        "upstream forcing",
+        "downstream measured-stage boundary",
+        "solver",
+        "numerical order"
+      ],
+      "changed": "channel geometry, bed slope, and roughness evidence",
+      "interpretation": "This paired structural test is the only current comparison that can isolate a hydraulic-data substitution. It remains retrospective because the field visits postdate the event.",
+      "control_dataset": "gage_datum_reach_proxy",
+      "treatment_dataset": "field_measurement_cross_sections",
+      "score_deltas_treatment_minus_control": {
+        "nse": 0.00954224584759178,
+        "rmse": -0.4930195703495315,
+        "percent_bias": 0.046375132077603354,
+        "pearson_r": 0.032206052329947776
+      },
+      "finding": "The hydraulic-data substitution did not resolve the event error; investigate forcing, controls, reach processes, and model structure."
+    }
+  ],
+  "cases": [
+    {
+      "config": "glen_canyon_lees_ferry.json",
+      "name": "Glen Canyon Dam to Lees Ferry \u2014 2004-07-01",
+      "river": "Colorado River",
+      "hydraulic_dataset": {
+        "dataset_id": "assumed_reach_geometry",
+        "rank": 5,
+        "label": "Assumed constant reach geometry",
+        "resolution": "reach average",
+        "role": "Legacy geometry proxy below the preferred hierarchy",
+        "limitations": "Cannot distinguish terrain error from channel-shape assumptions."
+      },
+      "scores": {
+        "nse": 0.433913836976101,
+        "rmse": 3508.1869926459162,
+        "bias": -1976.6591106674402,
+        "percent_bias": -7.951209044805918,
+        "pearson_r": 0.7889844205428209,
+        "n": 97
+      },
+      "error_diagnosis": {
+        "observed_volume_m3": 35722551.48120576,
+        "predicted_volume_m3": 32911506.15600561,
+        "volume_ratio": 0.9213089432685375,
+        "volume_only_counterfactual": {
+          "scale_applied_to_prediction": 1.0854122358264422,
+          "scores": {
+            "nse": 0.6212606560327275,
+            "rmse": 2869.535986464491,
+            "bias": -22.154110226448896,
+            "percent_bias": -0.08911600420200332,
+            "pearson_r": 0.7889844205428207,
+            "n": 97
+          },
+          "guard": "Uses held-out downstream volume as an oracle diagnostic. It is not a permissible forcing correction or calibration."
+        },
+        "amplitude_ratio": 0.741182010811683,
+        "observed_peak_time_min": 1425.0,
+        "predicted_peak_time_min": 1440.0,
+        "peak_lag_min": 15.0,
+        "pearson_r": 0.7889844205428209,
+        "signals": [
+          {
+            "component": "attenuation",
+            "likely_sources": [
+              "excess channel/floodplain storage",
+              "roughness or geometry bias",
+              "numerical diffusion"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "config": "truckee_reno_sparks_2017-01-08.json",
+      "name": "Truckee River Reno to Sparks \u2014 2017-01-08 flood rise",
+      "river": "Truckee River",
+      "hydraulic_dataset": {
+        "dataset_id": "gage_datum_reach_proxy",
+        "rank": 5,
+        "label": "Gauge-datum reach-average proxy",
+        "resolution": "reach average",
+        "role": "Legacy slope proxy below the preferred hierarchy",
+        "limitations": "Gauge datum is not bed elevation and cannot describe local controls."
+      },
+      "scores": {
+        "nse": 0.9635189169531811,
+        "rmse": 571.0316291065672,
+        "bias": 328.2453952190547,
+        "percent_bias": 10.235121668636019,
+        "pearson_r": 0.9980088615516328,
+        "n": 97
+      },
+      "error_diagnosis": {
+        "observed_volume_m3": 4566941.01835776,
+        "predicted_volume_m3": 5038017.583538147,
+        "volume_ratio": 1.1031492553301645,
+        "volume_only_counterfactual": {
+          "scale_applied_to_prediction": 0.9064956488600514,
+          "scores": {
+            "nse": 0.994702757071268,
+            "rmse": 217.59617035780977,
+            "bias": -2.3200389623400004,
+            "percent_bias": -0.07234185582307753,
+            "pearson_r": 0.998008861551633,
+            "n": 97
+          },
+          "guard": "Uses held-out downstream volume as an oracle diagnostic. It is not a permissible forcing correction or calibration."
+        },
+        "amplitude_ratio": 1.0631279945545435,
+        "observed_peak_time_min": 1440.0,
+        "predicted_peak_time_min": 1440.0,
+        "peak_lag_min": 0.0,
+        "pearson_r": 0.9980088615516328,
+        "signals": [
+          {
+            "component": "volume",
+            "likely_sources": [
+              "missing or excess lateral flow",
+              "boundary forcing bias",
+              "storage/geometry bias"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "config": "rio_grande_alameda_albuquerque_2023-05-12_stage.json",
+      "name": "Rio Grande Alameda to Albuquerque \u2014 2023-05-12 measured-stage experiment",
+      "river": "Rio Grande",
+      "hydraulic_dataset": {
+        "dataset_id": "gage_datum_reach_proxy",
+        "rank": 5,
+        "label": "Gauge-datum reach-average proxy",
+        "resolution": "reach average",
+        "role": "Legacy slope proxy below the preferred hierarchy",
+        "limitations": "Gauge datum is not bed elevation and cannot describe local controls."
+      },
+      "scores": {
+        "nse": -3.400780187237064,
+        "rmse": 454.5039029633674,
+        "bias": 391.5550325192734,
+        "percent_bias": 4.662406746003933,
+        "pearson_r": 0.3625194067496155,
+        "n": 193
+      },
+      "error_diagnosis": {
+        "observed_volume_m3": 24189496.300136447,
+        "predicted_volume_m3": 25314348.135632653,
+        "volume_ratio": 1.0465016642570544,
+        "volume_only_counterfactual": {
+          "scale_applied_to_prediction": 0.9555646533156089,
+          "scores": {
+            "nse": -0.09588598190810482,
+            "rmse": 226.80648314027067,
+            "bias": 0.9822804730946432,
+            "percent_bias": 0.011696417422495954,
+            "pearson_r": 0.36251940674961525,
+            "n": 193
+          },
+          "guard": "Uses held-out downstream volume as an oracle diagnostic. It is not a permissible forcing correction or calibration."
+        },
+        "amplitude_ratio": 0.7190493007685442,
+        "observed_peak_time_min": 2310.0,
+        "predicted_peak_time_min": 1065.0,
+        "peak_lag_min": -1245.0,
+        "pearson_r": 0.3625194067496155,
+        "signals": [
+          {
+            "component": "attenuation",
+            "likely_sources": [
+              "excess channel/floodplain storage",
+              "roughness or geometry bias",
+              "numerical diffusion"
+            ]
+          },
+          {
+            "component": "timing",
+            "likely_sources": [
+              "wave-speed/roughness error",
+              "bed or cross-section geometry error",
+              "boundary-control timing"
+            ]
+          },
+          {
+            "component": "shape",
+            "likely_sources": [
+              "missing reach processes or controls",
+              "forcing timing error",
+              "structural model inadequacy"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "config": "rio_grande_alameda_albuquerque_2023-05-12_stage_geometry.json",
+      "name": "Rio Grande Alameda to Albuquerque \u2014 2023-05-12 measured-stage and field-geometry experiment",
+      "river": "Rio Grande",
+      "hydraulic_dataset": {
+        "dataset_id": "field_measurement_cross_sections",
+        "rank": 1,
+        "label": "USGS field-measurement cross-sections",
+        "resolution": "two section snapshots",
+        "role": "Observed channel geometry at gauge sections",
+        "limitations": "Sparse sections do not map the intervening floodplain or channel bed."
+      },
+      "scores": {
+        "nse": -3.3912379413894724,
+        "rmse": 454.0108833930179,
+        "bias": 395.4496769246108,
+        "percent_bias": 4.7087818780815365,
+        "pearson_r": 0.3947254590795633,
+        "n": 193
+      },
+      "error_diagnosis": {
+        "observed_volume_m3": 24189496.300136447,
+        "predicted_volume_m3": 25325564.291502982,
+        "volume_ratio": 1.0469653430261847,
+        "volume_only_counterfactual": {
+          "scale_applied_to_prediction": 0.9551414539755112,
+          "scores": {
+            "nse": -0.02548333187318419,
+            "rmse": 219.40023152067434,
+            "bias": 0.9824274078854346,
+            "percent_bias": 0.011698167035456872,
+            "pearson_r": 0.39472545907956375,
+            "n": 193
+          },
+          "guard": "Uses held-out downstream volume as an oracle diagnostic. It is not a permissible forcing correction or calibration."
+        },
+        "amplitude_ratio": 0.7006416217774983,
+        "observed_peak_time_min": 2310.0,
+        "predicted_peak_time_min": 2850.0,
+        "peak_lag_min": 540.0,
+        "pearson_r": 0.3947254590795633,
+        "signals": [
+          {
+            "component": "attenuation",
+            "likely_sources": [
+              "excess channel/floodplain storage",
+              "roughness or geometry bias",
+              "numerical diffusion"
+            ]
+          },
+          {
+            "component": "timing",
+            "likely_sources": [
+              "wave-speed/roughness error",
+              "bed or cross-section geometry error",
+              "boundary-control timing"
+            ]
+          },
+          {
+            "component": "shape",
+            "likely_sources": [
+              "missing reach processes or controls",
+              "forcing timing error",
+              "structural model inadequacy"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

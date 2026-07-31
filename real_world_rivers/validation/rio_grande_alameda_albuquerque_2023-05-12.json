@@ -17,6 +17,9 @@
     }
   },
   "validation_status": "predeclared_third_river_transfer_test",
+  "validation_policy": {"calibration": "none"},
+  "hydraulic_dataset": "gage_datum_reach_proxy",
+  "validation_2d": {"representation": "ribbon", "x_cells": 31, "y_cells": 1},
   "observations": "rio_grande_alameda_albuquerque_2023-05-12.csv",
   "sources": [
     {

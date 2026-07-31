@@ -95,6 +95,12 @@ Each solver file also keeps a plain `run_model(...)` function used by its tests 
 
 `src/rivers/simulations/registry.py` maps solver names to instances. `src/rivers/simulations/run_simulation.py` is the unified CLI entry point.
 
+Observed-event validation under `src/rivers/validation/` must use
+`saint_venant_2d` exclusively. The canonical validation runner rejects missing
+`validation_2d` settings and must never dispatch or silently fall back to a 1-D
+solver. The 1-D solvers remain available for numerical verification, reference,
+and non-validation simulation workflows.
+
 All registered solvers run on the supplied grid and must honor its spatial cell
 widths, slopes, and `manning_n`. `scenario_from_profile(...)` transfers
 the optional profile initial depth, rainfall rates, and labels into `Scenario`.

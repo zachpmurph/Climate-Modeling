@@ -1,4 +1,4 @@
-"""Run one-at-a-time structural sensitivities for a two-gauge validation case."""
+"""Run explicit 2-D structural sensitivities for an observed case."""
 
 from __future__ import annotations
 
@@ -13,83 +13,71 @@ SRC_ROOT = Path(__file__).resolve().parents[2]
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
-from rivers.validation.run_case import run_validation_case
+from rivers.validation.run_case_2d import run_validation_case_2d
 
 
 def build_variants(config):
-    """Return named, auditable perturbations around the configured baseline."""
-    reach = config["reach"]
-    roughness = float(reach["manning_n"])
-    upstream_width = float(reach["upstream_width_m"])
-    downstream_width = float(reach["downstream_width_m"])
-    cells = int(reach["cells"])
-    coarse_cells = max(11, (cells + 1) // 2)
-    fine_cells = 2 * cells - 1
+    """Return fixed 2-D terrain/resolution experiments, never fitted values."""
+    baseline = config["validation_2d"]
+    x_cells = int(baseline["x_cells"])
     return [
-        ("baseline", {}, {}),
         (
-            "roughness_minus_20_percent",
-            {"reach": {"manning_n": 0.8 * roughness}},
-            {"manning_n_factor": 0.8},
-        ),
-        (
-            "roughness_plus_20_percent",
-            {"reach": {"manning_n": 1.2 * roughness}},
-            {"manning_n_factor": 1.2},
-        ),
-        (
-            "width_minus_20_percent",
+            "baseline_2d_ribbon",
             {
-                "reach": {
-                    "upstream_width_m": 0.8 * upstream_width,
-                    "downstream_width_m": 0.8 * downstream_width,
-                }
+                "representation": "ribbon",
+                "x_cells": x_cells,
+                "y_cells": int(baseline["y_cells"]),
             },
-            {"channel_width_factor": 0.8},
+            {"purpose": "canonical constant-width 2-D screening corridor"},
         ),
         (
-            "width_plus_20_percent",
+            "fine_longitudinal_2d_ribbon",
             {
-                "reach": {
-                    "upstream_width_m": 1.2 * upstream_width,
-                    "downstream_width_m": 1.2 * downstream_width,
-                }
+                "representation": "ribbon",
+                "x_cells": 2 * x_cells - 1,
+                "y_cells": int(baseline["y_cells"]),
             },
-            {"channel_width_factor": 1.2},
+            {"purpose": "test longitudinal numerical diffusion"},
         ),
-        ("coarse_grid", {"reach": {"cells": coarse_cells}}, {"cells": coarse_cells}),
-        ("fine_grid", {"reach": {"cells": fine_cells}}, {"cells": fine_cells}),
         (
-            "second_order_reconstruction",
-            {"spatial_order": 2},
-            {"spatial_order": 2},
+            "connected_lateral_shelves_2d",
+            {
+                "representation": "shelf",
+                "x_cells": x_cells,
+                "y_cells": 9,
+                "floodplain_width_factor": 3.0,
+                "bank_height_factor": 1.25,
+            },
+            {"purpose": "test lateral storage and bank connectivity"},
         ),
     ]
 
 
 def run_sensitivity(config_path, *, output_path=None):
-    """Evaluate structural sensitivity without calibrating to the held-out gauge."""
+    """Evaluate 2-D structural sensitivity without choosing a best variant."""
     config_path = Path(config_path)
     config = json.loads(config_path.read_text(encoding="utf-8"))
     runs = []
-    with tempfile.TemporaryDirectory(prefix="climate-model-sensitivity-") as temp_dir:
-        for name, overrides, changes in build_variants(config):
-            result = run_validation_case(
+    with tempfile.TemporaryDirectory(prefix="climate-model-2d-sensitivity-") as temp:
+        for name, settings, changes in build_variants(config):
+            result = run_validation_case_2d(
                 config_path,
-                output_path=Path(temp_dir) / f"{name}.json",
-                overrides=overrides,
+                output_path=Path(temp) / f"{name}.json",
+                **settings,
             )
             runs.append(
                 {
                     "name": name,
+                    "settings": settings,
                     "changes": changes,
                     "scores": result["scores"],
                     "mass": result["mass"],
+                    "reach_diagnosis": result["reach_diagnosis"],
                 }
             )
 
     metrics = ("nse", "rmse", "bias", "percent_bias", "pearson_r")
-    score_ranges = {}
+    ranges = {}
     for metric in metrics:
         values = [
             float(run["scores"][metric])
@@ -97,40 +85,33 @@ def run_sensitivity(config_path, *, output_path=None):
             if run["scores"][metric] is not None
             and math.isfinite(float(run["scores"][metric]))
         ]
-        score_ranges[metric] = {"minimum": min(values), "maximum": max(values)}
-
+        ranges[metric] = {"minimum": min(values), "maximum": max(values)}
     evidence = {
-        "schema_version": 1,
+        "schema_version": 2,
         "case": config["case"],
+        "solver_policy": "saint_venant_2d_only",
         "method": {
-            "type": "one_at_a_time",
+            "type": "one_at_a_time_structural_2d",
             "purpose": (
-                "Structural sensitivity screening only; downstream observations "
-                "remain held out and no parameter is calibrated."
+                "Diagnose numerical diffusion and lateral storage only. "
+                "No best-scoring variant is selected or transferred."
             ),
-            "parameters": [
-                "Manning roughness +/-20%",
-                "channel width +/-20%",
-                "longitudinal cells approximately halved/doubled",
-                "first- versus second-order spatial reconstruction",
-            ],
         },
         "runs": runs,
-        "score_ranges": score_ranges,
+        "score_ranges": ranges,
     }
     destination = (
         Path(output_path)
         if output_path is not None
         else config_path.with_suffix(".sensitivity.json")
     )
-    destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(json.dumps(evidence, indent=2) + "\n", encoding="utf-8")
     return evidence
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
-        description="Run structural sensitivities for a real-river validation case."
+        description="Run 2-D structural sensitivities for an observed case."
     )
     parser.add_argument("config", type=Path)
     parser.add_argument("--output", type=Path)
@@ -140,6 +121,7 @@ def main(argv=None):
         json.dumps(
             {
                 "case": evidence["case"],
+                "solver_policy": evidence["solver_policy"],
                 "runs": len(evidence["runs"]),
                 "score_ranges": evidence["score_ranges"],
             },

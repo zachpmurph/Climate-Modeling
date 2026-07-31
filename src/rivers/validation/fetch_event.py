@@ -13,8 +13,7 @@ SRC_ROOT = Path(__file__).resolve().parents[2]
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
-from rivers.ingest.common import request_json
-from rivers.ingest.usgs_flow import fetch_usgs_flow
+from rivers.validation.providers import fetch_usgs_flow, request_json
 
 
 FIELDNAMES = (

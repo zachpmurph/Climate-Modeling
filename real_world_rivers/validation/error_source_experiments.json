@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "study": "Uncalibrated 2-D error-source screening",
+  "status": "retrospective_diagnostic_not_parameter_selection",
+  "controls": [
+    "same committed event observations",
+    "same upstream hydrograph",
+    "same downstream boundary choice",
+    "same Manning and slope evidence within each geometry comparison",
+    "no fitted parameter is transferred into a validation case"
+  ],
+  "runs": {
+    "colorado_ribbon": "glen_canyon_lees_ferry.ribbon.2d.results.json",
+    "colorado_ribbon_fine": "glen_canyon_lees_ferry.ribbon_fine.2d.results.json",
+    "colorado_shelf": "glen_canyon_lees_ferry.shelf.2d.results.json",
+    "rio_ribbon": "rio_grande_alameda_albuquerque_2023-05-12_stage.ribbon.2d.results.json",
+    "rio_ribbon_fine": "rio_grande_alameda_albuquerque_2023-05-12_stage.ribbon_fine.2d.results.json",
+    "rio_shelf": "rio_grande_alameda_albuquerque_2023-05-12_stage.shelf.2d.results.json",
+    "rio_measured_geometry": "rio_grande_alameda_albuquerque_2023-05-12_stage_geometry.ribbon.2d.results.json",
+    "truckee_ribbon": "truckee_reno_sparks_2017-01-08.ribbon.2d.results.json"
+  }
+}

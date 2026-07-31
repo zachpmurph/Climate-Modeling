@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "case": {
     "name": "Glen Canyon Dam to Lees Ferry \u2014 2004-07-01",
     "river": "Colorado River",
@@ -11,212 +11,152 @@
     ],
     "purpose": "Uncalibrated two-gauge baseline; downstream observations are not used as a boundary or calibration target."
   },
+  "solver_policy": "saint_venant_2d_only",
   "method": {
-    "type": "one_at_a_time",
-    "purpose": "Structural sensitivity screening only; downstream observations remain held out and no parameter is calibrated.",
-    "parameters": [
-      "Manning roughness +/-20%",
-      "channel width +/-20%",
-      "longitudinal cells approximately halved/doubled",
-      "first- versus second-order spatial reconstruction"
-    ]
+    "type": "one_at_a_time_structural_2d",
+    "purpose": "Diagnose numerical diffusion and lateral storage only. No best-scoring variant is selected or transferred."
   },
   "runs": [
     {
-      "name": "baseline",
-      "changes": {},
+      "name": "baseline_2d_ribbon",
+      "settings": {
+        "representation": "ribbon",
+        "x_cells": 31,
+        "y_cells": 1
+      },
+      "changes": {
+        "purpose": "canonical constant-width 2-D screening corridor"
+      },
       "scores": {
-        "nse": 0.1188439984073244,
-        "rmse": 4376.912514477588,
-        "bias": -3114.940745193823,
-        "percent_bias": -12.530003222890862,
-        "pearson_r": 0.7559090459291324,
+        "nse": 0.433913836976101,
+        "rmse": 3508.1869926459162,
+        "bias": -1976.6591106674402,
+        "percent_bias": -7.951209044805918,
+        "pearson_r": 0.7889844205428209,
         "n": 97
       },
       "mass": {
-        "inflow_m3": 37288434.915018626,
+        "inflow_m3": 37288563.84680705,
         "source_m3": 0.0,
-        "outflow_m3": 31274187.171438962,
-        "floor_correction_m3": 0.0,
-        "rainfall_m3": 0.0,
-        "lateral_inflow_m3": 0.0
+        "outflow_m3": 32911266.01932313,
+        "floor_correction_m3": 0.0
+      },
+      "reach_diagnosis": {
+        "upstream_volume_m3": 37288614.68197632,
+        "observed_downstream_volume_m3": 35722551.48120576,
+        "predicted_downstream_volume_m3": 32911506.15600561,
+        "observed_net_change_from_upstream_m3": -1566063.200770557,
+        "observed_net_change_fraction": -0.041998428049072126,
+        "modeled_net_change_from_upstream_m3": -4377108.525970709,
+        "modeled_net_change_fraction": -0.11738458409629282,
+        "unexplained_downstream_volume_m3": 2811045.3252001517,
+        "observed_routing_lag_min": 180.0,
+        "modeled_routing_lag_min": 60.0,
+        "routing_lag_error_min": -120.0,
+        "guard": "Volume change combines intervening flows, withdrawals, measurement error, and net reach-storage change; it is not a calibrated lateral flow."
       }
     },
     {
-      "name": "roughness_minus_20_percent",
+      "name": "fine_longitudinal_2d_ribbon",
+      "settings": {
+        "representation": "ribbon",
+        "x_cells": 61,
+        "y_cells": 1
+      },
       "changes": {
-        "manning_n_factor": 0.8
+        "purpose": "test longitudinal numerical diffusion"
       },
       "scores": {
-        "nse": 0.5038458010512961,
-        "rmse": 3284.352782187621,
-        "bias": -1754.9235054405167,
-        "percent_bias": -7.059266604998728,
-        "pearson_r": 0.813385609777768,
+        "nse": 0.43301977805656044,
+        "rmse": 3510.956260489827,
+        "bias": -1999.42356189352,
+        "percent_bias": -8.042780175868435,
+        "pearson_r": 0.7910169950430762,
         "n": 97
       },
       "mass": {
-        "inflow_m3": 37288397.67960216,
+        "inflow_m3": 37288568.31121757,
         "source_m3": 0.0,
-        "outflow_m3": 33229679.859824225,
-        "floor_correction_m3": 0.0,
-        "rainfall_m3": 0.0,
-        "lateral_inflow_m3": 0.0
+        "outflow_m3": 32878290.004772265,
+        "floor_correction_m3": 0.0
+      },
+      "reach_diagnosis": {
+        "upstream_volume_m3": 37288614.68197632,
+        "observed_downstream_volume_m3": 35722551.48120576,
+        "predicted_downstream_volume_m3": 32878452.76815932,
+        "observed_net_change_from_upstream_m3": -1566063.200770557,
+        "observed_net_change_fraction": -0.041998428049072126,
+        "modeled_net_change_from_upstream_m3": -4410161.913817,
+        "modeled_net_change_fraction": -0.11827100447227605,
+        "unexplained_downstream_volume_m3": 2844098.7130464427,
+        "observed_routing_lag_min": 180.0,
+        "modeled_routing_lag_min": 60.0,
+        "routing_lag_error_min": -120.0,
+        "guard": "Volume change combines intervening flows, withdrawals, measurement error, and net reach-storage change; it is not a calibrated lateral flow."
       }
     },
     {
-      "name": "roughness_plus_20_percent",
+      "name": "connected_lateral_shelves_2d",
+      "settings": {
+        "representation": "shelf",
+        "x_cells": 31,
+        "y_cells": 9,
+        "floodplain_width_factor": 3.0,
+        "bank_height_factor": 1.25
+      },
       "changes": {
-        "manning_n_factor": 1.2
+        "purpose": "test lateral storage and bank connectivity"
       },
       "scores": {
-        "nse": -0.33151098182813765,
-        "rmse": 5380.391037766958,
-        "bias": -4276.26333285129,
-        "percent_bias": -17.20148077462791,
-        "pearson_r": 0.7157609824343081,
+        "nse": -0.2393515756726201,
+        "rmse": 5190.852947866279,
+        "bias": -4024.3723231396066,
+        "percent_bias": -16.188236728693983,
+        "pearson_r": 0.7478138189899843,
         "n": 97
       },
       "mass": {
-        "inflow_m3": 37288454.808050185,
+        "inflow_m3": 37288595.47131546,
         "source_m3": 0.0,
-        "outflow_m3": 29603718.51421462,
-        "floor_correction_m3": 0.0,
-        "rainfall_m3": 0.0,
-        "lateral_inflow_m3": 0.0
-      }
-    },
-    {
-      "name": "width_minus_20_percent",
-      "changes": {
-        "channel_width_factor": 0.8
+        "outflow_m3": 29982558.229695175,
+        "floor_correction_m3": 0.0
       },
-      "scores": {
-        "nse": 0.06839649184975782,
-        "rmse": 4500.4612005278705,
-        "bias": -3189.957935277089,
-        "percent_bias": -12.831763580600988,
-        "pearson_r": 0.7334446982803848,
-        "n": 97
-      },
-      "mass": {
-        "inflow_m3": 37288451.42900478,
-        "source_m3": 0.0,
-        "outflow_m3": 31164198.17110365,
-        "floor_correction_m3": 0.0,
-        "rainfall_m3": 0.0,
-        "lateral_inflow_m3": 0.0
-      }
-    },
-    {
-      "name": "width_plus_20_percent",
-      "changes": {
-        "channel_width_factor": 1.2
-      },
-      "scores": {
-        "nse": 0.1531849169143571,
-        "rmse": 4290.775149508018,
-        "bias": -3086.521088542277,
-        "percent_bias": -12.415683748279102,
-        "pearson_r": 0.7781891223267854,
-        "n": 97
-      },
-      "mass": {
-        "inflow_m3": 37288414.67675536,
-        "source_m3": 0.0,
-        "outflow_m3": 31316085.979292806,
-        "floor_correction_m3": 0.0,
-        "rainfall_m3": 0.0,
-        "lateral_inflow_m3": 0.0
-      }
-    },
-    {
-      "name": "coarse_grid",
-      "changes": {
-        "cells": 41
-      },
-      "scores": {
-        "nse": 0.12007963322389714,
-        "rmse": 4373.8425911043805,
-        "bias": -3100.3996999150995,
-        "percent_bias": -12.471511149008647,
-        "pearson_r": 0.7539010790965969,
-        "n": 97
-      },
-      "mass": {
-        "inflow_m3": 37288233.93086186,
-        "source_m3": 0.0,
-        "outflow_m3": 31294592.270198427,
-        "floor_correction_m3": 0.0,
-        "rainfall_m3": 0.0,
-        "lateral_inflow_m3": 0.0
-      }
-    },
-    {
-      "name": "fine_grid",
-      "changes": {
-        "cells": 161
-      },
-      "scores": {
-        "nse": 0.11835248301420376,
-        "rmse": 4378.133081522126,
-        "bias": -3122.173085779628,
-        "percent_bias": -12.559095670632928,
-        "pearson_r": 0.7570000622570662,
-        "n": 97
-      },
-      "mass": {
-        "inflow_m3": 37288522.58177314,
-        "source_m3": 0.0,
-        "outflow_m3": 31264217.56262897,
-        "floor_correction_m3": 0.0,
-        "rainfall_m3": 0.0,
-        "lateral_inflow_m3": 0.0
-      }
-    },
-    {
-      "name": "second_order_reconstruction",
-      "changes": {
-        "spatial_order": 2
-      },
-      "scores": {
-        "nse": -1.1920034383778622,
-        "rmse": 6903.384765165605,
-        "bias": -3272.4521665192374,
-        "percent_bias": -13.163600706212094,
-        "pearson_r": 0.154525929409603,
-        "n": 97
-      },
-      "mass": {
-        "inflow_m3": 37288614.68197624,
-        "source_m3": 0.0,
-        "outflow_m3": 31267507.211877637,
-        "floor_correction_m3": 0.0,
-        "rainfall_m3": 0.0,
-        "lateral_inflow_m3": 0.0
+      "reach_diagnosis": {
+        "upstream_volume_m3": 37288614.68197632,
+        "observed_downstream_volume_m3": 35722551.48120576,
+        "predicted_downstream_volume_m3": 29982490.995756302,
+        "observed_net_change_from_upstream_m3": -1566063.200770557,
+        "observed_net_change_fraction": -0.041998428049072126,
+        "modeled_net_change_from_upstream_m3": -7306123.686220016,
+        "modeled_net_change_fraction": -0.19593443598084315,
+        "unexplained_downstream_volume_m3": 5740060.485449459,
+        "observed_routing_lag_min": 180.0,
+        "modeled_routing_lag_min": 165.0,
+        "routing_lag_error_min": -15.0,
+        "guard": "Volume change combines intervening flows, withdrawals, measurement error, and net reach-storage change; it is not a calibrated lateral flow."
       }
     }
   ],
   "score_ranges": {
     "nse": {
-      "minimum": -1.1920034383778622,
-      "maximum": 0.5038458010512961
+      "minimum": -0.2393515756726201,
+      "maximum": 0.433913836976101
     },
     "rmse": {
-      "minimum": 3284.352782187621,
-      "maximum": 6903.384765165605
+      "minimum": 3508.1869926459162,
+      "maximum": 5190.852947866279
     },
     "bias": {
-      "minimum": -4276.26333285129,
-      "maximum": -1754.9235054405167
+      "minimum": -4024.3723231396066,
+      "maximum": -1976.6591106674402
     },
     "percent_bias": {
-      "minimum": -17.20148077462791,
-      "maximum": -7.059266604998728
+      "minimum": -16.188236728693983,
+      "maximum": -7.951209044805918
     },
     "pearson_r": {
-      "minimum": 0.154525929409603,
-      "maximum": 0.813385609777768
+      "minimum": 0.7478138189899843,
+      "maximum": 0.7910169950430762
     }
   }
 }
