@@ -374,6 +374,24 @@ def run_validation_case_2d(
             "internal-source timing, so a single lag relative to the mainstem "
             "upstream gauge is not a like-for-like travel-time metric."
         )
+    cell_area = np.asarray(result["dx_m"], dtype=float)[:, None] * np.asarray(
+        result["dy_m"], dtype=float
+    )[None, :]
+    storage_initial = float(np.sum(result["h_initial"] * cell_area))
+    storage_final = float(np.sum(result["h_final"] * cell_area))
+    expected_storage_change = float(
+        result["mass_inflow"]
+        + result["mass_source"]
+        - result["mass_outflow"]
+        + result["mass_floor_correction"]
+    )
+    mass_residual = storage_final - storage_initial - expected_storage_change
+    mass_scale = max(
+        abs(storage_initial),
+        abs(storage_final),
+        abs(expected_storage_change),
+        1.0,
+    )
     evidence = {
         "schema_version": 1,
         "case": config["case"],
@@ -481,6 +499,9 @@ def run_validation_case_2d(
         ),
         "reach_diagnosis": reach_diagnosis,
         "mass": {
+            "storage_initial_m3": storage_initial,
+            "storage_final_m3": storage_final,
+            "storage_change_m3": storage_final - storage_initial,
             "inflow_m3": float(result["mass_inflow"]),
             "source_m3": float(result["mass_source"]),
             "rainfall_m3": float(result["mass_rainfall"]),
@@ -493,6 +514,8 @@ def run_validation_case_2d(
             ),
             "outflow_m3": float(result["mass_outflow"]),
             "floor_correction_m3": float(result["mass_floor_correction"]),
+            "balance_residual_m3": mass_residual,
+            "relative_balance_residual": mass_residual / mass_scale,
         },
         "series": {
             "times_min": target_times.tolist(),

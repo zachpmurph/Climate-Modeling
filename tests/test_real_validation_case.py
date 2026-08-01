@@ -479,6 +479,47 @@ def test_fetch_event_normalizes_approved_usgs_rows():
     assert set(urls) == {"upstream", "downstream"}
 
 
+def test_fetch_event_allows_only_explicit_small_endpoint_gap():
+    config = {
+        "case": {
+            "observation_window": [
+                "2020-01-01T00:00:00Z",
+                "2020-01-01T00:15:00Z",
+            ]
+        },
+        "observation_endpoint_tolerance_min": 5.0,
+        "sources": [
+            {"role": "upstream", "gauge": "USGS-1"},
+            {"role": "downstream", "gauge": "USGS-2"},
+        ],
+    }
+
+    def requester(url, params=None):
+        return {
+            "features": [
+                {
+                    "properties": {
+                        "parameter_code": "00060",
+                        "time": timestamp,
+                        "value": 10.0,
+                        "unit_of_measure": "ft^3/s",
+                        "approval_status": "Approved",
+                    }
+                }
+                for timestamp in (
+                    "2020-01-01T00:00:00Z",
+                    "2020-01-01T00:10:00Z",
+                )
+            ]
+        }, f"https://example.test/{params['monitoring_location_id']}"
+
+    rows, _ = collect_event_rows(config, requester=requester)
+    assert len(rows) == 4
+    config["observation_endpoint_tolerance_min"] = 4.0
+    with pytest.raises(ValueError, match="configured end"):
+        collect_event_rows(config, requester=requester)
+
+
 def test_fetch_point_flows_preserves_station_and_requires_warmup_coverage():
     config = {
         "case": {

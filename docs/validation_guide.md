@@ -221,3 +221,17 @@ components, normalized RMSE, percent bias, volumetric efficiency, volume ratio,
 amplitude, peak and routing timing, conservation, and skill over the unchanged
 upstream hydrograph. Internal-source runs do not have one comparable mainstem
 routing lag because downstream timing mixes multiple source paths.
+
+Run the fixed longer-window study with:
+
+```bash
+python src/rivers/validation/extend_event_windows.py \
+  real_world_rivers/validation/extended_window_study.json --fetch
+python src/rivers/validation/run_suite.py \
+  real_world_rivers/validation/extended_window_suite.json
+python src/rivers/validation/analyze_extended_windows.py \
+  real_world_rivers/validation/extended_window_study.json
+```
+
+This appends 48 scored hours to every retained baseline and holdout while
+preserving its hydraulic assumptions. See `docs/extended_window_study.md`.

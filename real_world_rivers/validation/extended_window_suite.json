@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "suite": {
+    "name": "Fixed plus-48-hour routing-window study across all baseline and holdout events",
+    "window_extension_hours": 48.0
+  },
+  "parameter_policy": "No calibration. Every extended case preserves its baseline solver, geometry, roughness, grid, warm-up, and forcing rules.",
+  "cases": [
+    "glen_canyon_lees_ferry_extended_48h.json",
+    "glen_canyon_lees_ferry_2002-01-25_extended_48h.json",
+    "glen_canyon_lees_ferry_2002-07-02_extended_48h.json",
+    "glen_canyon_lees_ferry_2004-01-06_extended_48h.json",
+    "truckee_reno_sparks_2017-01-08_extended_48h.json",
+    "truckee_reno_sparks_2017-02-10_extended_48h.json",
+    "rio_grande_alameda_albuquerque_2023-05-12_extended_48h.json",
+    "delaware_montague_belvidere_2006-06-27_extended_48h.json",
+    "connecticut_montague_holyoke_2011-08-28_extended_48h.json",
+    "potomac_point_of_rocks_little_falls_2018-06-02_extended_48h.json",
+    "russian_hopland_guerneville_2019-02-26_extended_48h.json",
+    "snoqualmie_snoqualmie_carnation_2009-01-07_extended_48h.json",
+    "eel_fort_seward_scotia_2019-02-26_extended_48h.json",
+    "willamette_albany_salem_2012-01-18_extended_48h.json",
+    "chattahoochee_buford_norcross_2019-07-01_extended_48h.json",
+    "snoqualmie_snoqualmie_carnation_2009-01-07_observed_tributaries_extended_48h.json"
+  ]
+}

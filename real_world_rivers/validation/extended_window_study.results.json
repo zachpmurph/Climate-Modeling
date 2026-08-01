@@ -1,0 +1,869 @@
+{
+  "schema_version": 1,
+  "title": "Fixed plus-48-hour routing-window study across all baseline and holdout events",
+  "solver_policy": "saint_venant_2d_only",
+  "calibration": "none",
+  "extension_hours": 48.0,
+  "case_count": 16,
+  "cases": [
+    {
+      "base_config": "glen_canyon_lees_ferry.json",
+      "extended_config": "glen_canyon_lees_ferry_extended_48h.json",
+      "river": "Colorado River",
+      "has_internal_sources": false,
+      "duration_days": {
+        "baseline": 1.0,
+        "extended": 3.0
+      },
+      "observed_recession_hours_after_peak": 45.5,
+      "minimum_recession_covered": true,
+      "scores": {
+        "nse": {
+          "baseline": 0.433913836976101,
+          "extended": 0.3414637558327962,
+          "change": -0.09245008114330477
+        },
+        "pearson_r": {
+          "baseline": 0.7889844205428209,
+          "extended": 0.6831502308387055,
+          "change": -0.1058341897041154
+        },
+        "percent_bias": {
+          "baseline": -7.951209044805918,
+          "extended": -6.421661402660369,
+          "change": 1.5295476421455483
+        },
+        "kge": {
+          "baseline": null,
+          "extended": 0.5296858383509614,
+          "change": null
+        },
+        "volumetric_efficiency": {
+          "baseline": null,
+          "extended": 0.8753861929641086,
+          "change": null
+        }
+      },
+      "routing": {
+        "comparable": true,
+        "baseline_lag_error_min": -120.0,
+        "extended_lag_error_min": -105.0,
+        "materially_early_extended": true,
+        "short_window_artifact_reduction_min": 15.0
+      },
+      "numerics": {
+        "relative_mass_balance_residual": 2.0894981717313543e-14,
+        "within_mass_tolerance": true,
+        "floor_correction_m3": 0.0,
+        "all_reported_scores_finite": true
+      }
+    },
+    {
+      "base_config": "glen_canyon_lees_ferry_2002-01-25.json",
+      "extended_config": "glen_canyon_lees_ferry_2002-01-25_extended_48h.json",
+      "river": "Colorado River",
+      "has_internal_sources": false,
+      "duration_days": {
+        "baseline": 1.0,
+        "extended": 3.0
+      },
+      "observed_recession_hours_after_peak": 43.75,
+      "minimum_recession_covered": true,
+      "scores": {
+        "nse": {
+          "baseline": 0.14850338730953827,
+          "extended": 0.4417827237401555,
+          "change": 0.2932793364306172
+        },
+        "pearson_r": {
+          "baseline": 0.7605064419549697,
+          "extended": 0.7341759477487009,
+          "change": -0.026330494206268873
+        },
+        "percent_bias": {
+          "baseline": -11.838648257832359,
+          "extended": -5.778811102665064,
+          "change": 6.059837155167295
+        },
+        "kge": {
+          "baseline": null,
+          "extended": 0.6128398028979869,
+          "change": null
+        },
+        "volumetric_efficiency": {
+          "baseline": null,
+          "extended": 0.8808717778270359,
+          "change": null
+        }
+      },
+      "routing": {
+        "comparable": true,
+        "baseline_lag_error_min": -105.0,
+        "extended_lag_error_min": -120.0,
+        "materially_early_extended": true,
+        "short_window_artifact_reduction_min": -15.0
+      },
+      "numerics": {
+        "relative_mass_balance_residual": 1.8867470612155947e-15,
+        "within_mass_tolerance": true,
+        "floor_correction_m3": 0.0,
+        "all_reported_scores_finite": true
+      }
+    },
+    {
+      "base_config": "glen_canyon_lees_ferry_2002-07-02.json",
+      "extended_config": "glen_canyon_lees_ferry_2002-07-02_extended_48h.json",
+      "river": "Colorado River",
+      "has_internal_sources": false,
+      "duration_days": {
+        "baseline": 1.0,
+        "extended": 3.0
+      },
+      "observed_recession_hours_after_peak": 47.5,
+      "minimum_recession_covered": true,
+      "scores": {
+        "nse": {
+          "baseline": 0.32917658620475265,
+          "extended": 0.5797068972165859,
+          "change": 0.2505303110118332
+        },
+        "pearson_r": {
+          "baseline": 0.8121463171530747,
+          "extended": 0.8167855231633746,
+          "change": 0.004639206010299879
+        },
+        "percent_bias": {
+          "baseline": -11.080189172301013,
+          "extended": -5.8169630813707585,
+          "change": 5.263226090930255
+        },
+        "kge": {
+          "baseline": null,
+          "extended": 0.6895723901978826,
+          "change": null
+        },
+        "volumetric_efficiency": {
+          "baseline": null,
+          "extended": 0.8898015200593927,
+          "change": null
+        }
+      },
+      "routing": {
+        "comparable": true,
+        "baseline_lag_error_min": -120.0,
+        "extended_lag_error_min": -120.0,
+        "materially_early_extended": true,
+        "short_window_artifact_reduction_min": 0.0
+      },
+      "numerics": {
+        "relative_mass_balance_residual": 3.8936682746627765e-15,
+        "within_mass_tolerance": true,
+        "floor_correction_m3": 0.0,
+        "all_reported_scores_finite": true
+      }
+    },
+    {
+      "base_config": "glen_canyon_lees_ferry_2004-01-06.json",
+      "extended_config": "glen_canyon_lees_ferry_2004-01-06_extended_48h.json",
+      "river": "Colorado River",
+      "has_internal_sources": false,
+      "duration_days": {
+        "baseline": 1.0,
+        "extended": 3.0
+      },
+      "observed_recession_hours_after_peak": 68.25,
+      "minimum_recession_covered": true,
+      "scores": {
+        "nse": {
+          "baseline": 0.505634882732541,
+          "extended": 0.6068448574556686,
+          "change": 0.10120997472312765
+        },
+        "pearson_r": {
+          "baseline": 0.8356293552110748,
+          "extended": 0.8217731327397393,
+          "change": -0.013856222471335555
+        },
+        "percent_bias": {
+          "baseline": -17.2523937723431,
+          "extended": -10.749415871469468,
+          "change": 6.502977900873633
+        },
+        "kge": {
+          "baseline": null,
+          "extended": 0.6467987218275324,
+          "change": null
+        },
+        "volumetric_efficiency": {
+          "baseline": null,
+          "extended": 0.7581708218896586,
+          "change": null
+        }
+      },
+      "routing": {
+        "comparable": true,
+        "baseline_lag_error_min": -105.0,
+        "extended_lag_error_min": -120.0,
+        "materially_early_extended": true,
+        "short_window_artifact_reduction_min": -15.0
+      },
+      "numerics": {
+        "relative_mass_balance_residual": 5.5168662823909927e-14,
+        "within_mass_tolerance": true,
+        "floor_correction_m3": 0.0,
+        "all_reported_scores_finite": true
+      }
+    },
+    {
+      "base_config": "truckee_reno_sparks_2017-01-08.json",
+      "extended_config": "truckee_reno_sparks_2017-01-08_extended_48h.json",
+      "river": "Truckee River",
+      "has_internal_sources": false,
+      "duration_days": {
+        "baseline": 1.0,
+        "extended": 3.0
+      },
+      "observed_recession_hours_after_peak": 37.5,
+      "minimum_recession_covered": true,
+      "scores": {
+        "nse": {
+          "baseline": 0.9635189169531811,
+          "extended": 0.9838481685011545,
+          "change": 0.02032925154797338
+        },
+        "pearson_r": {
+          "baseline": 0.9980088615516328,
+          "extended": 0.9920675274176045,
+          "change": -0.005941334134028309
+        },
+        "percent_bias": {
+          "baseline": 10.235121668636019,
+          "extended": 0.5210266763178882,
+          "change": -9.714094992318131
+        },
+        "kge": {
+          "baseline": null,
+          "extended": 0.9732761683713252,
+          "change": null
+        },
+        "volumetric_efficiency": {
+          "baseline": null,
+          "extended": 0.9403104053703071,
+          "change": null
+        }
+      },
+      "routing": {
+        "comparable": true,
+        "baseline_lag_error_min": -375.0,
+        "extended_lag_error_min": -60.0,
+        "materially_early_extended": true,
+        "short_window_artifact_reduction_min": 315.0
+      },
+      "numerics": {
+        "relative_mass_balance_residual": 4.350295193074859e-12,
+        "within_mass_tolerance": true,
+        "floor_correction_m3": 0.0,
+        "all_reported_scores_finite": true
+      }
+    },
+    {
+      "base_config": "truckee_reno_sparks_2017-02-10.json",
+      "extended_config": "truckee_reno_sparks_2017-02-10_extended_48h.json",
+      "river": "Truckee River",
+      "has_internal_sources": false,
+      "duration_days": {
+        "baseline": 1.0,
+        "extended": 3.0
+      },
+      "observed_recession_hours_after_peak": 60.0,
+      "minimum_recession_covered": true,
+      "scores": {
+        "nse": {
+          "baseline": 0.7826730400113736,
+          "extended": 0.8573560346294258,
+          "change": 0.07468299461805217
+        },
+        "pearson_r": {
+          "baseline": 0.9137908801672753,
+          "extended": 0.9831390827704803,
+          "change": 0.06934820260320507
+        },
+        "percent_bias": {
+          "baseline": 0.6924392732617087,
+          "extended": -6.3146029867809395,
+          "change": -7.007042260042648
+        },
+        "kge": {
+          "baseline": null,
+          "extended": 0.7870255994060423,
+          "change": null
+        },
+        "volumetric_efficiency": {
+          "baseline": null,
+          "extended": 0.9116501347209045,
+          "change": null
+        }
+      },
+      "routing": {
+        "comparable": true,
+        "baseline_lag_error_min": -45.0,
+        "extended_lag_error_min": -45.0,
+        "materially_early_extended": false,
+        "short_window_artifact_reduction_min": 0.0
+      },
+      "numerics": {
+        "relative_mass_balance_residual": 4.024845076768926e-12,
+        "within_mass_tolerance": true,
+        "floor_correction_m3": 0.0,
+        "all_reported_scores_finite": true
+      }
+    },
+    {
+      "base_config": "rio_grande_alameda_albuquerque_2023-05-12.json",
+      "extended_config": "rio_grande_alameda_albuquerque_2023-05-12_extended_48h.json",
+      "river": "Rio Grande",
+      "has_internal_sources": false,
+      "duration_days": {
+        "baseline": 2.0,
+        "extended": 4.0
+      },
+      "observed_recession_hours_after_peak": 13.75,
+      "minimum_recession_covered": false,
+      "scores": {
+        "nse": {
+          "baseline": -2.862288600621918,
+          "extended": -0.6168566221995959,
+          "change": 2.245431978422322
+        },
+        "pearson_r": {
+          "baseline": 0.5692375802876193,
+          "extended": 0.7289445011085772,
+          "change": 0.15970692082095794
+        },
+        "percent_bias": {
+          "baseline": 4.564662236239114,
+          "extended": 2.913813019999783,
+          "change": -1.650849216239331
+        },
+        "kge": {
+          "baseline": null,
+          "extended": 0.3637880950691832,
+          "change": null
+        },
+        "volumetric_efficiency": {
+          "baseline": null,
+          "extended": 0.9496631778006566,
+          "change": null
+        }
+      },
+      "routing": {
+        "comparable": true,
+        "baseline_lag_error_min": -150.0,
+        "extended_lag_error_min": -195.0,
+        "materially_early_extended": true,
+        "short_window_artifact_reduction_min": -45.0
+      },
+      "numerics": {
+        "relative_mass_balance_residual": 1.0628153706975464e-13,
+        "within_mass_tolerance": true,
+        "floor_correction_m3": 0.0,
+        "all_reported_scores_finite": true
+      }
+    },
+    {
+      "base_config": "delaware_montague_belvidere_2006-06-27.json",
+      "extended_config": "delaware_montague_belvidere_2006-06-27_extended_48h.json",
+      "river": "Delaware River",
+      "has_internal_sources": false,
+      "duration_days": {
+        "baseline": 3.0,
+        "extended": 5.0
+      },
+      "observed_recession_hours_after_peak": 57.75,
+      "minimum_recession_covered": true,
+      "scores": {
+        "nse": {
+          "baseline": 0.7574684177427311,
+          "extended": 0.7929055252977673,
+          "change": 0.03543710755503615
+        },
+        "pearson_r": {
+          "baseline": 0.949474186745577,
+          "extended": 0.9715346662835396,
+          "change": 0.02206047953796253
+        },
+        "percent_bias": {
+          "baseline": -13.33892512060258,
+          "extended": -19.629783462878617,
+          "change": -6.290858342276037
+        },
+        "kge": {
+          "baseline": null,
+          "extended": 0.7781423023451445,
+          "change": null
+        },
+        "volumetric_efficiency": {
+          "baseline": null,
+          "extended": 0.8034728089619847,
+          "change": null
+        }
+      },
+      "routing": {
+        "comparable": true,
+        "baseline_lag_error_min": 0.0,
+        "extended_lag_error_min": 0.0,
+        "materially_early_extended": false,
+        "short_window_artifact_reduction_min": 0.0
+      },
+      "numerics": {
+        "relative_mass_balance_residual": 1.2592887340999936e-13,
+        "within_mass_tolerance": true,
+        "floor_correction_m3": 0.0,
+        "all_reported_scores_finite": true
+      }
+    },
+    {
+      "base_config": "connecticut_montague_holyoke_2011-08-28.json",
+      "extended_config": "connecticut_montague_holyoke_2011-08-28_extended_48h.json",
+      "river": "Connecticut River",
+      "has_internal_sources": false,
+      "duration_days": {
+        "baseline": 3.0,
+        "extended": 5.0
+      },
+      "observed_recession_hours_after_peak": 68.0,
+      "minimum_recession_covered": true,
+      "scores": {
+        "nse": {
+          "baseline": 0.950679276610932,
+          "extended": 0.9340905128162929,
+          "change": -0.01658876379463914
+        },
+        "pearson_r": {
+          "baseline": 0.9971912745968062,
+          "extended": 0.9880446576811395,
+          "change": -0.009146616915666761
+        },
+        "percent_bias": {
+          "baseline": -10.917376683256775,
+          "extended": -8.759904276577279,
+          "change": 2.1574724066794957
+        },
+        "kge": {
+          "baseline": null,
+          "extended": 0.8935982178733473,
+          "change": null
+        },
+        "volumetric_efficiency": {
+          "baseline": null,
+          "extended": 0.9049426955515782,
+          "change": null
+        }
+      },
+      "routing": {
+        "comparable": true,
+        "baseline_lag_error_min": -30.0,
+        "extended_lag_error_min": -30.0,
+        "materially_early_extended": false,
+        "short_window_artifact_reduction_min": 0.0
+      },
+      "numerics": {
+        "relative_mass_balance_residual": 2.424506461011216e-14,
+        "within_mass_tolerance": true,
+        "floor_correction_m3": 0.0,
+        "all_reported_scores_finite": true
+      }
+    },
+    {
+      "base_config": "potomac_point_of_rocks_little_falls_2018-06-02.json",
+      "extended_config": "potomac_point_of_rocks_little_falls_2018-06-02_extended_48h.json",
+      "river": "Potomac River",
+      "has_internal_sources": false,
+      "duration_days": {
+        "baseline": 4.0,
+        "extended": 5.989583333333333
+      },
+      "observed_recession_hours_after_peak": 63.25,
+      "minimum_recession_covered": true,
+      "scores": {
+        "nse": {
+          "baseline": 0.964263524135434,
+          "extended": 0.9589810072186258,
+          "change": -0.005282516916808255
+        },
+        "pearson_r": {
+          "baseline": 0.9925508072890545,
+          "extended": 0.9928021696505379,
+          "change": 0.000251362361483376
+        },
+        "percent_bias": {
+          "baseline": -8.81249867283747,
+          "extended": -9.39403595874586,
+          "change": -0.5815372859083894
+        },
+        "kge": {
+          "baseline": null,
+          "extended": 0.9033838591023367,
+          "change": null
+        },
+        "volumetric_efficiency": {
+          "baseline": null,
+          "extended": 0.8997343993992675,
+          "change": null
+        }
+      },
+      "routing": {
+        "comparable": true,
+        "baseline_lag_error_min": -45.0,
+        "extended_lag_error_min": -45.0,
+        "materially_early_extended": false,
+        "short_window_artifact_reduction_min": 0.0
+      },
+      "numerics": {
+        "relative_mass_balance_residual": 5.26108903393772e-14,
+        "within_mass_tolerance": true,
+        "floor_correction_m3": 0.0,
+        "all_reported_scores_finite": true
+      }
+    },
+    {
+      "base_config": "russian_hopland_guerneville_2019-02-26.json",
+      "extended_config": "russian_hopland_guerneville_2019-02-26_extended_48h.json",
+      "river": "Russian River",
+      "has_internal_sources": false,
+      "duration_days": {
+        "baseline": 3.0,
+        "extended": 5.0
+      },
+      "observed_recession_hours_after_peak": 68.75,
+      "minimum_recession_covered": true,
+      "scores": {
+        "nse": {
+          "baseline": -2.4233860130674065,
+          "extended": -2.5216214693874335,
+          "change": -0.09823545632002695
+        },
+        "pearson_r": {
+          "baseline": 0.6201923472017516,
+          "extended": 0.6491989419729075,
+          "change": 0.029006594771155858
+        },
+        "percent_bias": {
+          "baseline": -76.08286954764014,
+          "extended": -80.09110621466144,
+          "change": -4.008236667021293
+        },
+        "kge": {
+          "baseline": null,
+          "extended": -0.11199571862590418,
+          "change": null
+        },
+        "volumetric_efficiency": {
+          "baseline": null,
+          "extended": 0.19908893785338566,
+          "change": null
+        }
+      },
+      "routing": {
+        "comparable": true,
+        "baseline_lag_error_min": -285.0,
+        "extended_lag_error_min": -270.0,
+        "materially_early_extended": true,
+        "short_window_artifact_reduction_min": 15.0
+      },
+      "numerics": {
+        "relative_mass_balance_residual": 3.014379908859127e-13,
+        "within_mass_tolerance": true,
+        "floor_correction_m3": 0.0,
+        "all_reported_scores_finite": true
+      }
+    },
+    {
+      "base_config": "snoqualmie_snoqualmie_carnation_2009-01-07.json",
+      "extended_config": "snoqualmie_snoqualmie_carnation_2009-01-07_extended_48h.json",
+      "river": "Snoqualmie River",
+      "has_internal_sources": false,
+      "duration_days": {
+        "baseline": 3.0,
+        "extended": 5.0
+      },
+      "observed_recession_hours_after_peak": 81.75,
+      "minimum_recession_covered": true,
+      "scores": {
+        "nse": {
+          "baseline": 0.2299652825103392,
+          "extended": 0.5138843321525779,
+          "change": 0.2839190496422387
+        },
+        "pearson_r": {
+          "baseline": 0.7976643831308128,
+          "extended": 0.8792174416482306,
+          "change": 0.08155305851741779
+        },
+        "percent_bias": {
+          "baseline": -32.554241060011385,
+          "extended": -35.15824754750796,
+          "change": -2.6040064874965765
+        },
+        "kge": {
+          "baseline": null,
+          "extended": 0.5452784874488106,
+          "change": null
+        },
+        "volumetric_efficiency": {
+          "baseline": null,
+          "extended": 0.6019872574572378,
+          "change": null
+        }
+      },
+      "routing": {
+        "comparable": true,
+        "baseline_lag_error_min": -465.0,
+        "extended_lag_error_min": -450.0,
+        "materially_early_extended": true,
+        "short_window_artifact_reduction_min": 15.0
+      },
+      "numerics": {
+        "relative_mass_balance_residual": 6.143818638182703e-13,
+        "within_mass_tolerance": true,
+        "floor_correction_m3": 0.0,
+        "all_reported_scores_finite": true
+      }
+    },
+    {
+      "base_config": "eel_fort_seward_scotia_2019-02-26.json",
+      "extended_config": "eel_fort_seward_scotia_2019-02-26_extended_48h.json",
+      "river": "Eel River",
+      "has_internal_sources": false,
+      "duration_days": {
+        "baseline": 3.0,
+        "extended": 5.0
+      },
+      "observed_recession_hours_after_peak": 73.75,
+      "minimum_recession_covered": true,
+      "scores": {
+        "nse": {
+          "baseline": -0.10503071260258956,
+          "extended": 0.4472930302889736,
+          "change": 0.5523237428915632
+        },
+        "pearson_r": {
+          "baseline": 0.9766154063921537,
+          "extended": 0.9727078998394819,
+          "change": -0.003907506552671802
+        },
+        "percent_bias": {
+          "baseline": -40.766605280444175,
+          "extended": -38.88061983947119,
+          "change": 1.8859854409729877
+        },
+        "kge": {
+          "baseline": null,
+          "extended": 0.4811521829862129,
+          "change": null
+        },
+        "volumetric_efficiency": {
+          "baseline": null,
+          "extended": 0.6111938016052881,
+          "change": null
+        }
+      },
+      "routing": {
+        "comparable": true,
+        "baseline_lag_error_min": -90.0,
+        "extended_lag_error_min": -60.0,
+        "materially_early_extended": true,
+        "short_window_artifact_reduction_min": 30.0
+      },
+      "numerics": {
+        "relative_mass_balance_residual": 2.8356615197239437e-13,
+        "within_mass_tolerance": true,
+        "floor_correction_m3": 0.0,
+        "all_reported_scores_finite": true
+      }
+    },
+    {
+      "base_config": "willamette_albany_salem_2012-01-18.json",
+      "extended_config": "willamette_albany_salem_2012-01-18_extended_48h.json",
+      "river": "Willamette River",
+      "has_internal_sources": false,
+      "duration_days": {
+        "baseline": 3.0,
+        "extended": 5.0
+      },
+      "observed_recession_hours_after_peak": 41.75,
+      "minimum_recession_covered": true,
+      "scores": {
+        "nse": {
+          "baseline": -0.2700089077014276,
+          "extended": -0.49377587682174906,
+          "change": -0.22376696912032146
+        },
+        "pearson_r": {
+          "baseline": 0.9959335447416451,
+          "extended": 0.9829387234130493,
+          "change": -0.012994821328595751
+        },
+        "percent_bias": {
+          "baseline": -57.966884196311945,
+          "extended": -53.74398640374967,
+          "change": 4.2228977925622715
+        },
+        "kge": {
+          "baseline": null,
+          "extended": 0.2735592595771077,
+          "change": null
+        },
+        "volumetric_efficiency": {
+          "baseline": null,
+          "extended": 0.46256013596250334,
+          "change": null
+        }
+      },
+      "routing": {
+        "comparable": true,
+        "baseline_lag_error_min": 195.0,
+        "extended_lag_error_min": 405.0,
+        "materially_early_extended": false,
+        "short_window_artifact_reduction_min": -210.0
+      },
+      "numerics": {
+        "relative_mass_balance_residual": 1.4809926770049908e-13,
+        "within_mass_tolerance": true,
+        "floor_correction_m3": 0.0,
+        "all_reported_scores_finite": true
+      }
+    },
+    {
+      "base_config": "chattahoochee_buford_norcross_2019-07-01.json",
+      "extended_config": "chattahoochee_buford_norcross_2019-07-01_extended_48h.json",
+      "river": "Chattahoochee River",
+      "has_internal_sources": false,
+      "duration_days": {
+        "baseline": 1.0,
+        "extended": 3.0
+      },
+      "observed_recession_hours_after_peak": 46.25,
+      "minimum_recession_covered": true,
+      "scores": {
+        "nse": {
+          "baseline": 0.5891535292798324,
+          "extended": 0.8007710316164303,
+          "change": 0.21161750233659782
+        },
+        "pearson_r": {
+          "baseline": 0.8390992552784381,
+          "extended": 0.8985018646755889,
+          "change": 0.05940260939715081
+        },
+        "percent_bias": {
+          "baseline": -9.454262643623563,
+          "extended": -5.655830049710199,
+          "change": 3.798432593913364
+        },
+        "kge": {
+          "baseline": null,
+          "extended": 0.8261686822036007,
+          "change": null
+        },
+        "volumetric_efficiency": {
+          "baseline": null,
+          "extended": 0.755781866722828,
+          "change": null
+        }
+      },
+      "routing": {
+        "comparable": true,
+        "baseline_lag_error_min": -75.0,
+        "extended_lag_error_min": -60.0,
+        "materially_early_extended": true,
+        "short_window_artifact_reduction_min": 15.0
+      },
+      "numerics": {
+        "relative_mass_balance_residual": 7.652007266628469e-15,
+        "within_mass_tolerance": true,
+        "floor_correction_m3": 0.0,
+        "all_reported_scores_finite": true
+      }
+    },
+    {
+      "base_config": "snoqualmie_snoqualmie_carnation_2009-01-07_observed_tributaries.json",
+      "extended_config": "snoqualmie_snoqualmie_carnation_2009-01-07_observed_tributaries_extended_48h.json",
+      "river": "Snoqualmie River",
+      "has_internal_sources": true,
+      "duration_days": {
+        "baseline": 3.0,
+        "extended": 5.0
+      },
+      "observed_recession_hours_after_peak": 81.75,
+      "minimum_recession_covered": true,
+      "scores": {
+        "nse": {
+          "baseline": 0.47272660681275,
+          "extended": 0.6746034268019496,
+          "change": 0.2018768199891996
+        },
+        "pearson_r": {
+          "baseline": 0.7485928089639384,
+          "extended": 0.8536218224974067,
+          "change": 0.10502901353346827
+        },
+        "percent_bias": {
+          "baseline": -13.639310295983746,
+          "extended": -16.43272434684387,
+          "change": -2.7934140508601235
+        },
+        "kge": {
+          "baseline": 0.6891984565927609,
+          "extended": 0.7566377302933116,
+          "change": 0.0674392737005507
+        },
+        "volumetric_efficiency": {
+          "baseline": 0.6810571029582482,
+          "extended": 0.6851041211181328,
+          "change": 0.004047018159884619
+        }
+      },
+      "routing": {
+        "comparable": false,
+        "baseline_lag_error_min": -525.0,
+        "extended_lag_error_min": -510.0,
+        "materially_early_extended": false,
+        "short_window_artifact_reduction_min": null
+      },
+      "numerics": {
+        "relative_mass_balance_residual": 3.957843283640769e-12,
+        "within_mass_tolerance": true,
+        "floor_correction_m3": 0.0,
+        "all_reported_scores_finite": true
+      }
+    }
+  ],
+  "summary": {
+    "routing_comparable_case_count": 15,
+    "extended_routing_early_case_count": 13,
+    "extended_routing_materially_early_case_count": 10,
+    "extended_routing_zero_error_case_count": 1,
+    "extended_routing_late_case_count": 1,
+    "early_routing_prevalent": true,
+    "minimum_recession_covered_case_count": 15,
+    "nse_improved_case_count": 11,
+    "absolute_percent_bias_improved_case_count": 10,
+    "median_nse": {
+      "baseline": 0.4533202218944255,
+      "extended": 0.5932758773361273
+    },
+    "median_absolute_percent_bias": {
+      "baseline": 11.459418715066686,
+      "extended": 9.07697011766157
+    },
+    "maximum_relative_mass_balance_residual": 4.350295193074859e-12,
+    "all_cases_numerically_stable_and_conservative": true
+  },
+  "interpretation": [
+    "Fixed longer windows remove endpoint-peak artifacts without choosing an endpoint from model skill.",
+    "Numerical stability and conservation do not imply correct routing speed, forcing, or geometry.",
+    "Routing lag is not comparable for internal-source cases because downstream timing mixes source paths.",
+    "Rio Grande is retained only because this study covers all committed baseline events; interpret it separately from cross-river attribution."
+  ]
+}
