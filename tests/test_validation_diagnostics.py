@@ -152,6 +152,7 @@ def test_2d_validation_path_scores_boundary_flux_and_labels_idealized_terrain(
     assert evidence["scores"]["n"] == 3
     assert "not mapped flood terrain" in evidence["terrain_representation"]["limitation"]
     assert np.isfinite(evidence["mass"]["outflow_m3"])
+    assert abs(evidence["mass"]["relative_balance_residual"]) < 1e-12
 
 
 def test_committed_2d_error_source_assessment_is_reproducible(tmp_path):

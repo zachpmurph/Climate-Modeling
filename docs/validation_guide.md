@@ -115,6 +115,20 @@ volume error with drainage-area growth elevates omitted tributary and
 rainfall-runoff forcing as a hypothesis. It does not prove that drainage area
 alone predicts event runoff.
 
+Run the predeclared matched-river holdouts and rebuild the fit-regime analysis:
+
+```bash
+python src/rivers/validation/run_suite.py \
+  real_world_rivers/validation/cross_river_hypothesis_suite.json
+python src/rivers/validation/analyze_fit_regimes.py \
+  real_world_rivers/validation/fit_regime_analysis.json
+```
+
+The matched suite adds tributary-rich Eel and Willamette floods plus a regulated
+Chattahoochee pulse-routing control. Rio Grande is explicitly excluded from the
+fit-regime analysis. See `docs/cross_river_fit_investigation.md` for the
+predeclared hypotheses and interpretation.
+
 Run the cross-region diagnostic subset:
 
 ```bash
@@ -190,6 +204,34 @@ Explicitly refresh a committed USGS fixture only when source review requires it:
 python src/rivers/validation/fetch_event.py CASE.json
 python src/rivers/validation/fetch_stage_control.py CASE.json
 python src/rivers/validation/fetch_channel_geometry.py CASE.json
+python src/rivers/validation/fetch_point_flows.py CASE.json
 ```
 
 The refresh utilities have no database or generic ingestion/export path.
+
+Run the complementary metric audit with:
+
+```bash
+python src/rivers/validation/audit_validation_metrics.py \
+  real_world_rivers/validation/metric_audit.json
+```
+
+Do not use NSE or correlation alone as physical validation. Inspect KGE
+components, normalized RMSE, percent bias, volumetric efficiency, volume ratio,
+amplitude, peak and routing timing, conservation, and skill over the unchanged
+upstream hydrograph. Internal-source runs do not have one comparable mainstem
+routing lag because downstream timing mixes multiple source paths.
+
+Run the fixed longer-window study with:
+
+```bash
+python src/rivers/validation/extend_event_windows.py \
+  real_world_rivers/validation/extended_window_study.json --fetch
+python src/rivers/validation/run_suite.py \
+  real_world_rivers/validation/extended_window_suite.json
+python src/rivers/validation/analyze_extended_windows.py \
+  real_world_rivers/validation/extended_window_study.json
+```
+
+This appends 48 scored hours to every retained baseline and holdout while
+preserving its hydraulic assumptions. See `docs/extended_window_study.md`.

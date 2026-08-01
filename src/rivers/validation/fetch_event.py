@@ -46,6 +46,11 @@ def collect_event_rows(config, *, requester=request_json):
         warmup.get("duration_min", config.get("warmup_min", 0.0))
     )
     observed_warmup = warmup.get("upstream_forcing") == "observed"
+    endpoint_tolerance_min = float(
+        config.get("observation_endpoint_tolerance_min", 0.0)
+    )
+    if endpoint_tolerance_min < 0.0:
+        raise ValueError("observation_endpoint_tolerance_min cannot be negative")
     expected_roles = {"upstream", "downstream"}
     sources = config.get("sources", [])
     roles = {source.get("role") for source in sources}
@@ -104,7 +109,10 @@ def collect_event_rows(config, *, requester=request_json):
             )
         if selected[0]["observed_at"] != _as_utc_iso(expected_start):
             raise ValueError(f"{role} observations do not begin at the configured start")
-        if selected[-1]["observed_at"] != _as_utc_iso(end):
+        configured_end = datetime.fromisoformat(end.replace("Z", "+00:00"))
+        actual_end = datetime.fromisoformat(selected[-1]["observed_at"])
+        end_gap_min = (configured_end - actual_end).total_seconds() / 60.0
+        if end_gap_min < -1e-9 or end_gap_min > endpoint_tolerance_min + 1e-9:
             raise ValueError(f"{role} observations do not end at the configured end")
     return rows, resolved_urls
 

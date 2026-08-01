@@ -173,6 +173,8 @@ The rationale for each transition is given alongside the change.
 | **4as — Source-aware wetting timestep** | Current branch | Both Saint-Venant solvers now predict the gravity-wave speed associated with positive rainfall or lateral source water during a proposed step and tighten the CFL step when needed. Regression cases prove that dry-start routing no longer depends on artificial rainfall breakpoints and remains conservative with soil infiltration. | A dry domain has zero current wave speed. Using only the current state allowed one timestep to span an entire storm, adding rainfall at the end and suppressing all movement during the event. |
 | **4at — 2-D-only expanded validation** | Current branch | Observed validation now refuses 1-D fallback and runs 12 uncalibrated events across eight rivers through Saint-Venant 2-D. Five added USGS events span Delaware, Connecticut, Potomac, Russian, and Snoqualmie reaches, with tracked volume, timing, and structural-storage diagnostics. | Mixing solver families and fitted parameters obscures whether errors come from hydraulics, forcing, or datasets. A fixed 2-D pathway and diverse held-out events expose missing tributary inflow, reach storage, and geometry uncertainty without downstream calibration. |
 | **4au — Conservative 2-D internal hydrographs** | Current branch | Added signed, spatially mapped internal flow hydrographs to Saint-Venant 2-D. Observed tributaries and withdrawals are distributed over explicit channel cells, forcing breakpoints constrain time steps, withdrawals are capped by available water, and requested/applied lateral volumes are reported separately. | The expanded river tests showed that missing intervening runoff dominates volume error, but the 2-D path previously rejected measured point flows. Treating tributaries as rainfall would lose provenance and distort units; explicit internal hydrographs close the known forcing gap without downstream calibration. |
+| **4av — Observed tributaries and metric benchmarks** | Current branch | Added a reproducible approved-USGS internal-flow fetch, ran Raging and Tolt River hydrographs through the Snoqualmie reach, and expanded event scoring with normalized RMSE, KGE, volumetric efficiency, and skill over direct upstream passthrough. | Correlation hid severe Eel/Willamette volume errors and NSE hid a 375-minute Truckee lag. Multiple component metrics and a naive boundary benchmark prevent a correlated input hydrograph from being mistaken for physically correct routing. |
+| **4aw — Fixed extended routing windows** | Current branch | Added 48 scored hours to all 16 baseline and holdout configurations without changing hydraulics, refreshed approved observations, and recorded initial/final storage plus mass residuals. | January Truckee's 375-minute lag error was mostly an endpoint artifact, falling to 60 minutes, but 13 of 15 comparable extended cases still route early. Longer runs remain conservative while exposing accumulated forcing and storage error. |
 
 ---
 
@@ -607,6 +609,9 @@ recession windows remain important uncertainties. See
 [`docs/validation_guide.md`](docs/validation_guide.md) and the machine-readable
 `expanded_river_error_assessment.results.json`. The staged corrective work is
 tracked in [`docs/model_shortfall_roadmap.md`](docs/model_shortfall_roadmap.md).
+The matched-river attribution study and its new Eel, Willamette, and
+Chattahoochee holdouts are documented in
+[`docs/cross_river_fit_investigation.md`](docs/cross_river_fit_investigation.md).
 
 Dependencies are pinned in `requirements.txt`. The GitHub Actions verification
 workflow runs the complete suite and matrix from a clean checkout.

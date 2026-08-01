@@ -1,0 +1,31 @@
+{
+  "title": "Complementary metric audit for observed 2-D river validation",
+  "excluded_rivers": ["Rio Grande"],
+  "cases": [
+    "connecticut_montague_holyoke_2011-08-28.json",
+    "delaware_montague_belvidere_2006-06-27.json",
+    "potomac_point_of_rocks_little_falls_2018-06-02.json",
+    "truckee_reno_sparks_2017-01-08.json",
+    "truckee_reno_sparks_2017-02-10.json",
+    "glen_canyon_lees_ferry_2002-01-25.json",
+    "glen_canyon_lees_ferry_2002-07-02.json",
+    "glen_canyon_lees_ferry_2004-01-06.json",
+    "glen_canyon_lees_ferry.json",
+    "snoqualmie_snoqualmie_carnation_2009-01-07.json",
+    "russian_hopland_guerneville_2019-02-26.json",
+    "eel_fort_seward_scotia_2019-02-26.json",
+    "willamette_albany_salem_2012-01-18.json",
+    "chattahoochee_buford_norcross_2019-07-01.json",
+    "snoqualmie_snoqualmie_carnation_2009-01-07_observed_tributaries.json"
+  ],
+  "screening_rules": {
+    "headline_nse": 0.75,
+    "headline_correlation": 0.9,
+    "material_percent_bias": 20.0,
+    "material_routing_lag_min": 60.0,
+    "weak_kge": 0.5,
+    "weak_volumetric_efficiency": 0.6,
+    "minimum_shape_correlation": 0.75,
+    "minimum_routing_value_added": 0.1
+  }
+}

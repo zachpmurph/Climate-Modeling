@@ -1,0 +1,1700 @@
+{
+  "schema_version": 1,
+  "suite": {
+    "name": "Fixed plus-48-hour routing-window study across all baseline and holdout events",
+    "window_extension_hours": 48.0
+  },
+  "solver_policy": "saint_venant_2d_only",
+  "case_count": 16,
+  "parameter_policy": "No calibration. Every extended case preserves its baseline solver, geometry, roughness, grid, warm-up, and forcing rules.",
+  "cases": [
+    {
+      "config": "glen_canyon_lees_ferry_extended_48h.json",
+      "name": "Glen Canyon Dam to Lees Ferry \u2014 2004-07-01 \u2014 extended by 48 hours",
+      "status": "extended_window_diagnostic",
+      "solver": "saint_venant_2d",
+      "terrain_representation": {
+        "name": "ribbon",
+        "x_cells": 31,
+        "y_cells": 1,
+        "domain_width_m": 85.0,
+        "bank_height_m": 0.0,
+        "floodplain_width_factor": 3.0,
+        "configured_channel_width_m_range": {
+          "minimum": 85.0,
+          "maximum": 85.0
+        },
+        "effective_channel_width_m_range": {
+          "minimum": 85.0,
+          "maximum": 85.0
+        },
+        "provenance": {
+          "cross_section_shape": "rectangular"
+        },
+        "limitation": "Laterally uniform constant-width numerical ribbon; configured longitudinal width variation is not represented and this is not mapped flood terrain."
+      },
+      "scores": {
+        "nse": 0.3414637558327962,
+        "rmse": 3582.0429614914183,
+        "normalized_rmse": 0.2668747961331718,
+        "bias": -1558.2343729873282,
+        "percent_bias": -6.421661402660369,
+        "pearson_r": 0.6831502308387055,
+        "kge": 0.5296858383509614,
+        "volumetric_efficiency": 0.8753861929641086,
+        "n": 289
+      },
+      "reach_context": {
+        "window_extension_hours": 48.0,
+        "window_extension_policy": "Append the same fixed duration to the pre-existing scored end; no parameter or endpoint is selected from model skill."
+      },
+      "error_diagnosis": {
+        "observed_volume_m3": 104759306.64096767,
+        "predicted_volume_m3": 98056062.07895401,
+        "volume_ratio": 0.9360128968303781,
+        "volume_only_counterfactual": {
+          "scale_applied_to_prediction": 1.068361347783029,
+          "scores": {
+            "nse": 0.4662811937200235,
+            "rmse": 3224.7585438929673,
+            "normalized_rmse": 0.24025585070644087,
+            "bias": -5.949860446064034,
+            "percent_bias": -0.024520052849595124,
+            "pearson_r": 0.6831502308387056,
+            "kge": 0.5660089724139667,
+            "volumetric_efficiency": 0.8833726001640605,
+            "n": 289
+          },
+          "guard": "Uses held-out downstream volume as an oracle diagnostic. It is not a permissible forcing correction or calibration."
+        },
+        "amplitude_ratio": 0.7693446918985383,
+        "observed_peak_time_min": 1590.0,
+        "predicted_peak_time_min": 1590.0,
+        "peak_lag_min": 0.0,
+        "pearson_r": 0.6831502308387055,
+        "signals": [
+          {
+            "component": "shape",
+            "likely_sources": [
+              "missing reach processes or controls",
+              "forcing timing error",
+              "structural model inadequacy"
+            ]
+          }
+        ]
+      },
+      "reach_diagnosis": {
+        "upstream_volume_m3": 103096827.51701641,
+        "observed_downstream_volume_m3": 104759306.64096767,
+        "predicted_downstream_volume_m3": 98056062.07895401,
+        "observed_net_change_from_upstream_m3": 1662479.1239512563,
+        "observed_net_change_fraction": 0.01612541495204457,
+        "modeled_net_change_from_upstream_m3": -5040765.4380624,
+        "modeled_net_change_fraction": -0.04889350680776678,
+        "unexplained_downstream_volume_m3": 6703244.562013656,
+        "observed_routing_lag_min": 165.0,
+        "modeled_routing_lag_min": 60.0,
+        "routing_lag_error_min": -105.0,
+        "guard": "Volume change combines intervening flows, withdrawals, measurement error, and net reach-storage change; it is not a calibrated lateral flow.",
+        "routing_lag_comparable": true
+      },
+      "observation_count": {
+        "upstream": 721,
+        "downstream": 289
+      }
+    },
+    {
+      "config": "glen_canyon_lees_ferry_2002-01-25_extended_48h.json",
+      "name": "Glen Canyon Dam to Lees Ferry \u2014 2002-01-25 winter ramp \u2014 extended by 48 hours",
+      "status": "extended_window_diagnostic",
+      "solver": "saint_venant_2d",
+      "terrain_representation": {
+        "name": "ribbon",
+        "x_cells": 31,
+        "y_cells": 1,
+        "domain_width_m": 85.0,
+        "bank_height_m": 0.0,
+        "floodplain_width_factor": 3.0,
+        "configured_channel_width_m_range": {
+          "minimum": 85.0,
+          "maximum": 85.0
+        },
+        "effective_channel_width_m_range": {
+          "minimum": 85.0,
+          "maximum": 85.0
+        },
+        "provenance": {
+          "cross_section_shape": "rectangular"
+        },
+        "limitation": "Laterally uniform constant-width numerical ribbon; configured longitudinal width variation is not represented and this is not mapped flood terrain."
+      },
+      "scores": {
+        "nse": 0.4417827237401555,
+        "rmse": 2997.7188520560626,
+        "normalized_rmse": 0.23746846609484792,
+        "bias": -1250.5023149547387,
+        "percent_bias": -5.778811102665064,
+        "pearson_r": 0.7341759477487009,
+        "kge": 0.6128398028979869,
+        "volumetric_efficiency": 0.8808717778270359,
+        "n": 288
+      },
+      "reach_context": {
+        "window_extension_hours": 48.0,
+        "window_extension_policy": "Append the same fixed duration to the pre-existing scored end; no parameter or endpoint is selected from model skill."
+      },
+      "error_diagnosis": {
+        "observed_volume_m3": 93363361.63109683,
+        "predicted_volume_m3": 88020812.99114206,
+        "volume_ratio": 0.942776817944232,
+        "volume_only_counterfactual": {
+          "scale_applied_to_prediction": 1.0606964246114428,
+          "scores": {
+            "nse": 0.5378262778471503,
+            "rmse": 2727.6703757786327,
+            "normalized_rmse": 0.2160762006431134,
+            "bias": -12.966744497936613,
+            "percent_bias": -0.05992181395746506,
+            "pearson_r": 0.7341759477487005,
+            "kge": 0.6474965502419244,
+            "volumetric_efficiency": 0.8957744071385525,
+            "n": 288
+          },
+          "guard": "Uses held-out downstream volume as an oracle diagnostic. It is not a permissible forcing correction or calibration."
+        },
+        "amplitude_ratio": 0.8282762989075201,
+        "observed_peak_time_min": 1695.0,
+        "predicted_peak_time_min": 1650.0,
+        "peak_lag_min": -45.0,
+        "pearson_r": 0.7341759477487009,
+        "signals": [
+          {
+            "component": "timing",
+            "likely_sources": [
+              "wave-speed/roughness error",
+              "bed or cross-section geometry error",
+              "boundary-control timing"
+            ]
+          }
+        ]
+      },
+      "reach_diagnosis": {
+        "upstream_volume_m3": 92136378.50984217,
+        "observed_downstream_volume_m3": 93363361.63109683,
+        "predicted_downstream_volume_m3": 88020812.99114206,
+        "observed_net_change_from_upstream_m3": 1226983.1212546527,
+        "observed_net_change_fraction": 0.013317032220053931,
+        "modeled_net_change_from_upstream_m3": -4115565.518700108,
+        "modeled_net_change_fraction": -0.04466819279488477,
+        "unexplained_downstream_volume_m3": 5342548.639954761,
+        "observed_routing_lag_min": 180.0,
+        "modeled_routing_lag_min": 60.0,
+        "routing_lag_error_min": -120.0,
+        "guard": "Volume change combines intervening flows, withdrawals, measurement error, and net reach-storage change; it is not a calibrated lateral flow.",
+        "routing_lag_comparable": true
+      },
+      "observation_count": {
+        "upstream": 1009,
+        "downstream": 288
+      }
+    },
+    {
+      "config": "glen_canyon_lees_ferry_2002-07-02_extended_48h.json",
+      "name": "Glen Canyon Dam to Lees Ferry \u2014 2002-07-02 summer ramp \u2014 extended by 48 hours",
+      "status": "extended_window_diagnostic",
+      "solver": "saint_venant_2d",
+      "terrain_representation": {
+        "name": "ribbon",
+        "x_cells": 31,
+        "y_cells": 1,
+        "domain_width_m": 85.0,
+        "bank_height_m": 0.0,
+        "floodplain_width_factor": 3.0,
+        "configured_channel_width_m_range": {
+          "minimum": 85.0,
+          "maximum": 85.0
+        },
+        "effective_channel_width_m_range": {
+          "minimum": 85.0,
+          "maximum": 85.0
+        },
+        "provenance": {
+          "cross_section_shape": "rectangular"
+        },
+        "limitation": "Laterally uniform constant-width numerical ribbon; configured longitudinal width variation is not represented and this is not mapped flood terrain."
+      },
+      "scores": {
+        "nse": 0.5797068972165859,
+        "rmse": 3322.947042791084,
+        "normalized_rmse": 0.23009562225357494,
+        "bias": -1483.488386436979,
+        "percent_bias": -5.8169630813707585,
+        "pearson_r": 0.8167855231633746,
+        "kge": 0.6895723901978826,
+        "volumetric_efficiency": 0.8898015200593927,
+        "n": 289
+      },
+      "reach_context": {
+        "window_extension_hours": 48.0,
+        "window_extension_policy": "Append the same fixed duration to the pre-existing scored end; no parameter or endpoint is selected from model skill."
+      },
+      "error_diagnosis": {
+        "observed_volume_m3": 110121384.7116288,
+        "predicted_volume_m3": 103742278.52297948,
+        "volume_ratio": 0.9420720488999111,
+        "volume_only_counterfactual": {
+          "scale_applied_to_prediction": 1.0614899371738429,
+          "scores": {
+            "nse": 0.6669400159460258,
+            "rmse": 2958.0704769358176,
+            "normalized_rmse": 0.2048299471209082,
+            "bias": -6.542502878692604,
+            "percent_bias": -0.025654058402521596,
+            "pearson_r": 0.8167855231633744,
+            "kge": 0.7307891788850107,
+            "volumetric_efficiency": 0.9031986120120666,
+            "n": 289
+          },
+          "guard": "Uses held-out downstream volume as an oracle diagnostic. It is not a permissible forcing correction or calibration."
+        },
+        "amplitude_ratio": 0.8334174821189435,
+        "observed_peak_time_min": 1470.0,
+        "predicted_peak_time_min": 2970.0,
+        "peak_lag_min": 1500.0,
+        "pearson_r": 0.8167855231633746,
+        "signals": [
+          {
+            "component": "timing",
+            "likely_sources": [
+              "wave-speed/roughness error",
+              "bed or cross-section geometry error",
+              "boundary-control timing"
+            ]
+          }
+        ]
+      },
+      "reach_diagnosis": {
+        "upstream_volume_m3": 108766593.50328115,
+        "observed_downstream_volume_m3": 110121384.7116288,
+        "predicted_downstream_volume_m3": 103742278.52297948,
+        "observed_net_change_from_upstream_m3": 1354791.2083476484,
+        "observed_net_change_fraction": 0.012455949613856194,
+        "modeled_net_change_from_upstream_m3": -5024314.980301663,
+        "modeled_net_change_fraction": -0.04619354912636935,
+        "unexplained_downstream_volume_m3": 6379106.188649312,
+        "observed_routing_lag_min": 180.0,
+        "modeled_routing_lag_min": 60.0,
+        "routing_lag_error_min": -120.0,
+        "guard": "Volume change combines intervening flows, withdrawals, measurement error, and net reach-storage change; it is not a calibrated lateral flow.",
+        "routing_lag_comparable": true
+      },
+      "observation_count": {
+        "upstream": 1009,
+        "downstream": 289
+      }
+    },
+    {
+      "config": "glen_canyon_lees_ferry_2004-01-06_extended_48h.json",
+      "name": "Glen Canyon Dam to Lees Ferry \u2014 2004-01-06 winter ramp \u2014 extended by 48 hours",
+      "status": "extended_window_diagnostic",
+      "solver": "saint_venant_2d",
+      "terrain_representation": {
+        "name": "ribbon",
+        "x_cells": 31,
+        "y_cells": 1,
+        "domain_width_m": 85.0,
+        "bank_height_m": 0.0,
+        "floodplain_width_factor": 3.0,
+        "configured_channel_width_m_range": {
+          "minimum": 85.0,
+          "maximum": 85.0
+        },
+        "effective_channel_width_m_range": {
+          "minimum": 85.0,
+          "maximum": 85.0
+        },
+        "provenance": {
+          "cross_section_shape": "rectangular"
+        },
+        "limitation": "Laterally uniform constant-width numerical ribbon; configured longitudinal width variation is not represented and this is not mapped flood terrain."
+      },
+      "scores": {
+        "nse": 0.6068448574556686,
+        "rmse": 6317.652835528291,
+        "normalized_rmse": 0.23744764192076306,
+        "bias": -2405.286304589858,
+        "percent_bias": -10.749415871469468,
+        "pearson_r": 0.8217731327397393,
+        "kge": 0.6467987218275324,
+        "volumetric_efficiency": 0.7581708218896586,
+        "n": 289
+      },
+      "reach_context": {
+        "window_extension_hours": 48.0,
+        "window_extension_policy": "Append the same fixed duration to the pre-existing scored end; no parameter or endpoint is selected from model skill."
+      },
+      "error_diagnosis": {
+        "observed_volume_m3": 96496507.43911526,
+        "predicted_volume_m3": 86183284.63269478,
+        "volume_ratio": 0.8931233566880373,
+        "volume_only_counterfactual": {
+          "scale_applied_to_prediction": 1.1196661609078196,
+          "scores": {
+            "nse": 0.6748414347013976,
+            "rmse": 5745.4146317490995,
+            "normalized_rmse": 0.21594019039695994,
+            "bias": -15.470995542699042,
+            "percent_bias": -0.06914111002784765,
+            "pearson_r": 0.8217731327397392,
+            "kge": 0.7322261857012295,
+            "volumetric_efficiency": 0.793554875439301,
+            "n": 289
+          },
+          "guard": "Uses held-out downstream volume as an oracle diagnostic. It is not a permissible forcing correction or calibration."
+        },
+        "amplitude_ratio": 0.7255799384013456,
+        "observed_peak_time_min": 225.0,
+        "predicted_peak_time_min": 3075.0,
+        "peak_lag_min": 2850.0,
+        "pearson_r": 0.8217731327397393,
+        "signals": [
+          {
+            "component": "volume",
+            "likely_sources": [
+              "missing or excess lateral flow",
+              "boundary forcing bias",
+              "storage/geometry bias"
+            ]
+          },
+          {
+            "component": "attenuation",
+            "likely_sources": [
+              "excess channel/floodplain storage",
+              "roughness or geometry bias",
+              "numerical diffusion"
+            ]
+          },
+          {
+            "component": "timing",
+            "likely_sources": [
+              "wave-speed/roughness error",
+              "bed or cross-section geometry error",
+              "boundary-control timing"
+            ]
+          }
+        ]
+      },
+      "reach_diagnosis": {
+        "upstream_volume_m3": 92870733.45093581,
+        "observed_downstream_volume_m3": 96496507.43911526,
+        "predicted_downstream_volume_m3": 86183284.63269478,
+        "observed_net_change_from_upstream_m3": 3625773.9881794453,
+        "observed_net_change_fraction": 0.03904108273350683,
+        "modeled_net_change_from_upstream_m3": -6687448.81824103,
+        "modeled_net_change_fraction": -0.07200814045227769,
+        "unexplained_downstream_volume_m3": 10313222.806420475,
+        "observed_routing_lag_min": 180.0,
+        "modeled_routing_lag_min": 60.0,
+        "routing_lag_error_min": -120.0,
+        "guard": "Volume change combines intervening flows, withdrawals, measurement error, and net reach-storage change; it is not a calibrated lateral flow.",
+        "routing_lag_comparable": true
+      },
+      "observation_count": {
+        "upstream": 1009,
+        "downstream": 289
+      }
+    },
+    {
+      "config": "truckee_reno_sparks_2017-01-08_extended_48h.json",
+      "name": "Truckee River Reno to Sparks \u2014 2017-01-08 flood rise \u2014 extended by 48 hours",
+      "status": "extended_window_diagnostic",
+      "solver": "saint_venant_2d",
+      "terrain_representation": {
+        "name": "ribbon",
+        "x_cells": 31,
+        "y_cells": 1,
+        "domain_width_m": 30.0,
+        "bank_height_m": 0.0,
+        "floodplain_width_factor": 3.0,
+        "configured_channel_width_m_range": {
+          "minimum": 30.0,
+          "maximum": 30.0
+        },
+        "effective_channel_width_m_range": {
+          "minimum": 30.0,
+          "maximum": 30.0
+        },
+        "provenance": {
+          "cross_section_shape": "rectangular"
+        },
+        "limitation": "Laterally uniform constant-width numerical ribbon; configured longitudinal width variation is not represented and this is not mapped flood terrain."
+      },
+      "scores": {
+        "nse": 0.9838481685011545,
+        "rmse": 759.6087423155656,
+        "normalized_rmse": 0.03856873932252603,
+        "bias": 45.96017261858426,
+        "percent_bias": 0.5210266763178882,
+        "pearson_r": 0.9920675274176045,
+        "kge": 0.9732761683713252,
+        "volumetric_efficiency": 0.9403104053703071,
+        "n": 284
+      },
+      "reach_context": {
+        "window_extension_hours": 48.0,
+        "window_extension_policy": "Append the same fixed duration to the pre-existing scored end; no parameter or endpoint is selected from model skill."
+      },
+      "error_diagnosis": {
+        "observed_volume_m3": 39017655.493307136,
+        "predicted_volume_m3": 39188189.7292806,
+        "volume_ratio": 1.0043706940823933,
+        "volume_only_counterfactual": {
+          "scale_applied_to_prediction": 0.99564832575448,
+          "scores": {
+            "nse": 0.983743093822965,
+            "rmse": 762.0755293118353,
+            "normalized_rmse": 0.038693989150922294,
+            "bias": 7.373708379789451,
+            "percent_bias": 0.08359191339733056,
+            "pearson_r": 0.9920675274176044,
+            "kge": 0.9697062428770024,
+            "volumetric_efficiency": 0.940977806363773,
+            "n": 284
+          },
+          "guard": "Uses held-out downstream volume as an oracle diagnostic. It is not a permissible forcing correction or calibration."
+        },
+        "amplitude_ratio": 1.0399114469337147,
+        "observed_peak_time_min": 2070.0,
+        "predicted_peak_time_min": 1980.0,
+        "peak_lag_min": -90.0,
+        "pearson_r": 0.9920675274176045,
+        "signals": [
+          {
+            "component": "timing",
+            "likely_sources": [
+              "wave-speed/roughness error",
+              "bed or cross-section geometry error",
+              "boundary-control timing"
+            ]
+          }
+        ]
+      },
+      "reach_diagnosis": {
+        "upstream_volume_m3": 39317322.76989396,
+        "observed_downstream_volume_m3": 39017655.493307136,
+        "predicted_downstream_volume_m3": 39188189.7292806,
+        "observed_net_change_from_upstream_m3": -299667.27658682317,
+        "observed_net_change_fraction": -0.007621761998919323,
+        "modeled_net_change_from_upstream_m3": -129133.0406133607,
+        "modeled_net_change_fraction": -0.003284380306591994,
+        "unexplained_downstream_volume_m3": -170534.23597346246,
+        "observed_routing_lag_min": 75.0,
+        "modeled_routing_lag_min": 15.0,
+        "routing_lag_error_min": -60.0,
+        "guard": "Volume change combines intervening flows, withdrawals, measurement error, and net reach-storage change; it is not a calibrated lateral flow.",
+        "routing_lag_comparable": true
+      },
+      "observation_count": {
+        "upstream": 337,
+        "downstream": 284
+      }
+    },
+    {
+      "config": "truckee_reno_sparks_2017-02-10_extended_48h.json",
+      "name": "Truckee River Reno to Sparks \u2014 2017-02-10 high-flow event \u2014 extended by 48 hours",
+      "status": "extended_window_diagnostic",
+      "solver": "saint_venant_2d",
+      "terrain_representation": {
+        "name": "ribbon",
+        "x_cells": 31,
+        "y_cells": 1,
+        "domain_width_m": 30.0,
+        "bank_height_m": 0.0,
+        "floodplain_width_factor": 3.0,
+        "configured_channel_width_m_range": {
+          "minimum": 30.0,
+          "maximum": 30.0
+        },
+        "effective_channel_width_m_range": {
+          "minimum": 30.0,
+          "maximum": 30.0
+        },
+        "provenance": {
+          "cross_section_shape": "rectangular"
+        },
+        "limitation": "Laterally uniform constant-width numerical ribbon; configured longitudinal width variation is not represented and this is not mapped flood terrain."
+      },
+      "scores": {
+        "nse": 0.8573560346294258,
+        "rmse": 1050.8748198579715,
+        "normalized_rmse": 0.10813314111098085,
+        "bias": -687.2118660327402,
+        "percent_bias": -6.3146029867809395,
+        "pearson_r": 0.9831390827704803,
+        "kge": 0.7870255994060423,
+        "volumetric_efficiency": 0.9116501347209045,
+        "n": 289
+      },
+      "reach_context": {
+        "window_extension_hours": 48.0,
+        "window_extension_policy": "Append the same fixed duration to the pre-existing scored end; no parameter or endpoint is selected from model skill."
+      },
+      "error_diagnosis": {
+        "observed_volume_m3": 47037326.25032064,
+        "predicted_volume_m3": 44059188.344776794,
+        "volume_ratio": 0.936685646422695,
+        "volume_only_counterfactual": {
+          "scale_applied_to_prediction": 1.0675940256147933,
+          "scores": {
+            "nse": 0.8760489138960128,
+            "rmse": 979.6015251275949,
+            "normalized_rmse": 0.10079924644447247,
+            "bias": 1.95567204289722,
+            "percent_bias": 0.017970138662673236,
+            "pearson_r": 0.9831390827704801,
+            "kge": 0.7155069117318609,
+            "volumetric_efficiency": 0.9306716051379764,
+            "n": 289
+          },
+          "guard": "Uses held-out downstream volume as an oracle diagnostic. It is not a permissible forcing correction or calibration."
+        },
+        "amplitude_ratio": 1.1217973531296006,
+        "observed_peak_time_min": 720.0,
+        "predicted_peak_time_min": 705.0,
+        "peak_lag_min": -15.0,
+        "pearson_r": 0.9831390827704803,
+        "signals": [
+          {
+            "component": "residual",
+            "likely_sources": [
+              "measurement uncertainty",
+              "smaller combined forcing, geometry, and numerical errors"
+            ]
+          }
+        ]
+      },
+      "reach_diagnosis": {
+        "upstream_volume_m3": 43978342.263526656,
+        "observed_downstream_volume_m3": 47037326.25032064,
+        "predicted_downstream_volume_m3": 44059188.344776794,
+        "observed_net_change_from_upstream_m3": 3058983.9867939875,
+        "observed_net_change_fraction": 0.06955660057543708,
+        "modeled_net_change_from_upstream_m3": 80846.08125013858,
+        "modeled_net_change_fraction": 0.001838315795663542,
+        "unexplained_downstream_volume_m3": 2978137.905543849,
+        "observed_routing_lag_min": 60.0,
+        "modeled_routing_lag_min": 15.0,
+        "routing_lag_error_min": -45.0,
+        "guard": "Volume change combines intervening flows, withdrawals, measurement error, and net reach-storage change; it is not a calibrated lateral flow.",
+        "routing_lag_comparable": true
+      },
+      "observation_count": {
+        "upstream": 337,
+        "downstream": 289
+      }
+    },
+    {
+      "config": "rio_grande_alameda_albuquerque_2023-05-12_extended_48h.json",
+      "name": "Rio Grande Alameda to Albuquerque \u2014 2023-05-12 event \u2014 extended by 48 hours",
+      "status": "extended_window_diagnostic",
+      "solver": "saint_venant_2d",
+      "terrain_representation": {
+        "name": "ribbon",
+        "x_cells": 31,
+        "y_cells": 1,
+        "domain_width_m": 100.0,
+        "bank_height_m": 0.0,
+        "floodplain_width_factor": 3.0,
+        "configured_channel_width_m_range": {
+          "minimum": 100.0,
+          "maximum": 100.0
+        },
+        "effective_channel_width_m_range": {
+          "minimum": 100.0,
+          "maximum": 100.0
+        },
+        "provenance": {
+          "cross_section_shape": "rectangular"
+        },
+        "limitation": "Laterally uniform constant-width numerical ribbon; configured longitudinal width variation is not represented and this is not mapped flood terrain."
+      },
+      "scores": {
+        "nse": -0.6168566221995959,
+        "rmse": 471.0657342242903,
+        "normalized_rmse": 0.23104901955616855,
+        "bias": 243.68266559996704,
+        "percent_bias": 2.913813019999783,
+        "pearson_r": 0.7289445011085772,
+        "kge": 0.3637880950691832,
+        "volumetric_efficiency": 0.9496631778006566,
+        "n": 385
+      },
+      "reach_context": {
+        "window_extension_hours": 48.0,
+        "window_extension_policy": "Append the same fixed duration to the pre-existing scored end; no parameter or endpoint is selected from model skill."
+      },
+      "error_diagnosis": {
+        "observed_volume_m3": 48182756.853390336,
+        "predicted_volume_m3": 49589266.03372479,
+        "volume_ratio": 1.0291911312715907,
+        "volume_only_counterfactual": {
+          "scale_applied_to_prediction": 0.9716368219812346,
+          "scores": {
+            "nse": -0.11061364869858625,
+            "rmse": 390.41568996067576,
+            "normalized_rmse": 0.19149166630279563,
+            "bias": -0.430676894060615,
+            "percent_bias": -0.0051497792764092975,
+            "pearson_r": 0.7289445011085771,
+            "kge": 0.40455228034266977,
+            "volumetric_efficiency": 0.9639972086207242,
+            "n": 385
+          },
+          "guard": "Uses held-out downstream volume as an oracle diagnostic. It is not a permissible forcing correction or calibration."
+        },
+        "amplitude_ratio": 1.1422398726964695,
+        "observed_peak_time_min": 4935.0,
+        "predicted_peak_time_min": 3465.0,
+        "peak_lag_min": -1470.0,
+        "pearson_r": 0.7289445011085772,
+        "signals": [
+          {
+            "component": "timing",
+            "likely_sources": [
+              "wave-speed/roughness error",
+              "bed or cross-section geometry error",
+              "boundary-control timing"
+            ]
+          }
+        ]
+      },
+      "reach_diagnosis": {
+        "upstream_volume_m3": 49295184.17175706,
+        "observed_downstream_volume_m3": 48182756.853390336,
+        "predicted_downstream_volume_m3": 49589266.03372479,
+        "observed_net_change_from_upstream_m3": -1112427.3183667213,
+        "observed_net_change_fraction": -0.02256665305257283,
+        "modeled_net_change_from_upstream_m3": 294081.861967735,
+        "modeled_net_change_fraction": 0.005965732087399824,
+        "unexplained_downstream_volume_m3": -1406509.1803344563,
+        "observed_routing_lag_min": 345.0,
+        "modeled_routing_lag_min": 150.0,
+        "routing_lag_error_min": -195.0,
+        "guard": "Volume change combines intervening flows, withdrawals, measurement error, and net reach-storage change; it is not a calibrated lateral flow.",
+        "routing_lag_comparable": true
+      },
+      "observation_count": {
+        "upstream": 433,
+        "downstream": 385
+      }
+    },
+    {
+      "config": "delaware_montague_belvidere_2006-06-27_extended_48h.json",
+      "name": "Delaware River, Montague to Belvidere \u2014 June 2006 flood \u2014 extended by 48 hours",
+      "status": "extended_window_diagnostic",
+      "solver": "saint_venant_2d",
+      "terrain_representation": {
+        "name": "ribbon",
+        "x_cells": 31,
+        "y_cells": 1,
+        "domain_width_m": 200.0,
+        "bank_height_m": 0.0,
+        "floodplain_width_factor": 3.0,
+        "configured_channel_width_m_range": {
+          "minimum": 200.0,
+          "maximum": 200.0
+        },
+        "effective_channel_width_m_range": {
+          "minimum": 200.0,
+          "maximum": 200.0
+        },
+        "provenance": {
+          "cross_section_shape": "rectangular"
+        },
+        "limitation": "Laterally uniform constant-width numerical ribbon; configured longitudinal width variation is not represented and this is not mapped flood terrain."
+      },
+      "scores": {
+        "nse": 0.7929055252977673,
+        "rmse": 51203.65476369245,
+        "normalized_rmse": 0.14330638793009673,
+        "bias": -42984.33186514313,
+        "percent_bias": -19.629783462878617,
+        "pearson_r": 0.9715346662835396,
+        "kge": 0.7781423023451445,
+        "volumetric_efficiency": 0.8034728089619847,
+        "n": 285
+      },
+      "reach_context": {
+        "intervening_drainage_area_growth_fraction": 0.30316,
+        "forcing_limitation": "Tributary runoff, direct rainfall, regulation, and floodplain exchange between gauges are not supplied to the model.",
+        "window_extension_hours": 48.0,
+        "window_extension_policy": "Append the same fixed duration to the pre-existing scored end; no parameter or endpoint is selected from model skill."
+      },
+      "error_diagnosis": {
+        "observed_volume_m3": 1467775851.002427,
+        "predicted_volume_m3": 1270224389.705188,
+        "volume_ratio": 0.8654076089599648,
+        "volume_only_counterfactual": {
+          "scale_applied_to_prediction": 1.1555248528514632,
+          "scores": {
+            "nse": 0.9198425948763378,
+            "rmse": 31855.800987988896,
+            "normalized_rmse": 0.08915652203494173,
+            "bias": -15613.398382687745,
+            "percent_bias": -7.13021736230258,
+            "pearson_r": 0.9715346662835392,
+            "kge": 0.9131137531436201,
+            "volumetric_efficiency": 0.878925288011873,
+            "n": 285
+          },
+          "guard": "Uses held-out downstream volume as an oracle diagnostic. It is not a permissible forcing correction or calibration."
+        },
+        "amplitude_ratio": 0.9310336341093356,
+        "observed_peak_time_min": 3735.0,
+        "predicted_peak_time_min": 3450.0,
+        "peak_lag_min": -285.0,
+        "pearson_r": 0.9715346662835396,
+        "signals": [
+          {
+            "component": "volume",
+            "likely_sources": [
+              "missing or excess lateral flow",
+              "boundary forcing bias",
+              "storage/geometry bias"
+            ]
+          },
+          {
+            "component": "timing",
+            "likely_sources": [
+              "wave-speed/roughness error",
+              "bed or cross-section geometry error",
+              "boundary-control timing"
+            ]
+          }
+        ]
+      },
+      "reach_diagnosis": {
+        "upstream_volume_m3": 1264139213.0945818,
+        "observed_downstream_volume_m3": 1467775851.002427,
+        "predicted_downstream_volume_m3": 1270224389.705188,
+        "observed_net_change_from_upstream_m3": 203636637.90784526,
+        "observed_net_change_fraction": 0.16108719340281183,
+        "modeled_net_change_from_upstream_m3": 6085176.610606194,
+        "modeled_net_change_fraction": 0.004813691836763635,
+        "unexplained_downstream_volume_m3": 197551461.29723907,
+        "observed_routing_lag_min": 0.0,
+        "modeled_routing_lag_min": 0.0,
+        "routing_lag_error_min": 0.0,
+        "guard": "Volume change combines intervening flows, withdrawals, measurement error, and net reach-storage change; it is not a calibrated lateral flow.",
+        "routing_lag_comparable": true
+      },
+      "observation_count": {
+        "upstream": 529,
+        "downstream": 285
+      }
+    },
+    {
+      "config": "connecticut_montague_holyoke_2011-08-28_extended_48h.json",
+      "name": "Connecticut River, Montague City to Holyoke \u2014 Tropical Storm Irene \u2014 extended by 48 hours",
+      "status": "extended_window_diagnostic",
+      "solver": "saint_venant_2d",
+      "terrain_representation": {
+        "name": "ribbon",
+        "x_cells": 31,
+        "y_cells": 1,
+        "domain_width_m": 220.0,
+        "bank_height_m": 0.0,
+        "floodplain_width_factor": 3.0,
+        "configured_channel_width_m_range": {
+          "minimum": 220.0,
+          "maximum": 220.0
+        },
+        "effective_channel_width_m_range": {
+          "minimum": 220.0,
+          "maximum": 220.0
+        },
+        "provenance": {
+          "cross_section_shape": "rectangular"
+        },
+        "limitation": "Laterally uniform constant-width numerical ribbon; configured longitudinal width variation is not represented and this is not mapped flood terrain."
+      },
+      "scores": {
+        "nse": 0.9340905128162929,
+        "rmse": 13314.53450456931,
+        "normalized_rmse": 0.08545953263915403,
+        "bias": -10360.729847400005,
+        "percent_bias": -8.759904276577279,
+        "pearson_r": 0.9880446576811395,
+        "kge": 0.8935982178733473,
+        "volumetric_efficiency": 0.9049426955515782,
+        "n": 481
+      },
+      "reach_context": {
+        "intervening_drainage_area_growth_fraction": 0.06005,
+        "forcing_limitation": "Hydropower controls, tributary runoff, direct rainfall, and floodplain exchange between gauges are not supplied to the model.",
+        "window_extension_hours": 48.0,
+        "window_extension_policy": "Append the same fixed duration to the pre-existing scored end; no parameter or endpoint is selected from model skill."
+      },
+      "error_diagnosis": {
+        "observed_volume_m3": 852479940.9102566,
+        "predicted_volume_m3": 777728264.8591552,
+        "volume_ratio": 0.9123126862418798,
+        "volume_only_counterfactual": {
+          "scale_applied_to_prediction": 1.0961154164361493,
+          "scores": {
+            "nse": 0.9743677630752022,
+            "rmse": 8303.195728833942,
+            "normalized_rmse": 0.05329418209506692,
+            "bias": 11.443668910437273,
+            "percent_bias": 0.009675519553618148,
+            "pearson_r": 0.9880446576811389,
+            "kge": 0.9665655568704641,
+            "volumetric_efficiency": 0.939061971047892,
+            "n": 481
+          },
+          "guard": "Uses held-out downstream volume as an oracle diagnostic. It is not a permissible forcing correction or calibration."
+        },
+        "amplitude_ratio": 0.9758819109115036,
+        "observed_peak_time_min": 3120.0,
+        "predicted_peak_time_min": 3255.0,
+        "peak_lag_min": 135.0,
+        "pearson_r": 0.9880446576811395,
+        "signals": [
+          {
+            "component": "timing",
+            "likely_sources": [
+              "wave-speed/roughness error",
+              "bed or cross-section geometry error",
+              "boundary-control timing"
+            ]
+          }
+        ]
+      },
+      "reach_diagnosis": {
+        "upstream_volume_m3": 903967613.5630925,
+        "observed_downstream_volume_m3": 852479940.9102566,
+        "predicted_downstream_volume_m3": 777728264.8591552,
+        "observed_net_change_from_upstream_m3": -51487672.652835846,
+        "observed_net_change_fraction": -0.0569574306427763,
+        "modeled_net_change_from_upstream_m3": -126239348.70393729,
+        "modeled_net_change_fraction": -0.139650300309267,
+        "unexplained_downstream_volume_m3": 74751676.05110145,
+        "observed_routing_lag_min": 540.0,
+        "modeled_routing_lag_min": 510.0,
+        "routing_lag_error_min": -30.0,
+        "guard": "Volume change combines intervening flows, withdrawals, measurement error, and net reach-storage change; it is not a calibrated lateral flow.",
+        "routing_lag_comparable": true
+      },
+      "observation_count": {
+        "upstream": 529,
+        "downstream": 481
+      }
+    },
+    {
+      "config": "potomac_point_of_rocks_little_falls_2018-06-02_extended_48h.json",
+      "name": "Potomac River, Point of Rocks to Little Falls \u2014 June 2018 flood \u2014 extended by 48 hours",
+      "status": "extended_window_diagnostic",
+      "solver": "saint_venant_2d",
+      "terrain_representation": {
+        "name": "ribbon",
+        "x_cells": 31,
+        "y_cells": 1,
+        "domain_width_m": 300.0,
+        "bank_height_m": 0.0,
+        "floodplain_width_factor": 3.0,
+        "configured_channel_width_m_range": {
+          "minimum": 300.0,
+          "maximum": 300.0
+        },
+        "effective_channel_width_m_range": {
+          "minimum": 300.0,
+          "maximum": 300.0
+        },
+        "provenance": {
+          "cross_section_shape": "rectangular"
+        },
+        "limitation": "Laterally uniform constant-width numerical ribbon; configured longitudinal width variation is not represented and this is not mapped flood terrain."
+      },
+      "scores": {
+        "nse": 0.9589810072186258,
+        "rmse": 16590.998405019862,
+        "normalized_rmse": 0.06353346120689929,
+        "bias": -13172.564123177122,
+        "percent_bias": -9.39403595874586,
+        "pearson_r": 0.9928021696505379,
+        "kge": 0.9033838591023367,
+        "volumetric_efficiency": 0.8997343993992675,
+        "n": 520
+      },
+      "reach_context": {
+        "intervening_drainage_area_growth_fraction": 0.1978,
+        "forcing_limitation": "Monocacy River and other tributary runoff, direct rainfall, diversions, and floodplain exchange are not supplied to the model.",
+        "window_extension_hours": 48.0,
+        "window_extension_policy": "Append the same fixed duration to the pre-existing scored end; no parameter or endpoint is selected from model skill."
+      },
+      "error_diagnosis": {
+        "observed_volume_m3": 1156427450.4436991,
+        "predicted_volume_m3": 1043705583.1404294,
+        "volume_ratio": 0.9025257769002106,
+        "volume_only_counterfactual": {
+          "scale_applied_to_prediction": 1.108001594629875,
+          "scores": {
+            "nse": 0.9663142010140321,
+            "rmse": 15035.000673791248,
+            "normalized_rmse": 0.05757493363178208,
+            "bias": 549.045403881269,
+            "percent_bias": 0.3915526406866922,
+            "pearson_r": 0.9928021696505378,
+            "kge": 0.8680294759514947,
+            "volumetric_efficiency": 0.9253850943607664,
+            "n": 520
+          },
+          "guard": "Uses held-out downstream volume as an oracle diagnostic. It is not a permissible forcing correction or calibration."
+        },
+        "amplitude_ratio": 1.008684359144393,
+        "observed_peak_time_min": 4830.0,
+        "predicted_peak_time_min": 4680.0,
+        "peak_lag_min": -150.0,
+        "pearson_r": 0.9928021696505379,
+        "signals": [
+          {
+            "component": "timing",
+            "likely_sources": [
+              "wave-speed/roughness error",
+              "bed or cross-section geometry error",
+              "boundary-control timing"
+            ]
+          }
+        ]
+      },
+      "reach_diagnosis": {
+        "upstream_volume_m3": 1053165397.0662836,
+        "observed_downstream_volume_m3": 1156427450.4436991,
+        "predicted_downstream_volume_m3": 1043705583.1404294,
+        "observed_net_change_from_upstream_m3": 103262053.37741554,
+        "observed_net_change_fraction": 0.09804922727718188,
+        "modeled_net_change_from_upstream_m3": -9459813.925854206,
+        "modeled_net_change_fraction": -0.00898226807698547,
+        "unexplained_downstream_volume_m3": 112721867.30326974,
+        "observed_routing_lag_min": 420.0,
+        "modeled_routing_lag_min": 375.0,
+        "routing_lag_error_min": -45.0,
+        "guard": "Volume change combines intervening flows, withdrawals, measurement error, and net reach-storage change; it is not a calibrated lateral flow.",
+        "routing_lag_comparable": true
+      },
+      "observation_count": {
+        "upstream": 625,
+        "downstream": 520
+      }
+    },
+    {
+      "config": "russian_hopland_guerneville_2019-02-26_extended_48h.json",
+      "name": "Russian River, Hopland to Guerneville \u2014 February 2019 flood \u2014 extended by 48 hours",
+      "status": "extended_window_diagnostic",
+      "solver": "saint_venant_2d",
+      "terrain_representation": {
+        "name": "ribbon",
+        "x_cells": 31,
+        "y_cells": 1,
+        "domain_width_m": 75.0,
+        "bank_height_m": 0.0,
+        "floodplain_width_factor": 3.0,
+        "configured_channel_width_m_range": {
+          "minimum": 75.0,
+          "maximum": 75.0
+        },
+        "effective_channel_width_m_range": {
+          "minimum": 75.0,
+          "maximum": 75.0
+        },
+        "provenance": {
+          "cross_section_shape": "rectangular"
+        },
+        "limitation": "Laterally uniform constant-width numerical ribbon; configured longitudinal width variation is not represented and this is not mapped flood terrain."
+      },
+      "scores": {
+        "nse": -2.5216214693874335,
+        "rmse": 64987.91095843137,
+        "normalized_rmse": 0.5686106774745503,
+        "bias": -58258.146166341445,
+        "percent_bias": -80.09110621466144,
+        "pearson_r": 0.6491989419729075,
+        "kge": -0.11199571862590418,
+        "volumetric_efficiency": 0.19908893785338566,
+        "n": 481
+      },
+      "reach_context": {
+        "intervening_drainage_area_growth_fraction": 2.69613,
+        "forcing_limitation": "Most downstream contributing area, tributary runoff, direct rainfall, reservoir operations, and floodplain exchange are not supplied to the model.",
+        "window_extension_hours": 48.0,
+        "window_extension_policy": "Append the same fixed duration to the pre-existing scored end; no parameter or endpoint is selected from model skill."
+      },
+      "error_diagnosis": {
+        "observed_volume_m3": 524497757.4354194,
+        "predicted_volume_m3": 104406552.03575431,
+        "volume_ratio": 0.19906005422455925,
+        "volume_only_counterfactual": {
+          "scale_applied_to_prediction": 5.023609603119579,
+          "scores": {
+            "nse": -0.43051462601259094,
+            "rmse": 41419.742210079945,
+            "normalized_rmse": 0.36240136560104713,
+            "bias": 10.554556911646653,
+            "percent_bias": 0.014510007514584578,
+            "pearson_r": 0.649198941972908,
+            "kge": 0.3288064322119165,
+            "volumetric_efficiency": 0.5149628893787922,
+            "n": 481
+          },
+          "guard": "Uses held-out downstream volume as an oracle diagnostic. It is not a permissible forcing correction or calibration."
+        },
+        "amplitude_ratio": 0.3091553702954677,
+        "observed_peak_time_min": 3075.0,
+        "predicted_peak_time_min": 2685.0,
+        "peak_lag_min": -390.0,
+        "pearson_r": 0.6491989419729075,
+        "signals": [
+          {
+            "component": "volume",
+            "likely_sources": [
+              "missing or excess lateral flow",
+              "boundary forcing bias",
+              "storage/geometry bias"
+            ]
+          },
+          {
+            "component": "attenuation",
+            "likely_sources": [
+              "excess channel/floodplain storage",
+              "roughness or geometry bias",
+              "numerical diffusion"
+            ]
+          },
+          {
+            "component": "timing",
+            "likely_sources": [
+              "wave-speed/roughness error",
+              "bed or cross-section geometry error",
+              "boundary-control timing"
+            ]
+          },
+          {
+            "component": "shape",
+            "likely_sources": [
+              "missing reach processes or controls",
+              "forcing timing error",
+              "structural model inadequacy"
+            ]
+          }
+        ]
+      },
+      "reach_diagnosis": {
+        "upstream_volume_m3": 109199458.97870976,
+        "observed_downstream_volume_m3": 524497757.4354194,
+        "predicted_downstream_volume_m3": 104406552.03575431,
+        "observed_net_change_from_upstream_m3": 415298298.4567096,
+        "observed_net_change_fraction": 3.8031168134054485,
+        "modeled_net_change_from_upstream_m3": -4792906.942955449,
+        "modeled_net_change_fraction": -0.04389130667661921,
+        "unexplained_downstream_volume_m3": 420091205.39966506,
+        "observed_routing_lag_min": 720.0,
+        "modeled_routing_lag_min": 450.0,
+        "routing_lag_error_min": -270.0,
+        "guard": "Volume change combines intervening flows, withdrawals, measurement error, and net reach-storage change; it is not a calibrated lateral flow.",
+        "routing_lag_comparable": true
+      },
+      "observation_count": {
+        "upstream": 529,
+        "downstream": 481
+      }
+    },
+    {
+      "config": "snoqualmie_snoqualmie_carnation_2009-01-07_extended_48h.json",
+      "name": "Snoqualmie River, Snoqualmie to Carnation \u2014 January 2009 flood \u2014 extended by 48 hours",
+      "status": "extended_window_diagnostic",
+      "solver": "saint_venant_2d",
+      "terrain_representation": {
+        "name": "ribbon",
+        "x_cells": 31,
+        "y_cells": 1,
+        "domain_width_m": 90.0,
+        "bank_height_m": 0.0,
+        "floodplain_width_factor": 3.0,
+        "configured_channel_width_m_range": {
+          "minimum": 90.0,
+          "maximum": 90.0
+        },
+        "effective_channel_width_m_range": {
+          "minimum": 90.0,
+          "maximum": 90.0
+        },
+        "provenance": {
+          "cross_section_shape": "rectangular"
+        },
+        "limitation": "Laterally uniform constant-width numerical ribbon; configured longitudinal width variation is not represented and this is not mapped flood terrain."
+      },
+      "scores": {
+        "nse": 0.5138843321525779,
+        "rmse": 30859.723469853583,
+        "normalized_rmse": 0.2393378243631525,
+        "bias": -21648.831875689473,
+        "percent_bias": -35.15824754750796,
+        "pearson_r": 0.8792174416482306,
+        "kge": 0.5452784874488106,
+        "volumetric_efficiency": 0.6019872574572378,
+        "n": 481
+      },
+      "reach_context": {
+        "intervening_drainage_area_growth_fraction": 0.608,
+        "forcing_limitation": "Tributary runoff, direct rainfall, lowland floodplain exchange, and local controls between gauges are not supplied to the model.",
+        "window_extension_hours": 48.0,
+        "window_extension_policy": "Append the same fixed duration to the pre-existing scored end; no parameter or endpoint is selected from model skill."
+      },
+      "error_diagnosis": {
+        "observed_volume_m3": 444030652.2971773,
+        "predicted_volume_m3": 287927648.48693633,
+        "volume_ratio": 0.6484409285650721,
+        "volume_only_counterfactual": {
+          "scale_applied_to_prediction": 1.5421605206396967,
+          "scores": {
+            "nse": 0.7058873561014045,
+            "rmse": 24003.748525161445,
+            "normalized_rmse": 0.18616514675462284,
+            "bias": -2.2224278133391575,
+            "percent_bias": -0.0036092786745500283,
+            "pearson_r": 0.87921744164823,
+            "kge": 0.8163649836992954,
+            "volumetric_efficiency": 0.730393883608045,
+            "n": 481
+          },
+          "guard": "Uses held-out downstream volume as an oracle diagnostic. It is not a permissible forcing correction or calibration."
+        },
+        "amplitude_ratio": 0.7299169266034985,
+        "observed_peak_time_min": 2295.0,
+        "predicted_peak_time_min": 1875.0,
+        "peak_lag_min": -420.0,
+        "pearson_r": 0.8792174416482306,
+        "signals": [
+          {
+            "component": "volume",
+            "likely_sources": [
+              "missing or excess lateral flow",
+              "boundary forcing bias",
+              "storage/geometry bias"
+            ]
+          },
+          {
+            "component": "attenuation",
+            "likely_sources": [
+              "excess channel/floodplain storage",
+              "roughness or geometry bias",
+              "numerical diffusion"
+            ]
+          },
+          {
+            "component": "timing",
+            "likely_sources": [
+              "wave-speed/roughness error",
+              "bed or cross-section geometry error",
+              "boundary-control timing"
+            ]
+          }
+        ]
+      },
+      "reach_diagnosis": {
+        "upstream_volume_m3": 288741532.8146181,
+        "observed_downstream_volume_m3": 444030652.2971773,
+        "predicted_downstream_volume_m3": 287927648.48693633,
+        "observed_net_change_from_upstream_m3": 155289119.4825592,
+        "observed_net_change_fraction": 0.5378135870126454,
+        "modeled_net_change_from_upstream_m3": -813884.3276817799,
+        "modeled_net_change_fraction": -0.0028187296775359343,
+        "unexplained_downstream_volume_m3": 156103003.81024098,
+        "observed_routing_lag_min": 570.0,
+        "modeled_routing_lag_min": 120.0,
+        "routing_lag_error_min": -450.0,
+        "guard": "Volume change combines intervening flows, withdrawals, measurement error, and net reach-storage change; it is not a calibrated lateral flow.",
+        "routing_lag_comparable": true
+      },
+      "observation_count": {
+        "upstream": 529,
+        "downstream": 481
+      }
+    },
+    {
+      "config": "eel_fort_seward_scotia_2019-02-26_extended_48h.json",
+      "name": "Eel River, Fort Seward to Scotia \u2014 February 2019 flood \u2014 extended by 48 hours",
+      "status": "extended_window_diagnostic",
+      "solver": "saint_venant_2d",
+      "terrain_representation": {
+        "name": "ribbon",
+        "x_cells": 31,
+        "y_cells": 1,
+        "domain_width_m": 110.0,
+        "bank_height_m": 0.0,
+        "floodplain_width_factor": 3.0,
+        "configured_channel_width_m_range": {
+          "minimum": 110.0,
+          "maximum": 110.0
+        },
+        "effective_channel_width_m_range": {
+          "minimum": 110.0,
+          "maximum": 110.0
+        },
+        "provenance": {
+          "cross_section_shape": "rectangular"
+        },
+        "limitation": "Laterally uniform constant-width numerical ribbon; configured longitudinal width variation is not represented and this is not mapped flood terrain."
+      },
+      "scores": {
+        "nse": 0.4472930302889736,
+        "rmse": 85024.16590058313,
+        "normalized_rmse": 0.2111533109740962,
+        "bias": -72288.42629196009,
+        "percent_bias": -38.88061983947119,
+        "pearson_r": 0.9727078998394819,
+        "kge": 0.4811521829862129,
+        "volumetric_efficiency": 0.6111938016052881,
+        "n": 481
+      },
+      "reach_context": {
+        "intervening_drainage_area_growth_fraction": 0.477456,
+        "forcing_limitation": "Intervening tributary runoff, direct rainfall, floodplain exchange, and controls are not supplied to the model.",
+        "hypothesis_role": "tributary_rich_volume_gain_test",
+        "window_extension_hours": 48.0,
+        "window_extension_policy": "Append the same fixed duration to the pre-existing scored end; no parameter or endpoint is selected from model skill."
+      },
+      "error_diagnosis": {
+        "observed_volume_m3": 1340342395.7898471,
+        "predicted_volume_m3": 819338439.0012318,
+        "volume_ratio": 0.6112903998074356,
+        "volume_only_counterfactual": {
+          "scale_applied_to_prediction": 1.6358836983453575,
+          "scores": {
+            "nse": 0.9355661384447116,
+            "rmse": 29030.331117143753,
+            "normalized_rmse": 0.07209539157639881,
+            "bias": -29.38035632812141,
+            "percent_bias": -0.015802342418248766,
+            "pearson_r": 0.9727078998394821,
+            "kge": 0.9195893080492563,
+            "volumetric_efficiency": 0.8797397762195193,
+            "n": 481
+          },
+          "guard": "Uses held-out downstream volume as an oracle diagnostic. It is not a permissible forcing correction or calibration."
+        },
+        "amplitude_ratio": 0.6886063400754634,
+        "observed_peak_time_min": 2775.0,
+        "predicted_peak_time_min": 2550.0,
+        "peak_lag_min": -225.0,
+        "pearson_r": 0.9727078998394819,
+        "signals": [
+          {
+            "component": "volume",
+            "likely_sources": [
+              "missing or excess lateral flow",
+              "boundary forcing bias",
+              "storage/geometry bias"
+            ]
+          },
+          {
+            "component": "attenuation",
+            "likely_sources": [
+              "excess channel/floodplain storage",
+              "roughness or geometry bias",
+              "numerical diffusion"
+            ]
+          },
+          {
+            "component": "timing",
+            "likely_sources": [
+              "wave-speed/roughness error",
+              "bed or cross-section geometry error",
+              "boundary-control timing"
+            ]
+          }
+        ]
+      },
+      "reach_diagnosis": {
+        "upstream_volume_m3": 822245619.0512794,
+        "observed_downstream_volume_m3": 1340342395.7898471,
+        "predicted_downstream_volume_m3": 819338439.0012318,
+        "observed_net_change_from_upstream_m3": 518096776.7385677,
+        "observed_net_change_fraction": 0.6300997715699067,
+        "modeled_net_change_from_upstream_m3": -2907180.050047636,
+        "modeled_net_change_fraction": -0.003535658911022218,
+        "unexplained_downstream_volume_m3": 521003956.78861535,
+        "observed_routing_lag_min": 300.0,
+        "modeled_routing_lag_min": 240.0,
+        "routing_lag_error_min": -60.0,
+        "guard": "Volume change combines intervening flows, withdrawals, measurement error, and net reach-storage change; it is not a calibrated lateral flow.",
+        "routing_lag_comparable": true
+      },
+      "observation_count": {
+        "upstream": 529,
+        "downstream": 481
+      }
+    },
+    {
+      "config": "willamette_albany_salem_2012-01-18_extended_48h.json",
+      "name": "Willamette River, Albany to Salem \u2014 January 2012 flood \u2014 extended by 48 hours",
+      "status": "extended_window_diagnostic",
+      "solver": "saint_venant_2d",
+      "terrain_representation": {
+        "name": "ribbon",
+        "x_cells": 31,
+        "y_cells": 1,
+        "domain_width_m": 150.0,
+        "bank_height_m": 0.0,
+        "floodplain_width_factor": 3.0,
+        "configured_channel_width_m_range": {
+          "minimum": 150.0,
+          "maximum": 150.0
+        },
+        "effective_channel_width_m_range": {
+          "minimum": 150.0,
+          "maximum": 150.0
+        },
+        "provenance": {
+          "cross_section_shape": "rectangular"
+        },
+        "limitation": "Laterally uniform constant-width numerical ribbon; configured longitudinal width variation is not represented and this is not mapped flood terrain."
+      },
+      "scores": {
+        "nse": -0.49377587682174906,
+        "rmse": 107130.70434232794,
+        "normalized_rmse": 0.4164778863372569,
+        "bias": -97518.1450661914,
+        "percent_bias": -53.74398640374967,
+        "pearson_r": 0.9829387234130493,
+        "kge": 0.2735592595771077,
+        "volumetric_efficiency": 0.46256013596250334,
+        "n": 481
+      },
+      "reach_context": {
+        "intervening_drainage_area_growth_fraction": 0.504132,
+        "forcing_limitation": "Santiam and other intervening tributary runoff, direct rainfall, floodplain exchange, and reservoir operations are not supplied to the model.",
+        "hypothesis_role": "tributary_rich_volume_gain_test",
+        "window_extension_hours": 48.0,
+        "window_extension_policy": "Append the same fixed duration to the pre-existing scored end; no parameter or endpoint is selected from model skill."
+      },
+      "error_diagnosis": {
+        "observed_volume_m3": 1307263929.8591692,
+        "predicted_volume_m3": 604581192.9587,
+        "volume_ratio": 0.46247829466527934,
+        "volume_only_counterfactual": {
+          "scale_applied_to_prediction": 2.1622636381751805,
+          "scores": {
+            "nse": 0.9509982590890256,
+            "rmse": 19403.362360021998,
+            "normalized_rmse": 0.07543188848750035,
+            "bias": 32.109733770141595,
+            "percent_bias": 0.01769624610885669,
+            "pearson_r": 0.9829387234130499,
+            "kge": 0.8925310763025733,
+            "volumetric_efficiency": 0.9065677630210327,
+            "n": 481
+          },
+          "guard": "Uses held-out downstream volume as an oracle diagnostic. It is not a permissible forcing correction or calibration."
+        },
+        "amplitude_ratio": 0.4599597989054979,
+        "observed_peak_time_min": 4695.0,
+        "predicted_peak_time_min": 5625.0,
+        "peak_lag_min": 930.0,
+        "pearson_r": 0.9829387234130493,
+        "signals": [
+          {
+            "component": "volume",
+            "likely_sources": [
+              "missing or excess lateral flow",
+              "boundary forcing bias",
+              "storage/geometry bias"
+            ]
+          },
+          {
+            "component": "attenuation",
+            "likely_sources": [
+              "excess channel/floodplain storage",
+              "roughness or geometry bias",
+              "numerical diffusion"
+            ]
+          },
+          {
+            "component": "timing",
+            "likely_sources": [
+              "wave-speed/roughness error",
+              "bed or cross-section geometry error",
+              "boundary-control timing"
+            ]
+          }
+        ]
+      },
+      "reach_diagnosis": {
+        "upstream_volume_m3": 665101562.0574412,
+        "observed_downstream_volume_m3": 1307263929.8591692,
+        "predicted_downstream_volume_m3": 604581192.9587,
+        "observed_net_change_from_upstream_m3": 642162367.801728,
+        "observed_net_change_fraction": 0.9655102384893631,
+        "modeled_net_change_from_upstream_m3": -60520369.09874129,
+        "modeled_net_change_fraction": -0.09099417675629286,
+        "unexplained_downstream_volume_m3": 702682736.9004693,
+        "observed_routing_lag_min": 60.0,
+        "modeled_routing_lag_min": 465.0,
+        "routing_lag_error_min": 405.0,
+        "guard": "Volume change combines intervening flows, withdrawals, measurement error, and net reach-storage change; it is not a calibrated lateral flow.",
+        "routing_lag_comparable": true
+      },
+      "observation_count": {
+        "upstream": 529,
+        "downstream": 481
+      }
+    },
+    {
+      "config": "chattahoochee_buford_norcross_2019-07-01_extended_48h.json",
+      "name": "Chattahoochee River, Buford Dam to Norcross \u2014 July 2019 release \u2014 extended by 48 hours",
+      "status": "extended_window_diagnostic",
+      "solver": "saint_venant_2d",
+      "terrain_representation": {
+        "name": "ribbon",
+        "x_cells": 31,
+        "y_cells": 1,
+        "domain_width_m": 75.0,
+        "bank_height_m": 0.0,
+        "floodplain_width_factor": 3.0,
+        "configured_channel_width_m_range": {
+          "minimum": 75.0,
+          "maximum": 75.0
+        },
+        "effective_channel_width_m_range": {
+          "minimum": 75.0,
+          "maximum": 75.0
+        },
+        "provenance": {
+          "cross_section_shape": "rectangular"
+        },
+        "limitation": "Laterally uniform constant-width numerical ribbon; configured longitudinal width variation is not represented and this is not mapped flood terrain."
+      },
+      "scores": {
+        "nse": 0.8007710316164303,
+        "rmse": 1182.8077028129017,
+        "normalized_rmse": 0.12141163765971148,
+        "bias": -201.1525831161328,
+        "percent_bias": -5.655830049710199,
+        "pearson_r": 0.8985018646755889,
+        "kge": 0.8261686822036007,
+        "volumetric_efficiency": 0.755781866722828,
+        "n": 289
+      },
+      "reach_context": {
+        "intervening_drainage_area_growth_fraction": 0.125,
+        "forcing_limitation": "Intervening tributaries and Buford Dam operations are represented only through the observed upstream boundary; downstream stage and detailed channel storage are not supplied.",
+        "hypothesis_role": "regulated_pulse_storage_test",
+        "window_extension_hours": 48.0,
+        "window_extension_policy": "Append the same fixed duration to the pre-existing scored end; no parameter or endpoint is selected from model skill."
+      },
+      "error_diagnosis": {
+        "observed_volume_m3": 15342615.414527155,
+        "predicted_volume_m3": 14469700.622942701,
+        "volume_ratio": 0.9431052158970279,
+        "volume_only_counterfactual": {
+          "scale_applied_to_prediction": 1.0603270803129394,
+          "scores": {
+            "nse": 0.8066936692601651,
+            "rmse": 1165.0939301432884,
+            "normalized_rmse": 0.11959337240506782,
+            "bias": 1.2689164444243717,
+            "percent_bias": 0.0356782679385398,
+            "pearson_r": 0.8985018646755887,
+            "kge": 0.8727406435962117,
+            "volumetric_efficiency": 0.7667936815918299,
+            "n": 289
+          },
+          "guard": "Uses held-out downstream volume as an oracle diagnostic. It is not a permissible forcing correction or calibration."
+        },
+        "amplitude_ratio": 0.8722694187682621,
+        "observed_peak_time_min": 1545.0,
+        "predicted_peak_time_min": 1485.0,
+        "peak_lag_min": -60.0,
+        "pearson_r": 0.8985018646755889,
+        "signals": [
+          {
+            "component": "timing",
+            "likely_sources": [
+              "wave-speed/roughness error",
+              "bed or cross-section geometry error",
+              "boundary-control timing"
+            ]
+          }
+        ]
+      },
+      "reach_diagnosis": {
+        "upstream_volume_m3": 17908346.83469276,
+        "observed_downstream_volume_m3": 15342615.414527155,
+        "predicted_downstream_volume_m3": 14469700.622942701,
+        "observed_net_change_from_upstream_m3": -2565731.420165606,
+        "observed_net_change_fraction": -0.14327014346154884,
+        "modeled_net_change_from_upstream_m3": -3438646.2117500603,
+        "modeled_net_change_fraction": -0.19201360368387427,
+        "unexplained_downstream_volume_m3": 872914.7915844545,
+        "observed_routing_lag_min": 330.0,
+        "modeled_routing_lag_min": 270.0,
+        "routing_lag_error_min": -60.0,
+        "guard": "Volume change combines intervening flows, withdrawals, measurement error, and net reach-storage change; it is not a calibrated lateral flow.",
+        "routing_lag_comparable": true
+      },
+      "observation_count": {
+        "upstream": 337,
+        "downstream": 289
+      }
+    },
+    {
+      "config": "snoqualmie_snoqualmie_carnation_2009-01-07_observed_tributaries_extended_48h.json",
+      "name": "Snoqualmie River, Snoqualmie to Carnation \u2014 January 2009 with observed tributaries \u2014 extended by 48 hours",
+      "status": "extended_window_diagnostic",
+      "solver": "saint_venant_2d",
+      "terrain_representation": {
+        "name": "ribbon",
+        "x_cells": 31,
+        "y_cells": 1,
+        "domain_width_m": 90.0,
+        "bank_height_m": 0.0,
+        "floodplain_width_factor": 3.0,
+        "configured_channel_width_m_range": {
+          "minimum": 90.0,
+          "maximum": 90.0
+        },
+        "effective_channel_width_m_range": {
+          "minimum": 90.0,
+          "maximum": 90.0
+        },
+        "provenance": {
+          "cross_section_shape": "rectangular"
+        },
+        "limitation": "Laterally uniform constant-width numerical ribbon; configured longitudinal width variation is not represented and this is not mapped flood terrain."
+      },
+      "scores": {
+        "nse": 0.6746034268019496,
+        "rmse": 25248.100377254686,
+        "normalized_rmse": 0.1958159287946237,
+        "bias": -10118.5158948455,
+        "percent_bias": -16.43272434684387,
+        "pearson_r": 0.8536218224974067,
+        "kge": 0.7566377302933116,
+        "volumetric_efficiency": 0.6851041211181328,
+        "n": 481
+      },
+      "reach_context": {
+        "intervening_drainage_area_growth_fraction": 0.608,
+        "forcing_limitation": "Raging and Tolt River gauge flow is supplied; ungauged runoff, direct rainfall, lowland floodplain exchange, and local controls remain omitted.",
+        "hypothesis_role": "observed_tributary_forcing_test",
+        "window_extension_hours": 48.0,
+        "window_extension_policy": "Append the same fixed duration to the pre-existing scored end; no parameter or endpoint is selected from model skill."
+      },
+      "error_diagnosis": {
+        "observed_volume_m3": 444030652.2971773,
+        "predicted_volume_m3": 371038049.2446416,
+        "volume_ratio": 0.835613594073042,
+        "volume_only_counterfactual": {
+          "scale_applied_to_prediction": 1.1967253849063024,
+          "scores": {
+            "nse": 0.6808125338984041,
+            "rmse": 25006.052299977015,
+            "normalized_rmse": 0.19393868383928523,
+            "bias": 4.3596132557031755,
+            "percent_bias": 0.007080121594344811,
+            "pearson_r": 0.8536218224974066,
+            "kge": 0.8367018737172759,
+            "volumetric_efficiency": 0.7111786159959959,
+            "n": 481
+          },
+          "guard": "Uses held-out downstream volume as an oracle diagnostic. It is not a permissible forcing correction or calibration."
+        },
+        "amplitude_ratio": 0.8731518120762477,
+        "observed_peak_time_min": 2295.0,
+        "predicted_peak_time_min": 1890.0,
+        "peak_lag_min": -405.0,
+        "pearson_r": 0.8536218224974067,
+        "signals": [
+          {
+            "component": "volume",
+            "likely_sources": [
+              "missing or excess lateral flow",
+              "boundary forcing bias",
+              "storage/geometry bias"
+            ]
+          },
+          {
+            "component": "timing",
+            "likely_sources": [
+              "wave-speed/roughness error",
+              "bed or cross-section geometry error",
+              "boundary-control timing"
+            ]
+          }
+        ]
+      },
+      "reach_diagnosis": {
+        "upstream_volume_m3": 288741532.8146181,
+        "observed_downstream_volume_m3": 444030652.2971773,
+        "predicted_downstream_volume_m3": 371038049.2446416,
+        "observed_net_change_from_upstream_m3": 155289119.4825592,
+        "observed_net_change_fraction": 0.5378135870126454,
+        "modeled_net_change_from_upstream_m3": 82296516.43002349,
+        "modeled_net_change_fraction": 0.28501793845799334,
+        "unexplained_downstream_volume_m3": 72992603.05253571,
+        "observed_routing_lag_min": 570.0,
+        "modeled_routing_lag_min": 60.0,
+        "routing_lag_error_min": -510.0,
+        "guard": "Volume change combines intervening flows, withdrawals, measurement error, and net reach-storage change; it is not a calibrated lateral flow.",
+        "routing_lag_comparable": false,
+        "routing_lag_limitation": "Modeled downstream timing reflects both upstream routing and internal-source timing, so a single lag relative to the mainstem upstream gauge is not a like-for-like travel-time metric."
+      },
+      "observation_count": {
+        "upstream": 529,
+        "downstream": 481
+      }
+    }
+  ],
+  "score_summary": {
+    "nse": {
+      "minimum": -2.5216214693874335,
+      "median": 0.5932758773361273,
+      "maximum": 0.9838481685011545
+    },
+    "rmse": {
+      "minimum": 471.0657342242903,
+      "median": 9816.0936700488,
+      "maximum": 107130.70434232794
+    },
+    "normalized_rmse": {
+      "minimum": 0.03856873932252603,
+      "median": 0.22062446661383556,
+      "maximum": 0.5686106774745503
+    },
+    "bias": {
+      "minimum": -97518.1450661914,
+      "median": -6261.901099717678,
+      "maximum": 243.68266559996704
+    },
+    "percent_bias": {
+      "minimum": -80.09110621466144,
+      "median": -9.07697011766157,
+      "maximum": 2.913813019999783
+    },
+    "pearson_r": {
+      "minimum": 0.6491989419729075,
+      "median": 0.8888596531619097,
+      "maximum": 0.9928021696505379
+    },
+    "kge": {
+      "minimum": -0.11199571862590418,
+      "median": 0.6681855560127075,
+      "maximum": 0.9732761683713252
+    },
+    "volumetric_efficiency": {
+      "minimum": 0.19908893785338566,
+      "median": 0.8394295009630466,
+      "maximum": 0.9496631778006566
+    }
+  }
+}

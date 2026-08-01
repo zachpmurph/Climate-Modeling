@@ -1,0 +1,526 @@
+{
+  "schema_version": 1,
+  "title": "Complementary metric audit for observed 2-D river validation",
+  "solver_policy": "saint_venant_2d_only",
+  "calibration": "none",
+  "excluded_rivers": [
+    "Rio Grande"
+  ],
+  "screening_rules": {
+    "headline_nse": 0.75,
+    "headline_correlation": 0.9,
+    "material_percent_bias": 20.0,
+    "material_routing_lag_min": 60.0,
+    "weak_kge": 0.5,
+    "weak_volumetric_efficiency": 0.6,
+    "minimum_shape_correlation": 0.75,
+    "minimum_routing_value_added": 0.1
+  },
+  "case_count": 15,
+  "flagged_case_count": 4,
+  "flag_counts": {
+    "high_nse_hides_routing_lag_failure": 1,
+    "shape_score_adds_little_value_over_upstream_passthrough": 3,
+    "high_correlation_hides_magnitude_or_volume_failure": 2
+  },
+  "cases": [
+    {
+      "config": "connecticut_montague_holyoke_2011-08-28.json",
+      "river": "Connecticut River",
+      "has_internal_sources": false,
+      "scores": {
+        "nse": 0.950679276610932,
+        "rmse": 14336.132161688109,
+        "normalized_rmse": 0.09201667200385848,
+        "bias": -13344.374930857497,
+        "percent_bias": -10.917376683256775,
+        "pearson_r": 0.9971912745968062,
+        "kge": 0.8855941568947066,
+        "volumetric_efficiency": 0.8908262331674323,
+        "n": 289
+      },
+      "upstream_passthrough_scores": {
+        "nse": 0.45635131169969023,
+        "rmse": 47596.656856963964,
+        "normalized_rmse": 0.3054998316904284,
+        "bias": 23473.97994959103,
+        "percent_bias": 19.20466733681877,
+        "pearson_r": 0.8116310276587021,
+        "kge": 0.7203241452701985,
+        "volumetric_efficiency": 0.7408483356019104,
+        "n": 289
+      },
+      "squared_error_skill_over_upstream_passthrough": 0.9092783180563413,
+      "routing_lag_error_min": -30.0,
+      "routing_lag_comparable": true,
+      "volume_ratio": 0.8909712935618974,
+      "flags": []
+    },
+    {
+      "config": "delaware_montague_belvidere_2006-06-27.json",
+      "river": "Delaware River",
+      "has_internal_sources": false,
+      "scores": {
+        "nse": 0.7574684177427311,
+        "rmse": 55954.4023950395,
+        "normalized_rmse": 0.15660255763043926,
+        "bias": -43032.364734509836,
+        "percent_bias": -13.33892512060258,
+        "pearson_r": 0.949474186745577,
+        "kge": 0.8389679318162443,
+        "volumetric_efficiency": 0.8661336667335757,
+        "n": 93
+      },
+      "upstream_passthrough_scores": {
+        "nse": 0.2615238436965661,
+        "rmse": 97637.88211179411,
+        "normalized_rmse": 0.27326432605563494,
+        "bias": -68850.12887178738,
+        "percent_bias": -21.341767277504708,
+        "pearson_r": 0.7951765527549102,
+        "kge": 0.6705597270211926,
+        "volumetric_efficiency": 0.7600459827394839,
+        "n": 93
+      },
+      "squared_error_skill_over_upstream_passthrough": 0.6715783167986068,
+      "routing_lag_error_min": 0.0,
+      "routing_lag_comparable": true,
+      "volume_ratio": 0.9252661816865383,
+      "flags": []
+    },
+    {
+      "config": "potomac_point_of_rocks_little_falls_2018-06-02.json",
+      "river": "Potomac River",
+      "has_internal_sources": false,
+      "scores": {
+        "nse": 0.964263524135434,
+        "rmse": 17422.955833508848,
+        "normalized_rmse": 0.06671935356360664,
+        "bias": -12988.339542860489,
+        "percent_bias": -8.81249867283747,
+        "pearson_r": 0.9925508072890545,
+        "kge": 0.9081754955004523,
+        "volumetric_efficiency": 0.9037470220365396,
+        "n": 385
+      },
+      "upstream_passthrough_scores": {
+        "nse": 0.8321184877191863,
+        "rmse": 37763.08018752268,
+        "normalized_rmse": 0.14460969325517375,
+        "bias": -3696.7827101483226,
+        "percent_bias": -2.5082415361444887,
+        "pearson_r": 0.9165665486521722,
+        "kge": 0.9128018215028559,
+        "volumetric_efficiency": 0.8124762335356415,
+        "n": 385
+      },
+      "squared_error_skill_over_upstream_passthrough": 0.7871327498837994,
+      "routing_lag_error_min": -45.0,
+      "routing_lag_comparable": true,
+      "volume_ratio": 0.9119321992123152,
+      "flags": []
+    },
+    {
+      "config": "truckee_reno_sparks_2017-01-08.json",
+      "river": "Truckee River",
+      "has_internal_sources": false,
+      "scores": {
+        "nse": 0.9635189169531811,
+        "rmse": 571.0316291065672,
+        "normalized_rmse": 0.05007397613559571,
+        "bias": 328.2453952190547,
+        "percent_bias": 10.235121668636019,
+        "pearson_r": 0.9980088615516328,
+        "kge": 0.8257512125500389,
+        "volumetric_efficiency": 0.8955398636010183,
+        "n": 97
+      },
+      "upstream_passthrough_scores": {
+        "nse": 0.9193599196439406,
+        "rmse": 848.9884434208047,
+        "normalized_rmse": 0.07444811265842544,
+        "bias": 545.1722784593813,
+        "percent_bias": 16.99918622369563,
+        "pearson_r": 0.9969884903103272,
+        "kge": 0.7371985607669613,
+        "volumetric_efficiency": 0.8296913657787949,
+        "n": 97
+      },
+      "squared_error_skill_over_upstream_passthrough": 0.5476060677799464,
+      "routing_lag_error_min": -375.0,
+      "routing_lag_comparable": true,
+      "volume_ratio": 1.1031492553301645,
+      "flags": [
+        "high_nse_hides_routing_lag_failure"
+      ]
+    },
+    {
+      "config": "truckee_reno_sparks_2017-02-10.json",
+      "river": "Truckee River",
+      "has_internal_sources": false,
+      "scores": {
+        "nse": 0.7826730400113736,
+        "rmse": 825.4782416785439,
+        "normalized_rmse": 0.1145891862842696,
+        "bias": 99.78700478068237,
+        "percent_bias": 0.6924392732617087,
+        "pearson_r": 0.9137908801672753,
+        "kge": 0.8392320514096065,
+        "volumetric_efficiency": 0.9502162991460956,
+        "n": 97
+      },
+      "upstream_passthrough_scores": {
+        "nse": 0.6820643909494757,
+        "rmse": 998.4318208577546,
+        "normalized_rmse": 0.13859782624890174,
+        "bias": 93.88348313388866,
+        "percent_bias": 0.6514737161956852,
+        "pearson_r": 0.8731017802433668,
+        "kge": 0.8023705810412151,
+        "volumetric_efficiency": 0.937818292312367,
+        "n": 97
+      },
+      "squared_error_skill_over_upstream_passthrough": 0.3164434753387746,
+      "routing_lag_error_min": -45.0,
+      "routing_lag_comparable": true,
+      "volume_ratio": 1.0068786444284226,
+      "flags": []
+    },
+    {
+      "config": "glen_canyon_lees_ferry_2002-01-25.json",
+      "river": "Colorado River",
+      "has_internal_sources": false,
+      "scores": {
+        "nse": 0.14850338730953827,
+        "rmse": 3888.8449348064532,
+        "normalized_rmse": 0.31570865012468713,
+        "bias": -2761.257005599504,
+        "percent_bias": -11.838648257832359,
+        "pearson_r": 0.7605064419549697,
+        "kge": 0.624821286507008,
+        "volumetric_efficiency": 0.84753495093256,
+        "n": 97
+      },
+      "upstream_passthrough_scores": {
+        "nse": -0.19849551800426246,
+        "rmse": 4613.678959522409,
+        "normalized_rmse": 0.37455295359880025,
+        "bias": -167.27374327026791,
+        "percent_bias": -0.7171715654616175,
+        "pearson_r": 0.49305431428786994,
+        "kge": 0.46942938362182096,
+        "volumetric_efficiency": 0.8398717351797059,
+        "n": 97
+      },
+      "squared_error_skill_over_upstream_passthrough": 0.28952874675044604,
+      "routing_lag_error_min": -105.0,
+      "routing_lag_comparable": true,
+      "volume_ratio": 0.8821906358683322,
+      "flags": []
+    },
+    {
+      "config": "glen_canyon_lees_ferry_2002-07-02.json",
+      "river": "Colorado River",
+      "has_internal_sources": false,
+      "scores": {
+        "nse": 0.32917658620475265,
+        "rmse": 4170.908443153233,
+        "normalized_rmse": 0.2993785398288603,
+        "bias": -2894.835927592335,
+        "percent_bias": -11.080189172301013,
+        "pearson_r": 0.8121463171530747,
+        "kge": 0.6505233790607603,
+        "volumetric_efficiency": 0.8637221801177908,
+        "n": 97
+      },
+      "upstream_passthrough_scores": {
+        "nse": 0.2997258209990641,
+        "rmse": 4261.4814952745355,
+        "normalized_rmse": 0.3058796722467705,
+        "bias": -91.08099110004133,
+        "percent_bias": -0.34861893268972954,
+        "pearson_r": 0.6925242291082229,
+        "kge": 0.6712634471496891,
+        "volumetric_efficiency": 0.8672566371681416,
+        "n": 97
+      },
+      "squared_error_skill_over_upstream_passthrough": 0.0420560490288322,
+      "routing_lag_error_min": -120.0,
+      "routing_lag_comparable": true,
+      "volume_ratio": 0.8899013330239866,
+      "flags": [
+        "shape_score_adds_little_value_over_upstream_passthrough"
+      ]
+    },
+    {
+      "config": "glen_canyon_lees_ferry_2004-01-06.json",
+      "river": "Colorado River",
+      "has_internal_sources": false,
+      "scores": {
+        "nse": 0.505634882732541,
+        "rmse": 7117.6829644067675,
+        "normalized_rmse": 0.26803007220861796,
+        "bias": -3891.092887396684,
+        "percent_bias": -17.2523937723431,
+        "pearson_r": 0.8356293552110748,
+        "kge": 0.5546324698345264,
+        "volumetric_efficiency": 0.7295669388353805,
+        "n": 97
+      },
+      "upstream_passthrough_scores": {
+        "nse": 0.2737363298777311,
+        "rmse": 8627.041560457501,
+        "normalized_rmse": 0.3248678796118442,
+        "bias": -854.0594473150029,
+        "percent_bias": -3.786743292043649,
+        "pearson_r": 0.6541207322803005,
+        "kge": 0.6500334480639789,
+        "volumetric_efficiency": 0.7073428338446006,
+        "n": 97
+      },
+      "squared_error_skill_over_upstream_passthrough": 0.31930352900038206,
+      "routing_lag_error_min": -105.0,
+      "routing_lag_comparable": true,
+      "volume_ratio": 0.8288263842266791,
+      "flags": []
+    },
+    {
+      "config": "glen_canyon_lees_ferry.json",
+      "river": "Colorado River",
+      "has_internal_sources": false,
+      "scores": {
+        "nse": 0.433913836976101,
+        "rmse": 3508.1869926459162,
+        "normalized_rmse": 0.2753121209821153,
+        "bias": -1976.6591106674402,
+        "percent_bias": -7.951209044805918,
+        "pearson_r": 0.7889844205428209,
+        "kge": 0.6205377270773909,
+        "volumetric_efficiency": 0.8804515631718395,
+        "n": 97
+      },
+      "upstream_passthrough_scores": {
+        "nse": 0.29730299901023605,
+        "rmse": 3908.6385789623005,
+        "normalized_rmse": 0.3067383750017921,
+        "bias": 1087.717220637031,
+        "percent_bias": 4.375396322130627,
+        "pearson_r": 0.6954330813774259,
+        "kge": 0.686771933721162,
+        "volumetric_efficiency": 0.8787430423448178,
+        "n": 97
+      },
+      "squared_error_skill_over_upstream_passthrough": 0.19440930838390602,
+      "routing_lag_error_min": -120.0,
+      "routing_lag_comparable": true,
+      "volume_ratio": 0.9213089432685375,
+      "flags": []
+    },
+    {
+      "config": "snoqualmie_snoqualmie_carnation_2009-01-07.json",
+      "river": "Snoqualmie River",
+      "has_internal_sources": false,
+      "scores": {
+        "nse": 0.2299652825103392,
+        "rmse": 38017.69273872946,
+        "normalized_rmse": 0.29485267022185346,
+        "bias": -27517.89592601194,
+        "percent_bias": -32.554241060011385,
+        "pearson_r": 0.7976643831308128,
+        "kge": 0.5391127907583523,
+        "volumetric_efficiency": 0.6181654162716581,
+        "n": 289
+      },
+      "upstream_passthrough_scores": {
+        "nse": 0.07195753418190753,
+        "rmse": 41736.35598689518,
+        "normalized_rmse": 0.3236933943529249,
+        "bias": -26931.496313124673,
+        "percent_bias": -31.86051816757961,
+        "pearson_r": 0.6788958027062655,
+        "kge": 0.47274618101476606,
+        "volumetric_efficiency": 0.5775860390197491,
+        "n": 289
+      },
+      "squared_error_skill_over_upstream_passthrough": 0.17025917902274423,
+      "routing_lag_error_min": -465.0,
+      "routing_lag_comparable": true,
+      "volume_ratio": 0.6747931079122842,
+      "flags": []
+    },
+    {
+      "config": "russian_hopland_guerneville_2019-02-26.json",
+      "river": "Russian River",
+      "has_internal_sources": false,
+      "scores": {
+        "nse": -2.4233860130674065,
+        "rmse": 70872.40422799789,
+        "normalized_rmse": 0.6200969563109767,
+        "bias": -62936.61087782891,
+        "percent_bias": -76.08286954764014,
+        "pearson_r": 0.6201923472017516,
+        "kge": -0.10715837575559628,
+        "volumetric_efficiency": 0.23917130452359858,
+        "n": 289
+      },
+      "upstream_passthrough_scores": {
+        "nse": -2.656575760942832,
+        "rmse": 73246.43937161456,
+        "normalized_rmse": 0.640868538462982,
+        "bias": -61949.813698517486,
+        "percent_bias": -74.88994924233056,
+        "pearson_r": 0.05148461036462146,
+        "kge": -0.4169778315258572,
+        "volumetric_efficiency": 0.25076079648747274,
+        "n": 289
+      },
+      "squared_error_skill_over_upstream_passthrough": 0.06377271062347634,
+      "routing_lag_error_min": -285.0,
+      "routing_lag_comparable": true,
+      "volume_ratio": 0.2394688363600451,
+      "flags": []
+    },
+    {
+      "config": "eel_fort_seward_scotia_2019-02-26.json",
+      "river": "Eel River",
+      "has_internal_sources": false,
+      "scores": {
+        "nse": -0.10503071260258956,
+        "rmse": 107329.59133524778,
+        "normalized_rmse": 0.285586855587541,
+        "bias": -102764.09817271603,
+        "percent_bias": -40.766605280444175,
+        "pearson_r": 0.9766154063921537,
+        "kge": 0.5276856062153863,
+        "volumetric_efficiency": 0.5923339471955582,
+        "n": 289
+      },
+      "upstream_passthrough_scores": {
+        "nse": -0.2242058103313902,
+        "rmse": 112969.06118049263,
+        "normalized_rmse": 0.3005925817833447,
+        "bias": -97995.88564194767,
+        "percent_bias": -38.87505130788462,
+        "pearson_r": 0.8424634114903921,
+        "kge": 0.5008960690498168,
+        "volumetric_efficiency": 0.6112494869211538,
+        "n": 289
+      },
+      "squared_error_skill_over_upstream_passthrough": 0.09734890712252076,
+      "routing_lag_error_min": -90.0,
+      "routing_lag_comparable": true,
+      "volume_ratio": 0.5924157299423995,
+      "flags": [
+        "high_correlation_hides_magnitude_or_volume_failure",
+        "shape_score_adds_little_value_over_upstream_passthrough"
+      ]
+    },
+    {
+      "config": "willamette_albany_salem_2012-01-18.json",
+      "river": "Willamette River",
+      "has_internal_sources": false,
+      "scores": {
+        "nse": -0.2700089077014276,
+        "rmse": 86825.0092760105,
+        "normalized_rmse": 0.3514667888207779,
+        "bias": -75450.77681444763,
+        "percent_bias": -57.966884196311945,
+        "pearson_r": 0.9959335447416451,
+        "kge": 0.1979027949903276,
+        "volumetric_efficiency": 0.4203311580368806,
+        "n": 289
+      },
+      "upstream_passthrough_scores": {
+        "nse": 0.09577274131232327,
+        "rmse": 73262.24999626468,
+        "normalized_rmse": 0.296564871834533,
+        "bias": -61683.498165517296,
+        "percent_bias": -47.389839388628936,
+        "pearson_r": 0.9965392286508126,
+        "kge": 0.30398998342566175,
+        "volumetric_efficiency": 0.5261016061137106,
+        "n": 289
+      },
+      "squared_error_skill_over_upstream_passthrough": -0.4045240236891523,
+      "routing_lag_error_min": 195.0,
+      "routing_lag_comparable": true,
+      "volume_ratio": 0.4202481486528181,
+      "flags": [
+        "high_correlation_hides_magnitude_or_volume_failure",
+        "shape_score_adds_little_value_over_upstream_passthrough"
+      ]
+    },
+    {
+      "config": "chattahoochee_buford_norcross_2019-07-01.json",
+      "river": "Chattahoochee River",
+      "has_internal_sources": false,
+      "scores": {
+        "nse": 0.5891535292798324,
+        "rmse": 811.6175893809674,
+        "normalized_rmse": 0.1459071710155103,
+        "bias": -240.33070608887317,
+        "percent_bias": -9.454262643623563,
+        "pearson_r": 0.8390992552784381,
+        "kge": 0.7781232451266574,
+        "volumetric_efficiency": 0.7554154572425564,
+        "n": 97
+      },
+      "upstream_passthrough_scores": {
+        "nse": -33.06172719745996,
+        "rmse": 7390.009613351913,
+        "normalized_rmse": 1.3285264027902646,
+        "bias": 2529.073904795184,
+        "percent_bias": 99.49011231309859,
+        "pearson_r": -0.4486918822518508,
+        "kge": -3.334122345096125,
+        "volumetric_efficiency": -1.0143319782264175,
+        "n": 97
+      },
+      "squared_error_skill_over_upstream_passthrough": 0.9879381785797755,
+      "routing_lag_error_min": -75.0,
+      "routing_lag_comparable": true,
+      "volume_ratio": 0.9007313737568022,
+      "flags": []
+    },
+    {
+      "config": "snoqualmie_snoqualmie_carnation_2009-01-07_observed_tributaries.json",
+      "river": "Snoqualmie River",
+      "has_internal_sources": true,
+      "scores": {
+        "nse": 0.47272660681275,
+        "rmse": 31459.2621056961,
+        "normalized_rmse": 0.24398764803588813,
+        "bias": -11529.223505336191,
+        "percent_bias": -13.639310295983746,
+        "pearson_r": 0.7485928089639384,
+        "kge": 0.6891984565927609,
+        "volumetric_efficiency": 0.6810571029582482,
+        "n": 289
+      },
+      "upstream_passthrough_scores": {
+        "nse": 0.07195753418190753,
+        "rmse": 41736.35598689518,
+        "normalized_rmse": 0.3236933943529249,
+        "bias": -26931.496313124673,
+        "percent_bias": -31.86051816757961,
+        "pearson_r": 0.6788958027062655,
+        "kge": 0.47274618101476606,
+        "volumetric_efficiency": 0.5775860390197491,
+        "n": 289
+      },
+      "squared_error_skill_over_upstream_passthrough": 0.431843463410432,
+      "routing_lag_error_min": -525.0,
+      "routing_lag_comparable": false,
+      "volume_ratio": 0.8639711293527935,
+      "flags": []
+    }
+  ],
+  "interpretation": {
+    "nse": "Sensitive to squared peak errors but can reward a correlated boundary hydrograph despite wrong travel time.",
+    "pearson_r": "Measures linear shape association and is invariant to additive and multiplicative bias.",
+    "kge": "Combines correlation, variability ratio, and mean-flow ratio; inspect its components rather than using it alone.",
+    "volumetric_efficiency": "Penalizes absolute flow-volume error and can be negative.",
+    "upstream_passthrough": "Tests whether hydraulic routing beats using the simultaneous upstream gauge unchanged.",
+    "guard": "Flags are screening diagnostics, not universal pass/fail thresholds or calibration objectives."
+  }
+}

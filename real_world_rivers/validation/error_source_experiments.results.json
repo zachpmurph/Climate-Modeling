@@ -49,9 +49,12 @@
         "scores": {
           "nse": 0.6212606560327275,
           "rmse": 2869.535986464491,
+          "normalized_rmse": 0.22519268223847005,
           "bias": -22.154110226448896,
           "percent_bias": -0.08911600420200332,
           "pearson_r": 0.7889844205428207,
+          "kge": 0.6760110906434784,
+          "volumetric_efficiency": 0.9002293757075622,
           "n": 97
         },
         "guard": "Uses held-out downstream volume as an oracle diagnostic. It is not a permissible forcing correction or calibration."
@@ -109,9 +112,12 @@
         "scores": {
           "nse": 0.6245592840024838,
           "rmse": 2857.0125556980565,
+          "normalized_rmse": 0.2242098804968561,
           "bias": -21.91790964903504,
           "percent_bias": -0.08816587569608847,
           "pearson_r": 0.7910169950430761,
+          "kge": 0.6798383766801115,
+          "volumetric_efficiency": 0.9006595459943131,
           "n": 97
         },
         "guard": "Uses held-out downstream volume as an oracle diagnostic. It is not a permissible forcing correction or calibration."
@@ -169,9 +175,12 @@
         "scores": {
           "nse": 0.5415308395182719,
           "rmse": 3157.159536478969,
+          "normalized_rmse": 0.24776452626072049,
           "bias": -35.47973983932981,
           "percent_bias": -0.14271900844986043,
           "pearson_r": 0.7478138189899846,
+          "kge": 0.5397642366701265,
+          "volumetric_efficiency": 0.8990444517862659,
           "n": 97
         },
         "guard": "Uses held-out downstream volume as an oracle diagnostic. It is not a permissible forcing correction or calibration."
@@ -229,9 +238,12 @@
         "scores": {
           "nse": -0.09588598190810482,
           "rmse": 226.80648314027067,
+          "normalized_rmse": 0.19631361182283275,
           "bias": 0.9822804730946432,
           "percent_bias": 0.011696417422495954,
           "pearson_r": 0.36251940674961525,
+          "kge": 0.34256751856325407,
+          "volumetric_efficiency": 0.9779769692290161,
           "n": 193
         },
         "guard": "Uses held-out downstream volume as an oracle diagnostic. It is not a permissible forcing correction or calibration."
@@ -289,9 +301,12 @@
         "scores": {
           "nse": -0.050324111739566524,
           "rmse": 222.0416502265365,
+          "normalized_rmse": 0.1921893842166538,
           "bias": 0.9952924642145587,
           "percent_bias": 0.011851356550173879,
           "pearson_r": 0.3868330629306508,
+          "kge": 0.3647556061164271,
+          "volumetric_efficiency": 0.9784457666087454,
           "n": 193
         },
         "guard": "Uses held-out downstream volume as an oracle diagnostic. It is not a permissible forcing correction or calibration."
@@ -349,9 +364,12 @@
         "scores": {
           "nse": -0.36235547592113737,
           "rmse": 252.882047682184,
+          "normalized_rmse": 0.21888346161137037,
           "bias": 1.1044126729195265,
           "percent_bias": 0.013150695736080922,
           "pearson_r": 0.26182384033614886,
+          "kge": 0.2573097030594137,
+          "volumetric_efficiency": 0.9754478315363357,
           "n": 193
         },
         "guard": "Uses held-out downstream volume as an oracle diagnostic. It is not a permissible forcing correction or calibration."
@@ -426,9 +444,12 @@
         "scores": {
           "nse": -0.02548333187318419,
           "rmse": 219.40023152067434,
+          "normalized_rmse": 0.18990308957769722,
           "bias": 0.9824274078854346,
           "percent_bias": 0.011698167035456872,
           "pearson_r": 0.39472545907956375,
+          "kge": 0.3686656867768976,
+          "volumetric_efficiency": 0.978721874748453,
           "n": 193
         },
         "guard": "Uses held-out downstream volume as an oracle diagnostic. It is not a permissible forcing correction or calibration."
@@ -486,9 +507,12 @@
         "scores": {
           "nse": 0.994702757071268,
           "rmse": 217.59617035780977,
+          "normalized_rmse": 0.01908108918369663,
           "bias": -2.3200389623400004,
           "percent_bias": -0.07234185582307753,
           "pearson_r": 0.998008861551633,
+          "kge": 0.9656170187637421,
+          "volumetric_efficiency": 0.9560955317978634,
           "n": 97
         },
         "guard": "Uses held-out downstream volume as an oracle diagnostic. It is not a permissible forcing correction or calibration."

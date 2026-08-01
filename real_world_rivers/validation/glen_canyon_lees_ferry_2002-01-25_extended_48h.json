@@ -1,0 +1,66 @@
+{
+  "case": {
+    "name": "Glen Canyon Dam to Lees Ferry \u2014 2002-01-25 winter ramp \u2014 extended by 48 hours",
+    "river": "Colorado River",
+    "upstream_gauge": "USGS-09379910",
+    "downstream_gauge": "USGS-09380000",
+    "observation_window": [
+      "2002-01-25T00:00:00Z",
+      "2002-01-28T00:00:00Z"
+    ],
+    "purpose": "Fixed longer-window diagnostic retaining all baseline hydraulic assumptions; downstream observations remain scoring-only."
+  },
+  "validation_status": "extended_window_diagnostic",
+  "validation_policy": {
+    "calibration": "none"
+  },
+  "hydraulic_dataset": "assumed_reach_geometry",
+  "validation_2d": {
+    "representation": "ribbon",
+    "x_cells": 31,
+    "y_cells": 1
+  },
+  "observations": "glen_canyon_lees_ferry_2002-01-25_extended_48h.csv",
+  "sources": [
+    {
+      "role": "upstream",
+      "provider": "U.S. Geological Survey Water Data APIs",
+      "parameter": "00060 continuous discharge",
+      "gauge": "USGS-09379910",
+      "url": "https://api.waterdata.usgs.gov/ogcapi/v0/collections/continuous/items?f=json&monitoring_location_id=USGS-09379910&parameter_code=00060&datetime=2002-01-24T12%3A00%3A00Z%2F2002-01-28T00%3A00%3A00Z&limit=50000",
+      "approval_status": "Approved"
+    },
+    {
+      "role": "downstream",
+      "provider": "U.S. Geological Survey Water Data APIs",
+      "parameter": "00060 continuous discharge",
+      "gauge": "USGS-09380000",
+      "url": "https://api.waterdata.usgs.gov/ogcapi/v0/collections/continuous/items?f=json&monitoring_location_id=USGS-09380000&parameter_code=00060&datetime=2002-01-25T00%3A00%3A00Z%2F2002-01-28T00%3A00%3A00Z&limit=50000",
+      "approval_status": "Approved"
+    }
+  ],
+  "retrieved_at": "2026-08-01",
+  "reach": {
+    "length_m": 25452.369,
+    "cells": 81,
+    "slope": 0.0002,
+    "manning_n": 0.0005833333333333334,
+    "upstream_width_m": 85.0,
+    "downstream_width_m": 85.0,
+    "geometry_classification": "estimated",
+    "roughness_origin": "SI Manning n 0.035 divided by 60",
+    "length_source": "USGS NLDI NHDPlusV2 routed centerline"
+  },
+  "warmup": {
+    "duration_min": 720.0,
+    "upstream_forcing": "observed"
+  },
+  "record_interval_min": 5.0,
+  "spatial_order": 1,
+  "cfl": 0.4,
+  "observation_endpoint_tolerance_min": 15.0,
+  "reach_context": {
+    "window_extension_hours": 48.0,
+    "window_extension_policy": "Append the same fixed duration to the pre-existing scored end; no parameter or endpoint is selected from model skill."
+  }
+}

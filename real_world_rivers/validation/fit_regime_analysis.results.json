@@ -1,0 +1,405 @@
+{
+  "schema_version": 1,
+  "title": "Why upstream-driven 2-D validation succeeds or underestimates across rivers",
+  "solver_policy": "saint_venant_2d_only",
+  "calibration": "none",
+  "excluded_rivers": [
+    "Rio Grande"
+  ],
+  "case_count": 14,
+  "river_count": 10,
+  "cases": [
+    {
+      "config": "connecticut_montague_holyoke_2011-08-28.json",
+      "river": "Connecticut River",
+      "hypothesis_role": "existing_evidence",
+      "drainage_growth_fraction": 0.06005,
+      "nse": 0.950679276610932,
+      "pearson_r": 0.9971912745968062,
+      "percent_bias": -10.917376683256775,
+      "predicted_to_observed_volume_ratio": 0.8909712935618974,
+      "observed_downstream_to_upstream_volume_ratio": 0.8381712465668433,
+      "modeled_downstream_to_upstream_volume_ratio": 0.7467865197800484,
+      "routing_lag_error_min": -30.0,
+      "amplitude_ratio": 0.9758819109115036
+    },
+    {
+      "config": "delaware_montague_belvidere_2006-06-27.json",
+      "river": "Delaware River",
+      "hypothesis_role": "existing_evidence",
+      "drainage_growth_fraction": 0.30316,
+      "nse": 0.7574684177427311,
+      "pearson_r": 0.949474186745577,
+      "percent_bias": -13.33892512060258,
+      "predicted_to_observed_volume_ratio": 0.9252661816865383,
+      "observed_downstream_to_upstream_volume_ratio": 1.0026614611043303,
+      "modeled_downstream_to_upstream_volume_ratio": 0.9277287416402492,
+      "routing_lag_error_min": 0.0,
+      "amplitude_ratio": 0.9310336341093356
+    },
+    {
+      "config": "potomac_point_of_rocks_little_falls_2018-06-02.json",
+      "river": "Potomac River",
+      "hypothesis_role": "existing_evidence",
+      "drainage_growth_fraction": 0.1978,
+      "nse": 0.964263524135434,
+      "pearson_r": 0.9925508072890545,
+      "percent_bias": -8.81249867283747,
+      "predicted_to_observed_volume_ratio": 0.9119321992123152,
+      "observed_downstream_to_upstream_volume_ratio": 1.0251145379801636,
+      "modeled_downstream_to_upstream_volume_ratio": 0.9348349550647669,
+      "routing_lag_error_min": -45.0,
+      "amplitude_ratio": 1.008684359144393
+    },
+    {
+      "config": "russian_hopland_guerneville_2019-02-26.json",
+      "river": "Russian River",
+      "hypothesis_role": "existing_evidence",
+      "drainage_growth_fraction": 2.69613,
+      "nse": -2.4233860130674065,
+      "pearson_r": 0.6201923472017516,
+      "percent_bias": -76.08286954764014,
+      "predicted_to_observed_volume_ratio": 0.2394688363600451,
+      "observed_downstream_to_upstream_volume_ratio": 3.9770495425630914,
+      "modeled_downstream_to_upstream_volume_ratio": 0.9523794261038331,
+      "routing_lag_error_min": -285.0,
+      "amplitude_ratio": 0.3091553702954677
+    },
+    {
+      "config": "snoqualmie_snoqualmie_carnation_2009-01-07.json",
+      "river": "Snoqualmie River",
+      "hypothesis_role": "existing_evidence",
+      "drainage_growth_fraction": 0.608,
+      "nse": 0.2299652825103392,
+      "pearson_r": 0.7976643831308128,
+      "percent_bias": -32.554241060011385,
+      "predicted_to_observed_volume_ratio": 0.6747931079122842,
+      "observed_downstream_to_upstream_volume_ratio": 1.4667308522293416,
+      "modeled_downstream_to_upstream_volume_ratio": 0.9897398702466708,
+      "routing_lag_error_min": -465.0,
+      "amplitude_ratio": 0.7299169266034985
+    },
+    {
+      "config": "eel_fort_seward_scotia_2019-02-26.json",
+      "river": "Eel River",
+      "hypothesis_role": "tributary_rich_volume_gain_test",
+      "drainage_growth_fraction": 0.477456,
+      "nse": -0.10503071260258956,
+      "pearson_r": 0.9766154063921537,
+      "percent_bias": -40.766605280444175,
+      "predicted_to_observed_volume_ratio": 0.5924157299423995,
+      "observed_downstream_to_upstream_volume_ratio": 1.6357421930972558,
+      "modeled_downstream_to_upstream_volume_ratio": 0.9690394053212923,
+      "routing_lag_error_min": -90.0,
+      "amplitude_ratio": 0.7377925072237107
+    },
+    {
+      "config": "willamette_albany_salem_2012-01-18.json",
+      "river": "Willamette River",
+      "hypothesis_role": "tributary_rich_volume_gain_test",
+      "drainage_growth_fraction": 0.504132,
+      "nse": -0.2700089077014276,
+      "pearson_r": 0.9959335447416451,
+      "percent_bias": -57.966884196311945,
+      "predicted_to_observed_volume_ratio": 0.4202481486528181,
+      "observed_downstream_to_upstream_volume_ratio": 1.9000473954069548,
+      "modeled_downstream_to_upstream_volume_ratio": 0.7984914002723817,
+      "routing_lag_error_min": 195.0,
+      "amplitude_ratio": 0.41146069023274295
+    },
+    {
+      "config": "truckee_reno_sparks_2017-01-08.json",
+      "river": "Truckee River",
+      "hypothesis_role": "existing_evidence",
+      "drainage_growth_fraction": null,
+      "nse": 0.9635189169531811,
+      "pearson_r": 0.9980088615516328,
+      "percent_bias": 10.235121668636019,
+      "predicted_to_observed_volume_ratio": 1.1031492553301645,
+      "observed_downstream_to_upstream_volume_ratio": 0.8532784797167802,
+      "modeled_downstream_to_upstream_volume_ratio": 0.9412935194888209,
+      "routing_lag_error_min": -375.0,
+      "amplitude_ratio": 1.0631279945545435
+    },
+    {
+      "config": "truckee_reno_sparks_2017-02-10.json",
+      "river": "Truckee River",
+      "hypothesis_role": "existing_evidence",
+      "drainage_growth_fraction": null,
+      "nse": 0.7826730400113736,
+      "pearson_r": 0.9137908801672753,
+      "percent_bias": 0.6924392732617087,
+      "predicted_to_observed_volume_ratio": 1.0068786444284226,
+      "observed_downstream_to_upstream_volume_ratio": 0.9936466593234056,
+      "modeled_downstream_to_upstream_volume_ratio": 1.0004816013803812,
+      "routing_lag_error_min": -45.0,
+      "amplitude_ratio": 0.9571366327014833
+    },
+    {
+      "config": "glen_canyon_lees_ferry_2002-01-25.json",
+      "river": "Colorado River",
+      "hypothesis_role": "existing_evidence",
+      "drainage_growth_fraction": null,
+      "nse": 0.14850338730953827,
+      "pearson_r": 0.7605064419549697,
+      "percent_bias": -11.838648257832359,
+      "predicted_to_observed_volume_ratio": 0.8821906358683322,
+      "observed_downstream_to_upstream_volume_ratio": 1.0074991200012244,
+      "modeled_downstream_to_upstream_volume_ratio": 0.8888062893106652,
+      "routing_lag_error_min": -105.0,
+      "amplitude_ratio": 0.7538152395105436
+    },
+    {
+      "config": "glen_canyon_lees_ferry_2002-07-02.json",
+      "river": "Colorado River",
+      "hypothesis_role": "existing_evidence",
+      "drainage_growth_fraction": null,
+      "nse": 0.32917658620475265,
+      "pearson_r": 0.8121463171530747,
+      "percent_bias": -11.080189172301013,
+      "predicted_to_observed_volume_ratio": 0.8899013330239866,
+      "observed_downstream_to_upstream_volume_ratio": 1.0034743511138362,
+      "modeled_downstream_to_upstream_volume_ratio": 0.8929931627115828,
+      "routing_lag_error_min": -120.0,
+      "amplitude_ratio": 0.7869525219969872
+    },
+    {
+      "config": "glen_canyon_lees_ferry_2004-01-06.json",
+      "river": "Colorado River",
+      "hypothesis_role": "existing_evidence",
+      "drainage_growth_fraction": null,
+      "nse": 0.505634882732541,
+      "pearson_r": 0.8356293552110748,
+      "percent_bias": -17.2523937723431,
+      "predicted_to_observed_volume_ratio": 0.8288263842266791,
+      "observed_downstream_to_upstream_volume_ratio": 1.0397821861750547,
+      "modeled_downstream_to_upstream_volume_ratio": 0.8617989097507823,
+      "routing_lag_error_min": -105.0,
+      "amplitude_ratio": 0.635310201327642
+    },
+    {
+      "config": "glen_canyon_lees_ferry.json",
+      "river": "Colorado River",
+      "hypothesis_role": "existing_evidence",
+      "drainage_growth_fraction": null,
+      "nse": 0.433913836976101,
+      "pearson_r": 0.7889844205428209,
+      "percent_bias": -7.951209044805918,
+      "predicted_to_observed_volume_ratio": 0.9213089432685375,
+      "observed_downstream_to_upstream_volume_ratio": 0.9580015719509278,
+      "modeled_downstream_to_upstream_volume_ratio": 0.8826154159037072,
+      "routing_lag_error_min": -120.0,
+      "amplitude_ratio": 0.741182010811683
+    },
+    {
+      "config": "chattahoochee_buford_norcross_2019-07-01.json",
+      "river": "Chattahoochee River",
+      "hypothesis_role": "regulated_pulse_storage_test",
+      "drainage_growth_fraction": 0.125,
+      "nse": 0.5891535292798324,
+      "pearson_r": 0.8390992552784381,
+      "percent_bias": -9.454262643623563,
+      "predicted_to_observed_volume_ratio": 0.9007313737568022,
+      "observed_downstream_to_upstream_volume_ratio": 0.4938765338949467,
+      "modeled_downstream_to_upstream_volume_ratio": 0.44485008884144317,
+      "routing_lag_error_min": -75.0,
+      "amplitude_ratio": 1.3528921543112695
+    }
+  ],
+  "river_summary": [
+    {
+      "river": "Chattahoochee River",
+      "event_count": 1,
+      "median_nse": 0.5891535292798324,
+      "median_pearson_r": 0.8390992552784381,
+      "median_percent_bias": -9.454262643623563,
+      "median_predicted_to_observed_volume_ratio": 0.9007313737568022,
+      "median_observed_downstream_to_upstream_volume_ratio": 0.4938765338949467
+    },
+    {
+      "river": "Colorado River",
+      "event_count": 4,
+      "median_nse": 0.3815452115904268,
+      "median_pearson_r": 0.8005653688479478,
+      "median_percent_bias": -11.459418715066686,
+      "median_predicted_to_observed_volume_ratio": 0.8860459844461595,
+      "median_observed_downstream_to_upstream_volume_ratio": 1.0054867355575303
+    },
+    {
+      "river": "Connecticut River",
+      "event_count": 1,
+      "median_nse": 0.950679276610932,
+      "median_pearson_r": 0.9971912745968062,
+      "median_percent_bias": -10.917376683256775,
+      "median_predicted_to_observed_volume_ratio": 0.8909712935618974,
+      "median_observed_downstream_to_upstream_volume_ratio": 0.8381712465668433
+    },
+    {
+      "river": "Delaware River",
+      "event_count": 1,
+      "median_nse": 0.7574684177427311,
+      "median_pearson_r": 0.949474186745577,
+      "median_percent_bias": -13.33892512060258,
+      "median_predicted_to_observed_volume_ratio": 0.9252661816865383,
+      "median_observed_downstream_to_upstream_volume_ratio": 1.0026614611043303
+    },
+    {
+      "river": "Eel River",
+      "event_count": 1,
+      "median_nse": -0.10503071260258956,
+      "median_pearson_r": 0.9766154063921537,
+      "median_percent_bias": -40.766605280444175,
+      "median_predicted_to_observed_volume_ratio": 0.5924157299423995,
+      "median_observed_downstream_to_upstream_volume_ratio": 1.6357421930972558
+    },
+    {
+      "river": "Potomac River",
+      "event_count": 1,
+      "median_nse": 0.964263524135434,
+      "median_pearson_r": 0.9925508072890545,
+      "median_percent_bias": -8.81249867283747,
+      "median_predicted_to_observed_volume_ratio": 0.9119321992123152,
+      "median_observed_downstream_to_upstream_volume_ratio": 1.0251145379801636
+    },
+    {
+      "river": "Russian River",
+      "event_count": 1,
+      "median_nse": -2.4233860130674065,
+      "median_pearson_r": 0.6201923472017516,
+      "median_percent_bias": -76.08286954764014,
+      "median_predicted_to_observed_volume_ratio": 0.2394688363600451,
+      "median_observed_downstream_to_upstream_volume_ratio": 3.9770495425630914
+    },
+    {
+      "river": "Snoqualmie River",
+      "event_count": 1,
+      "median_nse": 0.2299652825103392,
+      "median_pearson_r": 0.7976643831308128,
+      "median_percent_bias": -32.554241060011385,
+      "median_predicted_to_observed_volume_ratio": 0.6747931079122842,
+      "median_observed_downstream_to_upstream_volume_ratio": 1.4667308522293416
+    },
+    {
+      "river": "Truckee River",
+      "event_count": 2,
+      "median_nse": 0.8730959784822774,
+      "median_pearson_r": 0.955899870859454,
+      "median_percent_bias": 5.463780470948864,
+      "median_predicted_to_observed_volume_ratio": 1.0550139498792936,
+      "median_observed_downstream_to_upstream_volume_ratio": 0.9234625695200929
+    },
+    {
+      "river": "Willamette River",
+      "event_count": 1,
+      "median_nse": -0.2700089077014276,
+      "median_pearson_r": 0.9959335447416451,
+      "median_percent_bias": -57.966884196311945,
+      "median_predicted_to_observed_volume_ratio": 0.4202481486528181,
+      "median_observed_downstream_to_upstream_volume_ratio": 1.9000473954069548
+    }
+  ],
+  "natural_flow_associations": {
+    "river_count": 7,
+    "drainage_growth_vs_observed_volume_gain_pearson_r": 0.9770257169236939,
+    "drainage_growth_vs_modeled_volume_deficit_pearson_r": 0.8015016885893367,
+    "drainage_growth_vs_nse_pearson_r": -0.9616012388516666,
+    "drainage_growth_vs_shape_correlation_pearson_r": -0.9141517237458516,
+    "warning": "Purposive river tests rank hypotheses but do not establish a universal drainage-area regression."
+  },
+  "matched_holdout_test": {
+    "case_count": 2,
+    "confirmed": true,
+    "criterion": "Each predeclared tributary-rich holdout gains >25% observed volume, is predicted at <80% of downstream volume, and retains Pearson r >0.9.",
+    "cases": [
+      "eel_fort_seward_scotia_2019-02-26.json",
+      "willamette_albany_salem_2012-01-18.json"
+    ]
+  },
+  "diagnostics": {
+    "colorado_one_day": {
+      "nse": 0.433913836976101,
+      "pearson_r": 0.7889844205428209,
+      "percent_bias": -7.951209044805918,
+      "volume_ratio": 0.9213089432685375,
+      "routing_lag_error_min": -120.0
+    },
+    "colorado_three_day": {
+      "nse": 0.3414637558327962,
+      "pearson_r": 0.6831502308387055,
+      "percent_bias": -6.421661402660369,
+      "volume_ratio": 0.9360128968303781,
+      "routing_lag_error_min": -105.0
+    },
+    "colorado_coarse": {
+      "nse": 0.433913836976101,
+      "pearson_r": 0.7889844205428209,
+      "percent_bias": -7.951209044805918,
+      "volume_ratio": 0.9213089432685375,
+      "routing_lag_error_min": -120.0
+    },
+    "colorado_fine": {
+      "nse": 0.43301977805656044,
+      "pearson_r": 0.7910169950430762,
+      "percent_bias": -8.042780175868435,
+      "volume_ratio": 0.9203836625571729,
+      "routing_lag_error_min": -120.0
+    },
+    "colorado_shelf": {
+      "nse": -0.2393515756726201,
+      "pearson_r": 0.7478138189899843,
+      "percent_bias": -16.188236728693983,
+      "volume_ratio": 0.8393154954659551,
+      "routing_lag_error_min": -15.0
+    },
+    "russian_ribbon": {
+      "nse": -2.4233860130674065,
+      "pearson_r": 0.6201923472017516,
+      "percent_bias": -76.08286954764014,
+      "volume_ratio": 0.2394688363600451,
+      "routing_lag_error_min": -285.0
+    },
+    "russian_shelf": {
+      "nse": -2.361874018769753,
+      "pearson_r": 0.8188549084616363,
+      "percent_bias": -76.9997482513137,
+      "volume_ratio": 0.23022721894684267,
+      "routing_lag_error_min": -30.0
+    },
+    "snoqualmie_ribbon": {
+      "nse": 0.2299652825103392,
+      "pearson_r": 0.7976643831308128,
+      "percent_bias": -32.554241060011385,
+      "volume_ratio": 0.6747931079122842,
+      "routing_lag_error_min": -465.0
+    },
+    "snoqualmie_shelf": {
+      "nse": 0.2895870678650352,
+      "pearson_r": 0.8399644047397337,
+      "percent_bias": -32.705718297271936,
+      "volume_ratio": 0.6732398545868455,
+      "routing_lag_error_min": -405.0
+    }
+  },
+  "conclusions": [
+    {
+      "rank": 1,
+      "finding": "High apparent skill mainly occurs when upstream flow already contains nearly all downstream event water.",
+      "basis": "The model is boundary-driven; low net volume-change reaches do not stress omitted runoff, even when their geometry is only a screening proxy."
+    },
+    {
+      "rank": 2,
+      "finding": "Missing intervening inflow is the dominant Russian, Snoqualmie, Eel, and Willamette volume-error mechanism.",
+      "basis": "The two predeclared holdouts confirm large deficits while retaining downstream hydrograph shape, and natural-river drainage growth tracks observed gain and model deficit."
+    },
+    {
+      "rank": 3,
+      "finding": "Colorado underestimation is primarily a reach-storage/geometry and boundary-state problem, not missing tributary water or grid diffusion.",
+      "basis": "Doubling longitudinal cells changes volume ratio by only 0.0009; extending the window changes it by only 0.0147; the shelf changes lag strongly but increases storage bias."
+    },
+    {
+      "rank": 4,
+      "finding": "High NSE does not imply physically correct storage or travel time.",
+      "basis": "Truckee and several reference rivers score highly while retaining substantial routing-lag errors; correlated boundary hydrographs can dominate NSE."
+    }
+  ]
+}

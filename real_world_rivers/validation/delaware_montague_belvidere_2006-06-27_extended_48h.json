@@ -1,0 +1,73 @@
+{
+  "case": {
+    "name": "Delaware River, Montague to Belvidere \u2014 June 2006 flood \u2014 extended by 48 hours",
+    "river": "Delaware River",
+    "upstream_gauge": "USGS-01438500",
+    "downstream_gauge": "USGS-01446500",
+    "observation_window": [
+      "2006-06-27T00:00:00Z",
+      "2006-07-02T00:00:00Z"
+    ],
+    "purpose": "Fixed longer-window diagnostic retaining all baseline hydraulic assumptions; downstream observations remain scoring-only."
+  },
+  "validation_status": "extended_window_diagnostic",
+  "validation_policy": {
+    "calibration": "none"
+  },
+  "hydraulic_dataset": "gage_datum_reach_proxy",
+  "validation_2d": {
+    "representation": "ribbon",
+    "x_cells": 31,
+    "y_cells": 1
+  },
+  "observations": "delaware_montague_belvidere_2006-06-27_extended_48h.csv",
+  "sources": [
+    {
+      "role": "upstream",
+      "provider": "U.S. Geological Survey Water Data APIs",
+      "parameter": "00060 continuous discharge",
+      "gauge": "USGS-01438500",
+      "url": "https://api.waterdata.usgs.gov/ogcapi/v0/collections/continuous/items?f=json&monitoring_location_id=USGS-01438500&parameter_code=00060&datetime=2006-06-26T12%3A00%3A00Z%2F2006-07-02T00%3A00%3A00Z&limit=50000",
+      "approval_status": "Approved"
+    },
+    {
+      "role": "downstream",
+      "provider": "U.S. Geological Survey Water Data APIs",
+      "parameter": "00060 continuous discharge",
+      "gauge": "USGS-01446500",
+      "url": "https://api.waterdata.usgs.gov/ogcapi/v0/collections/continuous/items?f=json&monitoring_location_id=USGS-01446500&parameter_code=00060&datetime=2006-06-27T00%3A00%3A00Z%2F2006-07-02T00%3A00%3A00Z&limit=50000",
+      "approval_status": "Approved"
+    }
+  ],
+  "retrieved_at": "2026-08-01",
+  "reach": {
+    "length_m": 80067.755,
+    "cells": 81,
+    "slope": 0.00054447,
+    "manning_n": 0.0005833333333333334,
+    "upstream_width_m": 200.0,
+    "downstream_width_m": 200.0,
+    "geometry_classification": "estimated",
+    "roughness_origin": "A priori SI Manning n 0.035 divided by 60; not fitted",
+    "length_source": "USGS NLDI NHDPlusV2 routed centerline",
+    "slope_source": "Difference between published NAVD88 gage datums divided by routed length; screening proxy only",
+    "gage_datum_upstream_ft_navd88": 369.2,
+    "gage_datum_downstream_ft_navd88": 226.17,
+    "drainage_area_upstream_mi2": 3480.0,
+    "drainage_area_downstream_mi2": 4535.0
+  },
+  "reach_context": {
+    "intervening_drainage_area_growth_fraction": 0.30316,
+    "forcing_limitation": "Tributary runoff, direct rainfall, regulation, and floodplain exchange between gauges are not supplied to the model.",
+    "window_extension_hours": 48.0,
+    "window_extension_policy": "Append the same fixed duration to the pre-existing scored end; no parameter or endpoint is selected from model skill."
+  },
+  "warmup": {
+    "duration_min": 720.0,
+    "upstream_forcing": "observed"
+  },
+  "record_interval_min": 15.0,
+  "spatial_order": 1,
+  "cfl": 0.4,
+  "observation_endpoint_tolerance_min": 15.0
+}

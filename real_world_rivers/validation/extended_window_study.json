@@ -1,0 +1,26 @@
+{
+  "title": "Fixed plus-48-hour routing-window study across all baseline and holdout events",
+  "extension_hours": 48.0,
+  "material_routing_error_min": 60.0,
+  "minimum_recession_hours": 24.0,
+  "mass_residual_tolerance": 1e-9,
+  "generated_suite": "extended_window_suite.json",
+  "base_cases": [
+    "glen_canyon_lees_ferry.json",
+    "glen_canyon_lees_ferry_2002-01-25.json",
+    "glen_canyon_lees_ferry_2002-07-02.json",
+    "glen_canyon_lees_ferry_2004-01-06.json",
+    "truckee_reno_sparks_2017-01-08.json",
+    "truckee_reno_sparks_2017-02-10.json",
+    "rio_grande_alameda_albuquerque_2023-05-12.json",
+    "delaware_montague_belvidere_2006-06-27.json",
+    "connecticut_montague_holyoke_2011-08-28.json",
+    "potomac_point_of_rocks_little_falls_2018-06-02.json",
+    "russian_hopland_guerneville_2019-02-26.json",
+    "snoqualmie_snoqualmie_carnation_2009-01-07.json",
+    "eel_fort_seward_scotia_2019-02-26.json",
+    "willamette_albany_salem_2012-01-18.json",
+    "chattahoochee_buford_norcross_2019-07-01.json",
+    "snoqualmie_snoqualmie_carnation_2009-01-07_observed_tributaries.json"
+  ]
+}

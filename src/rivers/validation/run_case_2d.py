@@ -28,6 +28,7 @@ if str(SRC_ROOT) not in sys.path:
 
 from general.solvers import saint_venant_2d
 from rivers.validation.compare import evaluate_series
+from rivers.validation.skill import benchmark_skill, skill_scores
 from rivers.validation.datasets import validate_case_policy
 from rivers.validation.diagnose import diagnose_hydrograph, diagnose_reach_routing
 from rivers.validation.case_inputs import (
@@ -362,6 +363,35 @@ def run_validation_case_2d(
     )
     predicted = scores["predicted_on_obs"]
     upstream_on_target = np.interp(target_times, upstream_times, upstream_flow)
+    upstream_passthrough_scores = skill_scores(target_flow, upstream_on_target)
+    reach_diagnosis = diagnose_reach_routing(
+        target_times, upstream_on_target, target_flow, predicted
+    )
+    reach_diagnosis["routing_lag_comparable"] = lateral_inflow is None
+    if lateral_inflow is not None:
+        reach_diagnosis["routing_lag_limitation"] = (
+            "Modeled downstream timing reflects both upstream routing and "
+            "internal-source timing, so a single lag relative to the mainstem "
+            "upstream gauge is not a like-for-like travel-time metric."
+        )
+    cell_area = np.asarray(result["dx_m"], dtype=float)[:, None] * np.asarray(
+        result["dy_m"], dtype=float
+    )[None, :]
+    storage_initial = float(np.sum(result["h_initial"] * cell_area))
+    storage_final = float(np.sum(result["h_final"] * cell_area))
+    expected_storage_change = float(
+        result["mass_inflow"]
+        + result["mass_source"]
+        - result["mass_outflow"]
+        + result["mass_floor_correction"]
+    )
+    mass_residual = storage_final - storage_initial - expected_storage_change
+    mass_scale = max(
+        abs(storage_initial),
+        abs(storage_final),
+        abs(expected_storage_change),
+        1.0,
+    )
     evidence = {
         "schema_version": 1,
         "case": config["case"],
@@ -437,13 +467,41 @@ def run_validation_case_2d(
             for key, value in scores.items()
             if key != "predicted_on_obs"
         },
+        "benchmarks": {
+            "upstream_passthrough": {
+                key: (
+                    int(value)
+                    if key == "n"
+                    else None
+                    if not math.isfinite(float(value))
+                    else float(value)
+                )
+                for key, value in upstream_passthrough_scores.items()
+            },
+            "squared_error_skill_over_upstream_passthrough": (
+                None
+                if not math.isfinite(
+                    value_added := benchmark_skill(
+                        target_flow, predicted, upstream_on_target
+                    )
+                )
+                else float(value_added)
+            ),
+            "interpretation": (
+                "Positive skill means routing reduces squared error relative "
+                "to using the simultaneous upstream gauge unchanged; zero or "
+                "negative skill means the hydraulic model adds no value over "
+                "that naive boundary-hydrograph benchmark for this event."
+            ),
+        },
         "error_diagnosis": diagnose_hydrograph(
             target_times, target_flow, predicted
         ),
-        "reach_diagnosis": diagnose_reach_routing(
-            target_times, upstream_on_target, target_flow, predicted
-        ),
+        "reach_diagnosis": reach_diagnosis,
         "mass": {
+            "storage_initial_m3": storage_initial,
+            "storage_final_m3": storage_final,
+            "storage_change_m3": storage_final - storage_initial,
             "inflow_m3": float(result["mass_inflow"]),
             "source_m3": float(result["mass_source"]),
             "rainfall_m3": float(result["mass_rainfall"]),
@@ -456,6 +514,8 @@ def run_validation_case_2d(
             ),
             "outflow_m3": float(result["mass_outflow"]),
             "floor_correction_m3": float(result["mass_floor_correction"]),
+            "balance_residual_m3": mass_residual,
+            "relative_balance_residual": mass_residual / mass_scale,
         },
         "series": {
             "times_min": target_times.tolist(),
