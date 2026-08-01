@@ -941,6 +941,20 @@ def _river_id(river_name):
     return river_name.lower().replace(" river", "").replace(" ", "_").strip("_")
 
 
+def _extended_routing_lag(stem):
+    """Routing-lag error from the 48-hour extended-window rerun, if one exists.
+
+    The extended-window study showed much of each baseline's apparent lag was a
+    truncated-window artifact (Truckee −375 → −60 min once the window includes
+    the peak and recession), so the baseline figure must never stand alone.
+    """
+    path = VALIDATION_DIR / f"{stem}_extended_48h.results.json"
+    if not path.exists():
+        return None
+    reach = json.loads(path.read_text(encoding="utf-8")).get("reach_diagnosis") or {}
+    return reach.get("routing_lag_error_min")
+
+
 def _validation_event(stem, *, predeclared=False):
     """Reshape one 2-D case result: series, steadiness, and the tracked diagnostics.
 
@@ -972,7 +986,15 @@ def _validation_event(stem, *, predeclared=False):
     reach = result.get("reach_diagnosis") or {}
     counterfactual = err.get("volume_only_counterfactual") or {}
     observed_volume = reach.get("observed_downstream_volume_m3")
+    upstream_volume = reach.get("upstream_volume_m3")
     unexplained = reach.get("unexplained_downstream_volume_m3")
+    # How much more (or less) water leaves the reach than enters it. Above 1 means
+    # water joins between the gauges — flow the boundary-driven model was never
+    # given. This is the single strongest predictor of where the model misses.
+    down_up_volume = (
+        float(observed_volume / upstream_volume)
+        if observed_volume and upstream_volume else None
+    )
 
     window = result["case"]["observation_window"]
     return {
@@ -1007,6 +1029,8 @@ def _validation_event(stem, *, predeclared=False):
             "observed_routing_lag_min": reach.get("observed_routing_lag_min"),
             "modeled_routing_lag_min": reach.get("modeled_routing_lag_min"),
             "routing_lag_error_min": reach.get("routing_lag_error_min"),
+            "routing_lag_error_min_extended": _extended_routing_lag(stem),
+            "downstream_over_upstream_volume": down_up_volume,
             "unexplained_volume_fraction": (
                 float(unexplained / observed_volume)
                 if observed_volume and unexplained is not None else None
@@ -1018,6 +1042,127 @@ def _validation_event(stem, *, predeclared=False):
             "middle": float(residual[first:second].mean()),
             "late": float(residual[second:].mean()),
         },
+    }
+
+
+# Predeclared hypotheses for the three cross-river holdouts, summarising the
+# predictions recorded in docs/cross_river_fit_investigation.md *before* scoring.
+# Eel and Willamette are the tributary-rich pair; Chattahoochee is the regulated
+# pulse-routing analogue for Glen Canyon Dam.
+HOLDOUT_HYPOTHESES = {
+    "eel_fort_seward_scotia_2019-02-26": {
+        "river": "Eel River",
+        "prediction": "Tributary-rich coastal flood in the same storm as the Russian event — predicted to underestimate (large intervening volume gain) while keeping hydrograph shape.",
+        "confirmed_expectation": "underestimate",
+    },
+    "willamette_albany_salem_2012-01-18": {
+        "river": "Willamette River",
+        "prediction": "Tributary-rich Pacific-Northwest flood — predicted to underestimate strongly from ungauged intervening inflow, with correlation still high.",
+        "confirmed_expectation": "underestimate",
+    },
+    "chattahoochee_buford_norcross_2019-07-01": {
+        "river": "Chattahoochee River",
+        "prediction": "Regulated dam-pulse reach, a routing analogue for Glen Canyon — predicted to behave like Colorado: modest bias, fast routing, no large volume gain.",
+        "confirmed_expectation": "colorado-like",
+    },
+}
+
+
+def _fit_regime():
+    """Per-river volume accounting that explains where the model fits and misses.
+
+    Mechanism first (a boundary-driven model cannot route water it was never
+    given), correlation second, with codex's own warning that these purposive
+    river tests rank hypotheses rather than establish a regression.
+    """
+    fr = json.loads((VALIDATION_DIR / "fit_regime_analysis.results.json").read_text(encoding="utf-8"))
+    rivers = [
+        {
+            "river": row["river"],
+            "events": row["event_count"],
+            "nse": row["median_nse"],
+            "pearson_r": row["median_pearson_r"],
+            "percent_bias": row["median_percent_bias"],
+            "predicted_over_observed_volume": row["median_predicted_to_observed_volume_ratio"],
+            "downstream_over_upstream_volume": row["median_observed_downstream_to_upstream_volume_ratio"],
+        }
+        for row in fr["river_summary"]
+    ]
+    rivers.sort(key=lambda r: r["downstream_over_upstream_volume"])
+    return {
+        "title": "Why the fit varies across rivers",
+        "lede": (
+            "The model is driven only by the upstream gauge. Where the downstream gauge carries "
+            "roughly the same water that entered (ratio near 1), it scores well; where much more "
+            "water leaves than entered — tributaries and runoff joining between the gauges — it "
+            "underestimates, because it was never given that water. The columns below are all "
+            "observed or modelled volumes; none is fitted."
+        ),
+        "rivers": rivers,
+        "associations": fr.get("natural_flow_associations"),
+        "conclusions": fr.get("conclusions"),
+        "excluded_rivers": fr.get("excluded_rivers"),
+    }
+
+
+def _holdout_group():
+    """The three predeclared cross-river holdouts, framed as prediction-then-score."""
+    events = []
+    for stem, meta in HOLDOUT_HYPOTHESES.items():
+        event = _validation_event(stem, predeclared=True)
+        event["prediction"] = meta["prediction"]
+        events.append(event)
+    return {
+        "title": "Predeclared holdout rivers",
+        "lede": (
+            "Three rivers named and predicted before their downstream data was scored, to test "
+            "the intervening-flow explanation rather than illustrate it. Two tributary-rich rivers "
+            "were predicted to underestimate; a regulated dam-pulse river was predicted to behave "
+            "like the Colorado. All three came in as predicted."
+        ),
+        "criterion": json.loads(
+            (VALIDATION_DIR / "fit_regime_analysis.results.json").read_text(encoding="utf-8")
+        ).get("matched_holdout_test", {}).get("criterion"),
+        "events": events,
+    }
+
+
+def _tributary_case():
+    """Snoqualmie baseline vs the same reach forced with observed tributary gauges.
+
+    An explicit two-source before/after (the suite still scores the baseline).
+    The guards are the point: correlation falls slightly while water balance
+    improves sharply, so a single-metric objective would reject a physically
+    correct forcing; and a large residual remains that is not licence to fit.
+    """
+    base = _validation_event("snoqualmie_snoqualmie_carnation_2009-01-07")
+    trib = _validation_event("snoqualmie_snoqualmie_carnation_2009-01-07_observed_tributaries")
+    trib_raw = json.loads(
+        (VALIDATION_DIR / "snoqualmie_snoqualmie_carnation_2009-01-07_observed_tributaries.results.json")
+        .read_text(encoding="utf-8")
+    )
+    reach = trib_raw.get("reach_diagnosis") or {}
+    return {
+        "title": "Supplying the missing water: observed tributaries",
+        "lede": (
+            "The Snoqualmie miss is the intervening-flow story made concrete. Re-running the same "
+            "reach with two independently observed tributary gauges — Raging River (USGS-12145500) "
+            "and Tolt River (USGS-12148500), located on the reach via the USGS NLDI network, with "
+            "no magnitude or timing taken from the downstream gauge — recovers most of the deficit."
+        ),
+        "tributary_sources": ["Raging River · USGS-12145500", "Tolt River · USGS-12148500"],
+        "baseline": base,
+        "with_tributaries": trib,
+        "supplied_volume_m3": reach.get("modeled_net_change_from_upstream_m3"),
+        "unexplained_volume_m3": reach.get("unexplained_downstream_volume_m3"),
+        "guards": [
+            "Correlation actually falls (0.798 → 0.749) while bias improves from −32.6% to −13.6% and "
+            "NSE from 0.23 to 0.47: a single correlation objective would have rejected a physically "
+            "necessary forcing. Water balance and shape are different questions.",
+            "About 49.8 million m³ of downstream volume is still unexplained after both gauges. That "
+            "residual can be ungauged runoff, gauge-to-confluence travel, storage, controls, geometry, "
+            "or measurement error — it is not licence to fit an extra source from the downstream gauge.",
+        ],
     }
 
 
@@ -1100,6 +1245,20 @@ def build_validation():
                 "is shown with it."
             ),
         },
+        "routing_note": {
+            "title": "Routing lag: read the extended window",
+            "text": (
+                "An early diagnostic scored each event over a short window that often ended near "
+                "the flood peak, so part of the apparent fast-routing was a truncated-window "
+                "artifact. Re-scoring every event with 48 more hours appended shrinks the error "
+                "(Truckee January fell from −375 to −60 minutes) but does not remove it: 13 of 15 "
+                "extended cases still route early, 10 by at least an hour. Each event shows both "
+                "figures; trust the extended one."
+            ),
+        },
+        "fit_regime": _fit_regime(),
+        "holdouts": _holdout_group(),
+        "tributary_case": _tributary_case(),
     }
     path = DATA_DIR / "validation.json"
     path.write_text(json.dumps(payload), encoding="utf-8")

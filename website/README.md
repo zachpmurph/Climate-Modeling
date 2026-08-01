@@ -11,8 +11,11 @@ A static, dependency-free site presenting the repository's flood models:
   Snoqualmie), compared to the downstream gauge with nothing tuned to match — every event 2-D
   with its declared terrain, no fitted parameter, no 1-D fallback. Every Nash–Sutcliffe score is
   paired with the event's observed variability (NSE is unreliable on near-steady flow), and each
-  event carries a volume/amplitude/routing-lag diagnosis plus a volume-only counterfactual whose
-  oracle guard is shown verbatim. Sourced from `real_world_rivers/validation/`.
+  event carries a volume/amplitude/routing-lag diagnosis (routing lag shown for the 48-hour
+  extended window, not the truncated baseline) plus a volume-only counterfactual whose oracle
+  guard is shown verbatim. A synthesis section explains *why* fit varies — a per-river
+  intervening-flow ladder, three predeclared holdout rivers (Eel, Willamette, Chattahoochee), and
+  a Snoqualmie observed-tributary before/after. Sourced from `real_world_rivers/validation/`.
 - **About** — provenance, verification status, and limitations.
 
 No frameworks, no build step, no CDN: plain HTML/CSS/JS with inline SVG charts.

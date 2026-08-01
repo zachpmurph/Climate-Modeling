@@ -265,6 +265,63 @@ body {
 .param.param-wide { grid-column: 1 / -1; }
 .param.param-wide .param-v { font-size: 0.8rem; line-height: 1.4; }
 
+/* validation synthesis: fit-regime ladder, holdouts, tributary before/after */
+.synth { margin-top: 30px; padding-top: 22px; border-top: 2px solid var(--ink); }
+.synth > h2 { margin: 0 0 4px; font-size: 1.2rem; letter-spacing: -0.015em; }
+.synth-lede { margin: 0 0 16px; color: var(--ink-soft); max-width: 92ch; font-size: 0.9rem; }
+.synth-list { margin: 14px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 7px; }
+.synth-list li { font-size: 0.87rem; }
+.synth-basis { color: var(--ink-soft); }
+.synth-note { margin-top: 22px; background: var(--warn-bg); border: 1px solid var(--warn-line);
+  border-left: 4px solid #d19a2a; border-radius: var(--radius); padding: 11px 16px; font-size: 0.85rem; color: var(--ink-soft); }
+.synth-note strong { color: var(--ink); }
+
+.fr-head, .fr-row { display: grid; grid-template-columns: minmax(110px, 1.3fr) minmax(160px, 2.4fr) 92px 64px;
+  gap: 12px; align-items: center; }
+.fr-head { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-soft);
+  padding-bottom: 7px; border-bottom: 1px solid var(--line); }
+.fr-row { padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 0.86rem; }
+.fr-name { font-weight: 600; display: flex; flex-direction: column; }
+.fr-ev { font-weight: 400; font-size: 0.68rem; color: var(--ink-faint); }
+.fr-du { display: flex; align-items: center; gap: 9px; }
+.fr-track { position: relative; flex: 1; height: 15px; background: var(--paper); border-radius: 4px; }
+.fr-mark { position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: var(--ink-faint); } /* ratio = 1 */
+.fr-fill { position: absolute; left: 0; top: 2px; bottom: 2px; border-radius: 3px;
+  background: linear-gradient(90deg, var(--water), var(--water-deep)); }
+.fr-fill.gain { background: linear-gradient(90deg, #d98a3a, #b4442c); }
+.fr-supplied { text-align: right; color: var(--ink-soft); }
+.fr-nse { text-align: right; font-weight: 700; }
+.fr-nse.good { color: #2f7d4f; } .fr-nse.mid { color: #b07d2a; } .fr-nse.bad { color: #b4442c; }
+
+.holdout-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.holdout-card { background: var(--card); border: 1px solid var(--line); border-left: 3px solid #5f8b4b;
+  border-radius: var(--radius); padding: 13px 15px; }
+.holdout-card h3 { margin: 0 0 8px; font-size: 0.98rem; display: flex; justify-content: space-between; align-items: baseline; }
+.ho-date { font-weight: 400; font-size: 0.74rem; color: var(--ink-faint); }
+.ho-pred { margin: 0 0 10px; font-size: 0.82rem; color: var(--ink-soft); }
+.ho-lab { display: block; font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-faint); }
+.ho-scores { display: flex; flex-wrap: wrap; gap: 10px 16px; }
+.ho-scores b { font-size: 1.05rem; } .ho-scores b.neg { color: #b4442c; }
+
+.trib-compare { border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.trib-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
+  padding: 9px 14px; background: var(--panel-sunk, var(--paper)); border-bottom: 1px solid var(--line);
+  font-size: 0.74rem; color: var(--ink-soft); }
+.trib-cols { display: grid; grid-template-columns: 90px 20px 130px; gap: 8px; text-align: center; }
+.trib-row { display: grid; grid-template-columns: 1fr 90px 20px 130px; gap: 8px; align-items: center;
+  padding: 7px 14px; border-bottom: 1px solid var(--line); font-size: 0.86rem; }
+.trib-row:last-child { border-bottom: none; }
+.trib-metric { color: var(--ink-soft); }
+.trib-base, .trib-with { text-align: center; font-variant-numeric: tabular-nums; }
+.trib-arrow { text-align: center; color: var(--ink-faint); }
+.trib-with.up { color: #2f7d4f; font-weight: 700; }
+.trib-with.down { color: #b4442c; font-weight: 700; }
+.trib-guard { margin-top: 10px; }
+@media (max-width: 640px) {
+  .fr-head, .fr-row { grid-template-columns: 1fr 60px 56px; }
+  .fr-du { grid-column: 1 / -1; order: 3; }
+}
+
 /* limitations + errors */
 .limitations { background: var(--warn-bg); border: 1px solid var(--warn-line); border-radius: var(--radius); padding: 12px 18px; font-size: 0.86rem; }
 .limitations ul { margin: 6px 0 0; padding-left: 20px; }

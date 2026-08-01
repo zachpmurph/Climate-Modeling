@@ -180,6 +180,32 @@
         <div id="val-limits" class="limitations"></div>
       </div>
     </div>
+
+    <!-- ── synthesis across rivers ─────────────────────────────────── -->
+    <section id="fit-regime" class="synth">
+      <h2 id="fit-regime-title"></h2>
+      <p class="synth-lede" id="fit-regime-lede"></p>
+      <div id="fit-regime-table" class="fr-table"></div>
+      <div id="fit-regime-assoc" class="warn-card"></div>
+      <ul id="fit-regime-conclusions" class="synth-list"></ul>
+    </section>
+
+    <section id="holdout-group" class="synth">
+      <h2 id="holdout-title"></h2>
+      <p class="synth-lede" id="holdout-lede"></p>
+      <p class="chart-note" id="holdout-criterion"></p>
+      <div id="holdout-cards" class="holdout-cards"></div>
+    </section>
+
+    <section id="tributary-case" class="synth">
+      <h2 id="tributary-title"></h2>
+      <p class="synth-lede" id="tributary-lede"></p>
+      <div id="tributary-compare" class="trib-compare"></div>
+      <div id="tributary-guards"></div>
+    </section>
+
+    <section id="routing-note" class="synth-note"></section>
+
     <div id="validation-error" class="error-card" hidden></div>
   </section>
 
@@ -212,12 +238,19 @@
       Potomac, Russian, and Snoqualmie — compared with what the downstream gauge recorded, every
       event 2-D with its declared terrain and nothing tuned to match. The results run the full
       range: near-perfect where the flow really moves (Potomac and Connecticut correlation 0.99),
-      biased low on the regulated Colorado, and a genuine miss on the Russian (76% under). Two
-      traps are handled openly — Nash–Sutcliffe becomes unreliable when a river barely varies, so
-      every score is shown next to the event's variability; and each event carries a diagnosis
-      (how much volume and how much of the swing the model delivered, how far off its routing time
-      was) with a volume-only counterfactual whose oracle guard is printed alongside it. Results
-      are reported as-is rather than tuned away.</p>
+      biased low on the regulated Colorado, and a genuine miss on the Russian (76% under).</p>
+      <p>The tab now also explains <em>why</em> the fit varies. The model is driven only by the
+      upstream gauge, so it does well where the downstream gauge carries roughly the water that
+      entered and underestimates where much more leaves than entered — tributaries and runoff
+      joining between the gauges. That pattern is shown as a per-river volume ladder, tested against
+      three <strong>predeclared holdout rivers</strong> (Eel, Willamette, and a regulated
+      Chattahoochee analogue, all called before scoring and all landing as predicted), and made
+      concrete on the Snoqualmie, where adding two independently observed tributary gauges lifts
+      Nash–Sutcliffe from 0.23 to 0.47 — while <em>lowering</em> correlation, a reminder that water
+      balance and shape are different questions. Two traps are handled openly throughout:
+      Nash–Sutcliffe becomes unreliable when a river barely varies, so every score sits next to the
+      event's variability; and each event's diagnosis carries oracle-only guards printed verbatim.
+      Results are reported as-is rather than tuned away.</p>
       <h2>What this is not</h2>
       <p>This is a <strong>screening and education tool</strong>, not a flood forecast. In the
       Playground, 1-D depths are cross-section averages — how high the water gets, not how far it

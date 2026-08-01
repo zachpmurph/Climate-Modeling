@@ -223,9 +223,19 @@ function renderDiagnosis(event) {
       s: "of the observed rise-and-fall — a shape error" });
   }
   if (d.routing_lag_error_min != null && d.modeled_routing_lag_min != null) {
-    const fast = d.routing_lag_error_min < 0;
-    tiles.push({ k: "Routing time", v: `${fast ? "−" : "+"}${formatNumber(Math.abs(d.routing_lag_error_min), 0)} min`,
-      s: `modelled ${formatNumber(d.modeled_routing_lag_min, 0)} vs observed ${formatNumber(d.observed_routing_lag_min, 0)} min — routes too ${fast ? "fast" : "slow"}` });
+    // Prefer the 48-hour extended-window figure; a short baseline window that
+    // ended near the peak inflates the apparent lag. Show both.
+    const ext = d.routing_lag_error_min_extended;
+    const primary = ext != null ? ext : d.routing_lag_error_min;
+    const fast = primary < 0;
+    const baselineNote = `baseline short window read ${d.routing_lag_error_min < 0 ? "−" : "+"}${formatNumber(Math.abs(d.routing_lag_error_min), 0)} min`;
+    tiles.push({
+      k: ext != null ? "Routing time (48 h window)" : "Routing time",
+      v: `${fast ? "−" : "+"}${formatNumber(Math.abs(primary), 0)} min`,
+      s: ext != null
+        ? `routes too ${fast ? "fast" : "slow"}; ${baselineNote}`
+        : `modelled ${formatNumber(d.modeled_routing_lag_min, 0)} vs observed ${formatNumber(d.observed_routing_lag_min, 0)} min — routes too ${fast ? "fast" : "slow"}`,
+    });
   } else if (d.peak_lag_min != null) {
     tiles.push({ k: "Peak timing", v: `${formatNumber(d.peak_lag_min, 0)} min`,
       s: "modelled peak vs observed" });
@@ -301,6 +311,121 @@ function renderLimits(river) {
   }
 }
 
+function renderFitRegime() {
+  const fr = state.data.fit_regime;
+  if (!fr) { document.getElementById("fit-regime").hidden = true; return; }
+  document.getElementById("fit-regime-title").textContent = fr.title;
+  document.getElementById("fit-regime-lede").textContent = fr.lede;
+
+  // Ladder of rivers by down/up volume: the further right the intervening-flow
+  // bar, the deeper the NSE falls. The relationship is the point.
+  const maxDU = Math.max(...fr.rivers.map((r) => r.downstream_over_upstream_volume), 1);
+  const host = document.getElementById("fit-regime-table");
+  host.innerHTML =
+    `<div class="fr-head"><span>river</span><span>water out ÷ water in</span>
+       <span>model supplied</span><span>NSE</span></div>` +
+    fr.rivers.map((r) => {
+      const du = r.downstream_over_upstream_volume;
+      const gainPct = Math.min((du / maxDU) * 100, 100);
+      const nseClass = r.nse >= 0.6 ? "good" : r.nse >= 0 ? "mid" : "bad";
+      const over = du > 1.08;
+      return `<div class="fr-row">
+        <span class="fr-name">${r.river.replace(" River", "")}<span class="fr-ev">${r.events} evt</span></span>
+        <span class="fr-du"><span class="fr-track"><span class="fr-mark"></span>
+          <span class="fr-fill ${over ? "gain" : ""}" style="width:${gainPct}%"></span></span>
+          <span class="mono">${formatNumber(du, 2)}×</span></span>
+        <span class="fr-supplied mono">${formatNumber(r.predicted_over_observed_volume * 100, 0)}%</span>
+        <span class="fr-nse ${nseClass} mono">${formatNumber(r.nse, 2)}</span>
+      </div>`;
+    }).join("");
+
+  const a = fr.associations || {};
+  const assoc = document.getElementById("fit-regime-assoc");
+  if (a.drainage_growth_vs_nse_pearson_r != null) {
+    assoc.hidden = false;
+    assoc.innerHTML =
+      `Across these ${a.river_count} rivers, drainage-area growth between the gauges tracks the
+       observed volume gain (r = <b>${formatNumber(a.drainage_growth_vs_observed_volume_gain_pearson_r, 2)}</b>)
+       and the model's skill inversely (r = <b>${formatNumber(a.drainage_growth_vs_nse_pearson_r, 2)}</b>):
+       more ungauged catchment between the gauges, larger the miss.
+       <span class="guard">${a.warning || ""}</span>`;
+  } else { assoc.hidden = true; }
+
+  const list = document.getElementById("fit-regime-conclusions");
+  list.innerHTML = "";
+  for (const c of fr.conclusions || []) {
+    const li = document.createElement("li");
+    li.innerHTML = `<b></b> <span class="synth-basis"></span>`;
+    li.querySelector("b").textContent = c.finding;
+    li.querySelector(".synth-basis").textContent = c.basis;
+    list.appendChild(li);
+  }
+}
+
+function renderHoldouts() {
+  const h = state.data.holdouts;
+  if (!h || !h.events || !h.events.length) { document.getElementById("holdout-group").hidden = true; return; }
+  document.getElementById("holdout-title").textContent = h.title;
+  document.getElementById("holdout-lede").textContent = h.lede;
+  document.getElementById("holdout-criterion").textContent = h.criterion ? `Predeclared criterion: ${h.criterion}` : "";
+  const host = document.getElementById("holdout-cards");
+  host.innerHTML = h.events.map((e) => {
+    const s = e.scores;
+    const du = e.diagnostics?.downstream_over_upstream_volume;
+    return `<div class="holdout-card">
+      <h3>${e.name.split(",")[0].replace(" River", "")}<span class="ho-date mono">${e.date}</span></h3>
+      <p class="ho-pred"><span class="ho-lab">Predicted</span>${e.prediction || ""}</p>
+      <div class="ho-scores">
+        <span><span class="ho-lab">NSE</span><b class="mono ${s.nse >= 0 ? "" : "neg"}">${formatNumber(s.nse, 2)}</b></span>
+        <span><span class="ho-lab">bias</span><b class="mono">${formatNumber(s.percent_bias, 0)}%</b></span>
+        <span><span class="ho-lab">r</span><b class="mono">${formatNumber(s.pearson_r, 2)}</b></span>
+        ${du != null ? `<span><span class="ho-lab">out÷in</span><b class="mono">${formatNumber(du, 2)}×</b></span>` : ""}
+      </div>
+    </div>`;
+  }).join("");
+}
+
+function renderTributary() {
+  const t = state.data.tributary_case;
+  if (!t) { document.getElementById("tributary-case").hidden = true; return; }
+  document.getElementById("tributary-title").textContent = t.title;
+  document.getElementById("tributary-lede").textContent = t.lede;
+
+  const b = t.baseline.scores;
+  const w = t.with_tributaries.scores;
+  const row = (label, base, withT, fmt, better) => {
+    const cls = better == null ? "" : better ? "up" : "down";
+    return `<div class="trib-row"><span class="trib-metric">${label}</span>
+      <span class="mono trib-base">${fmt(base)}</span>
+      <span class="trib-arrow">→</span>
+      <span class="mono trib-with ${cls}">${fmt(withT)}</span></div>`;
+  };
+  const pct = (v) => `${formatNumber(v, 1)}%`;
+  const num = (v) => formatNumber(v, 3);
+  document.getElementById("tributary-compare").innerHTML =
+    `<div class="trib-head"><span>${t.tributary_sources.join(" · ")}</span>
+       <span class="trib-cols"><span>upstream only</span><span></span><span>+ observed tributaries</span></span></div>` +
+    row("Nash–Sutcliffe", b.nse, w.nse, num, w.nse > b.nse) +
+    row("Bias", b.percent_bias, w.percent_bias, pct, Math.abs(w.percent_bias) < Math.abs(b.percent_bias)) +
+    row("Volume delivered", (t.baseline.diagnostics.volume_ratio || 0) * 100, (t.with_tributaries.diagnostics.volume_ratio || 0) * 100, (v) => `${formatNumber(v, 0)}%`, true) +
+    row("Correlation", b.pearson_r, w.pearson_r, num, w.pearson_r > b.pearson_r) +
+    (w.kge != null ? row("KGE", null, w.kge, (v) => v == null ? "—" : num(v), null) : "");
+
+  const guards = document.getElementById("tributary-guards");
+  guards.innerHTML = (t.guards || []).map((g) =>
+    `<div class="warn-card trib-guard"></div>`).join("");
+  guards.querySelectorAll(".trib-guard").forEach((node, i) => { node.textContent = t.guards[i]; });
+}
+
+function renderRoutingNote() {
+  const n = state.data.routing_note;
+  const host = document.getElementById("routing-note");
+  if (!n) { host.hidden = true; return; }
+  host.innerHTML = `<strong></strong> <span></span>`;
+  host.querySelector("strong").textContent = n.title + ".";
+  host.querySelector("span").textContent = n.text;
+}
+
 export async function initValidation() {
   try {
     const response = await fetch("data/validation.json");
@@ -309,6 +434,10 @@ export async function initValidation() {
     renderMetricNote();
     renderRiverChoice();
     selectRiver(state.data.rivers[0]);
+    renderFitRegime();
+    renderHoldouts();
+    renderTributary();
+    renderRoutingNote();
   } catch (error) {
     showError(`Could not load the validation results (${error.message}). Serve this folder over HTTP: python -m http.server`);
   }
