@@ -1,89 +1,209 @@
-import numpy as np
-import pandas as pd
-import scipy.optimize
+import torch
+from torch import nn
 
-offset = 1
-np.random.seed(1)
-layers = 128
 
-SiLU = lambda x: x / (1 + np.exp(-x))
-d_SiLU = lambda x: x * (1 + np.exp(-x))**-2 * np.exp(-x)
+# PINNs often benefit from float64 numerical precision.
+torch.set_default_dtype(torch.float64)
+torch.manual_seed(1)
 
-x = np.linspace(0, 10, 10)
-y = np.linspace(0, 10, 10)
-t = np.linspace(0, 10, 10)
-W1 = np.random.randn(layers, 3) * 0.01
-b1 = np.zeros((layers, 1))
-W2 = np.random.randn(3, layers) * 0.01
-b2 = np.zeros((3, 1))
+def make_collocation_points(x, y, t):
+    X, Y, T = torch.meshgrid(
+        x,
+        y,
+        t,
+        indexing="ij",
+    )
 
-p_flat = np.concatenate([
-    W1.ravel(), 
-    b1.ravel(), 
-    W2.ravel(), 
-    b2.ravel()
-])
+    coordinates = torch.stack(
+        [
+            X.flatten(),
+            Y.flatten(),
+            T.flatten(),
+        ],
+        dim=1,
+    )
 
-#makes grid of x, y, t easily usable
-def generalize_data(x, y, t):
-    X, Y, T = np.meshgrid(x, y, t)
-    X = X.flatten()
-    Y = Y.flatten()
-    T = T.flatten()
-    S = np.stack([X, Y, T])
-    return S
+    # Required because we need derivatives with respect to x, y and t.
+    coordinates.requires_grad_(True)
 
-#returns physical residual error
-def R_p(raw_out, h, u, v, da1_dz1, W1, W2):
-     # Derivative of our Softplus function wrapper on h: dh/draw_out
-    dh_draw = 1.0 / (1.0 + np.exp(-raw_out[0:1, :]))
+    return coordinates
 
-    # --- ANALYTICAL CALCULUS VIA NUMPY MATRICES ---
+def make_initial_points(x, y):
+    t = torch.zeros_like(x)
+    initial_coords = make_collocation_points(x, y, t)
 
-    # Extract weights explicitly for clarity
-    # W2[0, :] is the row of 128 weights mapped to output h
-    w2_h = W2[0:1, :]  # Shape: (1, 128)
+    return initial_coords
 
-    # Compute dh/dx, dh/dy, dh/dt across all 200,000 points continuously
-    # We map the chain rule backward from the output layer through Layer 1 weights
-    dh_dx = dh_draw * (w2_h @ (da1_dz1 * W1[:, 0:1]))  # W1[:, 0] is weights for x
-    dh_dy = dh_draw * (w2_h @ (da1_dz1 * W1[:, 1:2]))  # W1[:, 1] is weights for y
-    dh_dt = dh_draw * (w2_h @ (da1_dz1 * W1[:, 2:3]))  # W1[:, 2] is weights for t
+def make_targets(number_initial):
+    h = torch.ones(number_initial, 1)
+    u = torch.zeros(number_initial, 1)
+    v = torch.zeros(number_initial, 1)
+    return h, u, v
 
-    # Compute du/dx and dv/dy (No softplus wrapper on velocities, so no dh_draw term)
-    w2_u = W2[1:2, :]  # Shape: (1, 128)
-    w2_v = W2[2:3, :]  # Shape: (1, 128)
+def coordinate_gradient(field, coordinates):
+    """
+    Return derivatives of `field` with respect to x, y and t.
 
-    du_dx = w2_u @ (da1_dz1 * W1[:, 0:1])
-    dv_dy = w2_v @ (da1_dz1 * W1[:, 1:2])
+    field:       shape (N, 1)
+    coordinates: shape (N, 3)
+    """
+    gradient = torch.autograd.grad(
+        outputs=field,
+        inputs=coordinates,
+        grad_outputs=torch.ones_like(field),
+        create_graph=True,
+    )[0]
 
-    physics_residual = dh_dt + (u * dh_dx + h * du_dx) + (v * dh_dy + h * dv_dy)
-    return physics_residual
+    derivative_x = gradient[:, 0:1]
+    derivative_y = gradient[:, 1:2]
+    derivative_t = gradient[:, 2:3]
 
-#runs model, # W is 128 x 3
-def model(S, p0):
-    W1 = p0[0 : 3*layers].reshape(layers, 3)
-    b1 = p0[3*layers : 4*layers].reshape(layers, 1)
-    W2 = p0[4*layers : 7*layers].reshape(3, layers)
-    b2 = p0[7*layers :].reshape(3, 1)
-    z1 = (W1 @ S) + b1              # Shape: (128, 200000)
-    a1 = SiLU(z1)                      # Shape: (128, 200000)
-    da1_dz1 = d_SiLU(z1)       
-    raw_out = (W2 @ a1) + b2     #row 0 = h, row 1 = u, row 2 = v
-    return raw_out, da1_dz1, W1, W2
+    return derivative_x, derivative_y, derivative_t
 
-#returns sum of squared error with penalization for going against PDEs
-def SSE(p, S):
-    raw_out, da1_dz1, W1, W2 = model(S, p)
-    h = np.log(1.0 + np.exp(raw_out[0:1, :])) # Shape: (1, 200000)
-    u = raw_out[1:2, :]                       # Shape: (1, 200000)
-    v = raw_out[2:3, :]                       # Shape: (1, 200000)
+def continuity_residual(model, coordinates):
+    h, u, v = model(coordinates)
 
-    #Calculate MSE
-    L_data = 0       #set to 0 if no historical data exists
-    L_physical = np.sum(R_p(raw_out, h, u, v, da1_dz1, W1, W2)**2)
-    return L_data + offset * L_physical
+    discharge_x = h * u
+    discharge_y = h * v
 
-S = generalize_data(x, y, t)
-result = scipy.optimize.minimize(SSE, p_flat, args = (S), method = 'L-BFGS-B').x
-print(result)
+    _, _, dh_dt = coordinate_gradient(h, coordinates)
+
+    dhu_dx, _, _ = coordinate_gradient(
+        discharge_x,
+        coordinates,
+    )
+
+    _, dhv_dy, _ = coordinate_gradient(
+        discharge_y,
+        coordinates,
+    )
+
+    residual = dh_dt + dhu_dx + dhv_dy
+
+    return residual
+
+def physics_loss(model, coordinates):
+    residual = continuity_residual(
+        model,
+        coordinates,
+    )
+
+    return torch.mean(residual**2)
+
+def initial_loss(model, initial_coords, target_h, target_u, target_v):
+    pred_h, pred_u, pred_v = model(initial_coords)
+    loss_h = torch.mean((pred_h - target_h)**2)
+    loss_u = torch.mean((pred_u - target_u)**2)
+    loss_v = torch.mean((pred_v - target_v)**2)
+
+    return loss_h + loss_u + loss_v
+
+def total_loss(model, coordinates, initial_coords, target_h, target_u, target_v, initial_weight = 1.0):
+    L_p = physics_loss(model, coordinates)
+    L_i = initial_loss(model, initial_coords, target_h, target_u, target_v)
+
+    return L_p + initial_weight * L_i, L_p, L_i * initial_weight
+
+class PINN(nn.Module):
+    """Map coordinates (x, y, t) to water state (h, u, v)."""
+
+    def __init__(self, hidden_width=128):
+        super().__init__()
+
+        self.hidden_layer = nn.Linear(
+            in_features=3,
+            out_features=hidden_width,
+        )
+
+        self.activation = nn.SiLU()
+
+        self.output_layer = nn.Linear(
+            in_features=hidden_width,
+            out_features=3,
+        )
+
+        self.positive_depth = nn.Softplus()
+
+    def forward(self, coordinates):
+        """
+        coordinates: shape (N, 3)
+
+        Column 0: x
+        Column 1: y
+        Column 2: t
+        """
+        hidden = self.hidden_layer(coordinates)
+        hidden = self.activation(hidden)
+        raw_output = self.output_layer(hidden)
+
+        raw_h = raw_output[:, 0:1]
+        u = raw_output[:, 1:2]
+        v = raw_output[:, 2:3]
+
+        # Enforce h > 0 while preserving differentiability.
+        h = self.positive_depth(raw_h)
+
+        return h, u, v
+
+def main():
+    model = PINN()
+
+    optimizer = torch.optim.Adam(
+        model.parameters(),
+        lr=1e-3,
+    )
+
+    x = torch.linspace(0.0, 10.0, 10)
+    y = torch.linspace(0.0, 10.0, 10)
+    t = torch.linspace(0.0, 10.0, 10)
+    number_initial = len(x) * len(y) * len(t)
+
+    coordinates = make_collocation_points(x, y, t)
+
+    h, u, v = model(coordinates)
+    initial_coords = make_initial_points(x, y)
+    print(initial_coords.shape)
+    target_h, target_u, target_v = make_targets(number_initial)
+
+    num_epoch = 1000
+
+    for epoch in range(num_epoch):
+
+        #create new differentiable coords
+        interior_coordinates = (
+            coordinates
+            .detach()
+            .clone()
+            .requires_grad_(True)
+        )
+
+        #reset grads
+        optimizer.zero_grad(set_to_none = True)
+
+        #calculate loss
+        loss, loss_p, loss_i = total_loss(model, interior_coordinates, initial_coords, target_h, target_u, target_v)
+
+        #backprop loss
+        loss.backward()
+
+        #step optimizer
+        optimizer.step()
+
+        if epoch % 100 == 0:
+            print(
+                f"epoch={epoch:5d} "
+                f"total={loss.item():.6e} "
+                f"physics={loss_p.item():.6e} "
+                f"initial={loss_i.item():.6e}"
+            )
+
+    print("Coordinate shape:", coordinates.shape)
+    print("Depth shape:", h.shape)
+    print("Velocity-x shape:", u.shape)
+    print("Velocity-y shape:", v.shape)
+    print("Initial total loss:", loss.item())
+    print("Initial physics loss:", loss_p.item())
+    print("Initial conditions loss:", loss_i.item())
+
+if __name__ == "__main__":
+    main()
